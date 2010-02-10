@@ -2153,6 +2153,8 @@ source "net/Kconfig"
 
 source "drivers/Kconfig"
 
+source "chromeos/drivers/Kconfig"
+
 source "drivers/firmware/Kconfig"
 
 source "fs/Kconfig"
