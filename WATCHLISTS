@@ -1,0 +1,22 @@
+# See http://dev.chromium.org/developers/contributing-code/watchlists for
+# a description of this file's format.
+# Please keep these keys in alphabetical order.
+
+{
+  'WATCHLIST_DEFINITIONS': {
+    'all': {
+      'filepath': '.',
+    },
+    'chromeos': {
+      'filepath': 'chromeos/',
+    },
+    'networking': {
+      'filepath': 'net/',
+    },
+  },
+  'WATCHLISTS': {
+    'all': ['msb@chromium.org', 'olofj@chromium.org', 'vbendeb+kernel@chromium.org'],
+    'chromeos': ['sleffler+cc@chromium.org'],
+    'networking': ['sleffler+cc@chromium.org'],
+  },
+}
