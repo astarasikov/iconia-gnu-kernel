@@ -21,6 +21,7 @@ obj-$(CONFIG_SMP)			+= platsmp.o
 obj-$(CONFIG_ARCH_TEGRA_2x_SOC)		+= headsmp-t2.o
 obj-$(CONFIG_TEGRA_SYSTEM_DMA)		+= dma.o
 obj-$(CONFIG_CPU_FREQ)                  += cpu-tegra.o
+obj-$(CONFIG_CPU_IDLE)			+= cpuidle.o
 obj-$(CONFIG_TEGRA_PCI)			+= pcie.o
 
 obj-${CONFIG_MACH_HARMONY}              += board-harmony.o
