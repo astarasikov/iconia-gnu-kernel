@@ -610,10 +610,17 @@ static int tpm_tis_init(struct device *dev, resource_size_t start,
 	spin_unlock(&tis_lock);
 
 	tpm_get_timeouts(chip);
-	tpm_continue_selftest(chip);
+
+	if (!tpm_continue_selftest(chip)) {
+		dev_err(chip->dev, "TPM not present or not functional\n");
+		rc = -ENODEV;
+		goto out_err;
+	}
 
 	return 0;
 out_err:
+	if (chip->vendor.irq)
+		free_irq(chip->vendor.irq, chip);
 	if (chip->vendor.iobase)
 		iounmap(chip->vendor.iobase);
 	tpm_remove_hardware(chip->dev);
