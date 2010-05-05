@@ -140,6 +140,8 @@ struct tsl2563_chip {
 	u32			data1;
 };
 
+static int use_smbus = 0;
+
 static int tsl2563_write(struct i2c_client *client, u8 reg, u8 value)
 {
 	int ret;
@@ -148,14 +150,33 @@ static int tsl2563_write(struct i2c_client *client, u8 reg, u8 value)
 	buf[0] = TSL2563_CMD | reg;
 	buf[1] = value;
 
+	if (use_smbus) {
+		ret = i2c_smbus_write_byte_data(client, buf[0], value);
+		return ret;
+	}
+
 	ret = i2c_master_send(client, buf, sizeof(buf));
 	return (ret == sizeof(buf)) ? 0 : ret;
 }
 
-static int tsl2563_read(struct i2c_client *client, u8 reg, void *buf, int len)
+static int tsl2563_read(struct i2c_client *client, u8 reg, u8 *buf, int len)
 {
 	int ret;
 	u8 cmd = TSL2563_CMD | reg;
+
+	if (use_smbus) {
+		if (len == 1) {
+			ret = i2c_smbus_read_byte_data(client, cmd);
+			buf[0] = ret & 0xff;
+		} else if (len == 2) {
+			ret = i2c_smbus_read_word_data(client, cmd);
+			buf[0] = ret & 0xff;
+			buf[1] = (ret >> 8) & 0xff;
+		} else ret = -1;
+		if (ret < 0)
+			return 0; // failure
+		return len; // success
+	}
 
 	ret = i2c_master_send(client, &cmd, sizeof(cmd));
 	if (ret != sizeof(cmd))
@@ -821,6 +842,11 @@ static int __devinit tsl2563_probe(struct i2c_client *client,
 	int err = 0;
 	int ret;
 	u8 id;
+	u32 smbus_func = I2C_FUNC_SMBUS_BYTE_DATA | I2C_FUNC_SMBUS_WORD_DATA;
+
+	/* We support both I2C and SMBUS adapter interfaces. */
+	if (i2c_check_functionality(client->adapter, smbus_func))
+		use_smbus = 1;
 
 	chip = kzalloc(sizeof(*chip), GFP_KERNEL);
 	if (!chip)
