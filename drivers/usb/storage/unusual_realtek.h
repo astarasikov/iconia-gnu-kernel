@@ -20,6 +20,8 @@
  *   No. 450, Shenhu Road, Suzhou Industry Park, Suzhou, China
  */
 
+#if defined(CONFIG_USB_STORAGE_REALTEK) || \
+		defined(CONFIG_USB_STORAGE_REALTEK_MODULE)
 UNUSUAL_DEV(  0x0bda, 0x0159, 0x0000, 0x9999,
 		"Realtek",
 		"USB Card Reader",
@@ -34,3 +36,5 @@ UNUSUAL_DEV(  0x0bda, 0x0138, 0x0000, 0x9999,
 		"Realtek",
 		"USB Card Reader",
 		US_SC_SCSI, 0xF8, init_realtek_cr, 0),
+#endif  /* defined(CONFIG_USB_STORAGE_REALTEK) || ... */
+
