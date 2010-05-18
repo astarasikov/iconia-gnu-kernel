@@ -44,12 +44,13 @@
 MODULE_DESCRIPTION("Driver for Realtek USB Card Reader");
 MODULE_AUTHOR("wwang <wei_wang@realsil.com.cn>");
 MODULE_LICENSE("GPL");
+MODULE_VERSION("1.02");
 
 static int ss_en = 1;
 module_param(ss_en, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(ss_en, "enable selective suspend");
 
-static int ss_delay = 20;
+static int ss_delay = 50;
 module_param(ss_delay, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(ss_delay, "seconds to delay before entering selective suspend");
 
@@ -61,7 +62,7 @@ static int auto_delink_en = 1;
 module_param(auto_delink_en, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(auto_delink_en, "enable auto delink");
 
-enum CHIP_STAT	{STAT_INIT, STAT_IDLE, STAT_RUN, STAT_SS_PRE, STAT_SS};
+enum CHIP_STAT	{STAT_INIT, STAT_IDLE, STAT_RUN, STAT_SS_PRE, STAT_SS, STAT_SUSPEND};
 
 struct rts51x_status {
 	u16 vid;
@@ -89,6 +90,8 @@ struct rts51x_chip {
 	int 			ss_counter;
 	int 			idle_counter;
 	enum CHIP_STAT		chip_stat;
+	
+	int			resume_from_scsi;
 	
 	struct rts51x_status	*status;
 	int			status_len;
@@ -422,6 +425,8 @@ static int rts51x_check_status(struct us_data *us, u8 lun)
 		return -EIO;
 	}
 	
+	US_DEBUGP("chip->status_len = %d\n", chip->status_len);
+	
 	chip->status[lun].vid = ((u16)buf[0] << 8) | buf[1];
 	chip->status[lun].pid = ((u16)buf[2] << 8) | buf[3];
 	chip->status[lun].cur_lun = buf[4];
@@ -655,8 +660,13 @@ static int config_autodelink_before_power_down(struct us_data *us)
 static void rts51x_polling_func(struct us_data *us)
 {
 	struct rts51x_chip *chip = (struct rts51x_chip *)(us->extra);
+			
+	/* lock the device pointers */
+	mutex_lock(&(us->dev_mutex));
 	
 	if (RTS51X_CHK_STAT(chip, STAT_SS) || RTS51X_CHK_STAT(chip, STAT_SS_PRE)) {
+		/* unlock the device pointers */
+		mutex_unlock(&(us->dev_mutex));
 		return;
 	}
 
@@ -668,6 +678,9 @@ static void rts51x_polling_func(struct us_data *us)
 			} else {
 				US_DEBUGP("Ready to enter SS state\n");
 				RTS51X_SET_STAT(chip, STAT_SS_PRE);   // Prepare SS state
+				
+				/* unlock the device pointers */
+				mutex_unlock(&(us->dev_mutex));
 				usb_autopm_enable(us->pusb_intf);
 				return;
 			}
@@ -686,16 +699,8 @@ static void rts51x_polling_func(struct us_data *us)
 		}
 	}
 	
-	switch (RTS51X_GET_STAT(chip)) {
-	case STAT_RUN:
-		break;
-
-	case STAT_IDLE:
-		break;
-
-	default:
-		break;
-	}
+	/* unlock the device pointers */
+	mutex_unlock(&(us->dev_mutex));
 }
 
 static int rts51x_polling_thread(void * __us)
@@ -714,13 +719,8 @@ static int rts51x_polling_thread(void * __us)
 			break;
 		}
 		
-		/* lock the device pointers */
-		mutex_lock(&(us->dev_mutex));
-		
 		rts51x_polling_func(us);
-		
-		/* unlock the device pointers */
-		mutex_unlock(&(us->dev_mutex));
+
 	} /* for (;;) */
 
 	__set_current_state(TASK_RUNNING);
@@ -728,31 +728,58 @@ static int rts51x_polling_thread(void * __us)
 }
 
 #ifdef CONFIG_PM
-static void rts51x_handle_pm(struct us_data *us, int pwr_state)
+int realtek_cr_suspend(struct usb_interface *iface, pm_message_t message)
 {
+	struct us_data *us = usb_get_intfdata(iface);
 	struct rts51x_chip *chip = (struct rts51x_chip *)(us->extra);
-	
-	US_DEBUGP("Handle pm state: %s\n", pwr_state ? "resume" : "suspend");
 
-	if (pwr_state == US_RESUME) {
+	US_DEBUGP("%s, message.event = 0x%x\n", __func__, message.event);
+	
+	/* Wait until no command is running */
+	mutex_lock(&us->dev_mutex);
+	
+	if (message.event == PM_EVENT_AUTO_SUSPEND) {
+		US_DEBUGP("Enter SS state");
+		chip->resume_from_scsi = 0;
+		RTS51X_SET_STAT(chip, STAT_SS);
+	} else {
+		US_DEBUGP("Enter SUSPEND state");
+		RTS51X_SET_STAT(chip, STAT_SUSPEND);
+	}
+	(void)config_autodelink_before_power_down(us);
+
+	/* When runtime PM is working, we'll set a flag to indicate
+	* whether we should autoresume when a SCSI request arrives. */
+
+	mutex_unlock(&us->dev_mutex);
+
+	return 0;
+}
+
+int realtek_cr_resume(struct usb_interface *iface)
+{
+	struct us_data *us = usb_get_intfdata(iface);
+	struct rts51x_chip *chip = (struct rts51x_chip *)(us->extra);
+
+	US_DEBUGP("%s\n", __func__);
+	
+	if (!RTS51X_CHK_STAT(chip, STAT_SS) || !chip->resume_from_scsi) {
+		mutex_lock(&us->dev_mutex);
+
 		if (GET_PM_USAGE_CNT(us) <= 0) {
 			// Remote wake up, increase pm_usage_cnt
 			US_DEBUGP("Incr pm_usage_cnt\n");
 			SET_PM_USAGE_CNT(us, 1);
-			RTS51X_SET_STAT(chip, STAT_RUN);
 		}
-		
+
 		(void)config_autodelink_after_power_on(us);
-	} else {
-		if (RTS51X_CHK_STAT(chip, STAT_SS_PRE)) {
-			US_DEBUGP("Enter SS state");
-			RTS51X_SET_STAT(chip, STAT_SS);
-		}
-		
-		(void)config_autodelink_before_power_down(us);
+
+		RTS51X_SET_STAT(chip, STAT_RUN);
+	
+		mutex_unlock(&us->dev_mutex);
 	}
 
-	US_DEBUGP("pm_usage_cnt = %d\n", GET_PM_USAGE_CNT(us));
+	return 0;
 }
 #endif
 
@@ -786,10 +813,6 @@ static int init_realtek_cr(struct us_data *us)
 	us->extra = chip;
 	us->extra_destructor = realtek_cr_destructor;
 	
-#ifdef CONFIG_PM
-	us->suspend_resume_hook = rts51x_handle_pm;
-#endif
-	
 	us->max_lun = chip->max_lun = rts51x_get_max_lun(us);
 	
 	US_DEBUGP("chip->max_lun = %d\n", chip->max_lun);
@@ -816,6 +839,8 @@ static int init_realtek_cr(struct us_data *us)
 			SET_AUTO_DELINK(chip);
 		}
 	}
+	
+	US_DEBUGP("chip->flag = 0x%x\n", chip->flag);
 	
 	(void)config_autodelink_after_power_on(us);
 	
@@ -895,10 +920,11 @@ static int realtek_cr_transport(struct scsi_cmnd *srb, struct us_data *us)
 			if (RTS51X_CHK_STAT(chip, STAT_SS)) {
 				// Wake up device
 				US_DEBUGP("Try to wake up device\n");
-				mutex_unlock(&(us->dev_mutex));
+				chip->resume_from_scsi = 1;
 				usb_autopm_disable(us->pusb_intf);
 				wait_timeout(3000);
-				mutex_lock(&(us->dev_mutex));
+				
+				(void)config_autodelink_after_power_on(us);
 				rts51x_reset_card(us, lun);
 			}
 			RTS51X_SET_STAT(chip, STAT_RUN);
@@ -950,8 +976,8 @@ static struct usb_driver realtek_cr_driver = {
 	.name =		"ums-realtek",
 	.probe =	realtek_cr_probe,
 	.disconnect =	usb_stor_disconnect,
-	.suspend =	usb_stor_suspend,
-	.resume =	usb_stor_resume,
+	.suspend =	realtek_cr_suspend,
+	.resume =	realtek_cr_resume,
 	.reset_resume =	usb_stor_reset_resume,
 	.pre_reset =	usb_stor_pre_reset,
 	.post_reset =	usb_stor_post_reset,
