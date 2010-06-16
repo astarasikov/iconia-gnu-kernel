@@ -119,7 +119,7 @@ POSSIBILITY OF SUCH DAMAGE.
 // Include Files
 //---------------------------------------------------------------------------
 #include "Structs.h"
-#include "QCQMIExports.h"
+#include "QMI.h"
 
 /*=========================================================================*/
 // Generic functions
@@ -330,6 +330,3 @@ int SetupQMIWDSCallback( sQCUSBNet * pDev );
 
 // Register client, send req and parse MEID response, release client
 int QMIDMSGetMEID( sQCUSBNet * pDev );
-
-
-

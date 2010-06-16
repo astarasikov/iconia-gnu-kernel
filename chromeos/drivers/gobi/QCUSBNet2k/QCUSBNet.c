@@ -82,14 +82,14 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "Structs.h"
 #include "QMIDevice.h"
-#include "QCQMIExports.h"
+#include "QMI.h"
 
 //-----------------------------------------------------------------------------
 // Definitions
 //-----------------------------------------------------------------------------
 
 // Version Information
-#define DRIVER_VERSION "1.0.90"
+#define DRIVER_VERSION "1.0.100"
 #define DRIVER_AUTHOR "Qualcomm Innovation Center"
 #define DRIVER_DESC "QCUSBNet2k"
 
@@ -1246,6 +1246,10 @@ static void __exit QCUSBNetModExit( void )
    class_destroy( gpClass );
 }
 module_exit( QCUSBNetModExit );
+
+#ifdef bool
+#undef bool
+#endif
 
 MODULE_VERSION( DRIVER_VERSION );
 MODULE_AUTHOR( DRIVER_AUTHOR );
