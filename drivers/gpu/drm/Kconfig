@@ -127,6 +127,18 @@ config DRM_I915_KMS
 	  the driver to bind to PCI devices, which precludes loading things
 	  like intelfb.
 
+config DRM_I915_DIRECT_BACKLIGHT
+	bool "Enable direct backlight control"
+	depends on DRM_I915
+	help
+	  Choose this option if you want the i915 driver to provide direct
+	  backlight control via /sys/class/backlight/i915_backlight.  This
+	  is in addition to the ACPI interface (which may also be in that
+	  directory) that uses ASLE (ACPI Source Language Events) events to
+	  get to i915_opregion.c code.
+	  Direct backlight control gives finer granularity (0-256) than ACPI
+	  and does not require BIOS support.
+
 config DRM_MGA
 	tristate "Matrox g200/g400"
 	depends on DRM && PCI
