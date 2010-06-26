@@ -26,6 +26,7 @@
 #include <linux/sched.h>
 #include <linux/workqueue.h>
 #include <linux/kernel.h>
+#include <linux/slab.h>
 #include <linux/version.h>
 
 #include <scsi/scsi.h>
@@ -850,8 +851,7 @@ static int init_realtek_cr(struct us_data *us)
 		SET_PM_USAGE_CNT(us, 1);
 		US_DEBUGP("pm_usage_cnt = %d\n", GET_PM_USAGE_CNT(us));
 	
-		// Enable autosuspend
-		us->pusb_dev->autosuspend_disabled = 0;
+		usb_enable_autosuspend(us->pusb_dev);
 	}
 #endif
 	
