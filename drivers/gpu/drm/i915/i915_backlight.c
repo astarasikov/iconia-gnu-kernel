@@ -95,7 +95,7 @@ void i915_backlight_init(struct drm_device *dev)
 	}
 
 	bd = backlight_device_register("i915_backlight",
-		&dev->pdev->dev, dev, &i915_bl_ops);
+		&dev->pdev->dev, dev, &i915_bl_ops, &bd->props);
 	if (IS_ERR(bd)) {
 		dev_printk(KERN_WARNING, &dev->pdev->dev,
 			"Unable to register i915 backlight.\n");
