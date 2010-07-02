@@ -89,7 +89,7 @@ POSSIBILITY OF SUCH DAMAGE.
 //-----------------------------------------------------------------------------
 
 // Version Information
-#define DRIVER_VERSION "1.0.100"
+#define DRIVER_VERSION "1.0.110"
 #define DRIVER_AUTHOR "Qualcomm Innovation Center"
 #define DRIVER_DESC "QCUSBNet2k"
 
@@ -271,7 +271,7 @@ DESCRIPTION:
 
 PARAMETERS
    pDev           [ I ] - Pointer to usbnet device
-   pIntfUnused    [ I ] - Pointer to interface
+   pIntf          [ I ] - Pointer to interface
 
 RETURN VALUE:
    int - 0 for success
@@ -648,7 +648,7 @@ static int QCUSBNetAutoPMThread( void * pData )
       status = usb_submit_urb( pAutoPM->mpActiveURB, GFP_KERNEL );
       if (status < 0)
       {
-         // Should could happen for a number of reasons
+         // Could happen for a number of reasons
          DBG( "Failed to submit URB: %d.  Packet dropped\n", status );
          spin_lock_irqsave( &pAutoPM->mActiveURBLock, activeURBflags );
          usb_free_urb( pAutoPM->mpActiveURB );
@@ -698,14 +698,14 @@ int QCUSBNetStartXmit(
    if (pDev == NULL || pDev->net == NULL)
    {
       DBG( "failed to get usbnet device\n" );
-      return -NETDEV_TX_BUSY;
+      return NETDEV_TX_BUSY;
    }
    
    pQCDev = (sQCUSBNet *)pDev->data[0];
    if (pQCDev == NULL)
    {
       DBG( "failed to get QMIDevice\n" );
-      return -NETDEV_TX_BUSY;
+      return NETDEV_TX_BUSY;
    }
    pAutoPM = &pQCDev->mAutoPM;
    
@@ -714,7 +714,7 @@ int QCUSBNetStartXmit(
       // Should not happen
       DBG( "device is suspended\n" );
       dump_stack();
-      return -NETDEV_TX_BUSY;
+      return NETDEV_TX_BUSY;
    }
    
    // Convert the sk_buff into a URB
@@ -1165,6 +1165,7 @@ int QCUSBNetProbe(
 
    pQCDev->mQMIDev.mpDevClass = gpClass;
    
+   sema_init( &pQCDev->mAutoPM.mThreadDoWork, 0 );
    spin_lock_init( &pQCDev->mQMIDev.mClientMemLock );
 
    // Default to device down
