@@ -982,6 +982,11 @@ static const struct usb_device_id QCVIDPIDTable [] =
       USB_DEVICE( 0x05c6, 0x9205 ),
       .driver_info = (unsigned long)&QCNetInfo
    },
+   // Generic Gobi 2000
+   {
+      USB_DEVICE( 0x05c6, 0x920b ),
+      .driver_info = (unsigned long)&QCNetInfo
+   },
    // Panasonic Gobi 2000
    {
       USB_DEVICE( 0x04da, 0x250f ),

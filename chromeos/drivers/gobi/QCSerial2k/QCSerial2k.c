@@ -147,6 +147,8 @@ static struct usb_device_id QCVIDPIDTable[] =
    { USB_DEVICE(0x03f0, 0x251d) },   // HP Gobi 2000 Modem Device
    { USB_DEVICE(0x05c6, 0x9204) },   // Lenovo Gobi 2000 QDL device
    { USB_DEVICE(0x05c6, 0x9205) },   // Lenovo Gobi 2000 Modem Device
+   { USB_DEVICE(0x05c6, 0x9208) },   // Generic Gobi 2000 QDL device
+   { USB_DEVICE(0x05c6, 0x920b) },   // Generic Gobi 2000 Modem Device
    { USB_DEVICE(0x04da, 0x250e) },   // Panasonic Gobi 2000 QDL device
    { USB_DEVICE(0x04da, 0x250f) },   // Panasonic Gobi 2000 Modem Device
    { USB_DEVICE(0x05c6, 0x9244) },   // Samsung Gobi 2000 QDL device
