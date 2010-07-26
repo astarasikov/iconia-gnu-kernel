@@ -120,6 +120,7 @@ POSSIBILITY OF SUCH DAMAGE.
 //-----------------------------------------------------------------------------
 
 extern int debug;
+static int qcusbnet2k_fwdelay = 0;
 
 // Prototype to QCSuspend function
 int QCSuspend( 
@@ -2771,7 +2772,10 @@ bool QMIReady(
    DBG( "QMI Ready after %u milliseconds\n", curTime );
    
    // TODO: 3580 and newer firmware does not require this delay
-   msleep( 5000 );
+   if (qcusbnet2k_fwdelay)
+   {
+      msleep( qcusbnet2k_fwdelay * 1000 );
+   }
 
    // Success
    return true;
@@ -3165,3 +3169,10 @@ int QMIDMSGetMEID( sQCUSBNet * pDev )
    // Success
    return 0;
 }
+
+#ifdef bool
+#undef bool
+#endif
+
+module_param( qcusbnet2k_fwdelay, int, S_IRUGO | S_IWUSR );
+MODULE_PARM_DESC( qcusbnet2k_fwdelay, "Delay for old firmware" );
