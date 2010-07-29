@@ -231,8 +231,8 @@ typedef struct sAutoPM
    /* Thread for atomic autopm function */
    struct task_struct *       mpThread;
 
-   /* Up this semaphore when it's time for the thread to work */
-   struct semaphore           mThreadDoWork;
+   /* Completion for 'there is work to be done' */
+   struct completion          mThreadHasWork;
 
    /* Time to exit? */
    bool                       mbExit;

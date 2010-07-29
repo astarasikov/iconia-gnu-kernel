@@ -251,7 +251,7 @@ int QCResume( struct usb_interface * pIntf )
       }
 
       // Kick Auto PM thread to process any queued URBs
-      up( &pQCDev->mAutoPM.mThreadDoWork );
+      complete( &pQCDev->mAutoPM.mThreadHasWork );
    }
    else
    {
@@ -431,7 +431,7 @@ void QCUSBNetURBCallback( struct urb * pURB )
 
    spin_unlock_irqrestore( &pAutoPM->mActiveURBLock, activeURBflags );
 
-   up( &pAutoPM->mThreadDoWork );
+   complete( &pAutoPM->mThreadHasWork );
    
    usb_free_urb( pURB );
 }
@@ -497,7 +497,7 @@ void QCUSBNetTXTimeout( struct net_device * pNet )
 
    spin_unlock_irqrestore( &pAutoPM->mURBListLock, URBListFlags );
 
-   up( &pAutoPM->mThreadDoWork );
+   complete( &pAutoPM->mThreadHasWork );
 
    return;
 }
@@ -536,8 +536,7 @@ static int QCUSBNetAutoPMThread( void * pData )
 
    while (pAutoPM->mbExit == false)
    {
-      // Wait for someone to poke us
-      down( &pAutoPM->mThreadDoWork );
+      wait_for_completion_interruptible( &pAutoPM->mThreadHasWork );
 
       // Time to exit?
       if (pAutoPM->mbExit == true)
@@ -657,7 +656,7 @@ static int QCUSBNetAutoPMThread( void * pData )
          usb_autopm_put_interface( pAutoPM->mpIntf );
 
          // Loop again
-         up( &pAutoPM->mThreadDoWork );
+         complete( &pAutoPM->mThreadHasWork );
       }
       
       kfree( pURBListEntry );
@@ -767,7 +766,7 @@ int QCUSBNetStartXmit(
 
    spin_unlock_irqrestore( &pAutoPM->mURBListLock, URBListFlags );
 
-   up( &pAutoPM->mThreadDoWork );
+   complete( &pAutoPM->mThreadHasWork );
 
    // Start transfer timer
    pNet->trans_start = jiffies;
@@ -820,7 +819,7 @@ int QCUSBNetOpen( struct net_device * pNet )
    pQCDev->mAutoPM.mpActiveURB = NULL;
    spin_lock_init( &pQCDev->mAutoPM.mURBListLock );
    spin_lock_init( &pQCDev->mAutoPM.mActiveURBLock );
-   sema_init( &pQCDev->mAutoPM.mThreadDoWork, 0 );
+   init_completion( &pQCDev->mAutoPM.mThreadHasWork );
    
    pQCDev->mAutoPM.mpThread = kthread_run( QCUSBNetAutoPMThread, 
                               &pQCDev->mAutoPM, 
@@ -895,7 +894,7 @@ int QCUSBNetStop( struct net_device * pNet )
 
    // Tell traffic thread to exit
    pQCDev->mAutoPM.mbExit = true;
-   up( &pQCDev->mAutoPM.mThreadDoWork );
+   complete( &pQCDev->mAutoPM.mThreadHasWork );
    
    // Wait for it to exit
    while( pQCDev->mAutoPM.mpThread != NULL )
@@ -1170,7 +1169,7 @@ int QCUSBNetProbe(
 
    pQCDev->mQMIDev.mpDevClass = gpClass;
    
-   sema_init( &pQCDev->mAutoPM.mThreadDoWork, 0 );
+   init_completion( &pQCDev->mAutoPM.mThreadHasWork );
    spin_lock_init( &pQCDev->mQMIDev.mClientMemLock );
 
    // Default to device down
