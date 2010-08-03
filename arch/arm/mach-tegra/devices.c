@@ -760,3 +760,25 @@ struct platform_device tegra_pwfm3_device = {
 	.num_resources	= 1,
 	.resource	= &tegra_pwfm3_resource,
 };
+
+static struct resource tegra_gart_resources[] = {
+	[0] = {
+		.name	= "mc",
+		.flags	= IORESOURCE_MEM,
+		.start	= TEGRA_MC_BASE,
+		.end	= TEGRA_MC_BASE + TEGRA_MC_SIZE - 1,
+	},
+	[1] = {
+		.name	= "gart",
+		.flags	= IORESOURCE_MEM,
+		.start	= TEGRA_GART_BASE,
+		.end	= TEGRA_GART_BASE + TEGRA_GART_SIZE - 1,
+	}
+};
+
+struct platform_device tegra_gart_device = {
+	.name		= "tegra_gart",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(tegra_gart_resources),
+	.resource	= tegra_gart_resources
+};
