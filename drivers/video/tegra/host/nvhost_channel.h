@@ -75,12 +75,18 @@ int nvhost_channel_init(
 	struct nvhost_channel *ch,
 	struct nvhost_master *dev, int index);
 
-void nvhost_channel_submit(struct nvhost_channel *ch,
-			   struct nvmap_client *user_nvmap,
-			   struct nvhost_op_pair *ops, int num_pairs,
-			   struct nvhost_cpuinterrupt *intrs, int num_intrs,
-			   struct nvmap_handle **unpins, int num_unpins,
-			   u32 syncpt_id, u32 syncpt_val);
+void nvhost_channel_submit(
+	struct nvhost_channel *ch,
+	struct nvmap_client *user_nvmap,
+	struct nvhost_op_pair *ops,
+	int num_pairs,
+	struct nvhost_cpuinterrupt *intrs,
+	int num_intrs,
+	struct nvmap_handle **unpins,
+	int num_unpins,
+	u32 syncpt_id,
+	u32 syncpt_val,
+	int num_nulled_incrs);
 
 struct nvhost_channel *nvhost_getchannel(struct nvhost_channel *ch);
 void nvhost_putchannel(struct nvhost_channel *ch, struct nvhost_hwctx *ctx);
