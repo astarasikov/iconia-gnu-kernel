@@ -26,7 +26,6 @@
 #include <linux/clk.h>
 #include <linux/serial_8250.h>
 #include <linux/i2c.h>
-#include <linux/pda_power.h>
 #include <linux/i2c/panjit_ts.h>
 #include <linux/dma-mapping.h>
 #include <linux/delay.h>
@@ -79,18 +78,6 @@ static __initdata struct tegra_clk_init_table ventana_clk_init_table[] = {
 	{ "pll_m",	"clk_m",	600000000,	true},
 	{ "emc",	"pll_m",	600000000,	true},
 	{ NULL,		NULL,		0,		0},
-};
-
-/* PDA power */
-static struct pda_power_pdata pda_power_pdata = {
-};
-
-static struct platform_device pda_power_device = {
-	.name   = "pda_power",
-	.id     = -1,
-	.dev    = {
-		.platform_data  = &pda_power_pdata,
-	},
 };
 
 static struct tegra_sdhci_platform_data sdhci_pdata1 = {
@@ -202,7 +189,6 @@ static struct platform_device *ventana_devices[] __initdata = {
 	&tegra_sdhci_device1,
 	&tegra_sdhci_device3,
 	&tegra_sdhci_device4,
-	&pda_power_device,
 	&tegra_gart_device,
 	&ventana_keys_device,
 };
