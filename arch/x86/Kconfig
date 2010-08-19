@@ -1549,6 +1549,8 @@ config KEXEC_JUMP
 
 config PRESERVED_RAM
 	bool "Save crash log in preserved RAM"
+	select DEBUG_FS
+	select SYSFS
 	---help---
 	  Boot firmware may reserve an area of RAM to be preserved across
 	  reboot, in the event of a kernel BUG or oops or panic - perhaps

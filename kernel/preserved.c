@@ -4,14 +4,17 @@
  * This file is released under the GPLv2: see the file COPYING for details.
  */
 
+#include <linux/debugfs.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/magic.h>
 #include <linux/mmzone.h>
 #include <linux/mm_types.h>
+#include <linux/mutex.h>
 #include <linux/page-flags.h>
 #include <linux/preserved.h>
 #include <linux/reboot.h>
+#include <linux/uaccess.h>
 
 #define CHROMEOS_PRESERVED_RAM_ADDR 0x00f00000	/* 15MB */
 #define CHROMEOS_PRESERVED_RAM_SIZE 0x00100000	/*  1MB */
@@ -27,6 +30,7 @@ struct preserved {
 static struct preserved *preserved = __va(CHROMEOS_PRESERVED_RAM_ADDR);
 
 static bool preserved_was_reserved;
+static DEFINE_MUTEX(preserved_mutex);
 
 /*
  * We avoid writing or reading the preserved area until we have to,
@@ -65,6 +69,79 @@ static bool preserved_make_valid(void)
 	 */
 	return preserved_is_valid();
 }
+
+/*
+ * For runtime: reading and writing /sys/kernel/debug/preserved files.
+ */
+
+static ssize_t kcrash_read(struct file *file, char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	loff_t pos = *ppos;
+	unsigned int offset, limit, residue;
+	int error = 0;
+
+	mutex_lock(&preserved_mutex);
+	if (!preserved_is_valid())
+		goto out;
+	if (pos < 0 || pos >= preserved->ksize)
+		goto out;
+	if (count > preserved->ksize - pos)
+		count = preserved->ksize - pos;
+
+	offset = preserved->cursor - preserved->ksize;
+	if ((int)offset < 0)
+		offset += sizeof(preserved->buf);
+	offset += pos;
+	if (offset > sizeof(preserved->buf))
+		offset -= sizeof(preserved->buf);
+
+	limit = sizeof(preserved->buf) - offset;
+	residue = count;
+	error = -EFAULT;
+
+	if (residue > limit) {
+		if (copy_to_user(buf, preserved->buf + offset, limit))
+			goto out;
+		offset = 0;
+		residue -= limit;
+		buf += limit;
+	}
+
+	if (copy_to_user(buf, preserved->buf + offset, residue))
+		goto out;
+
+	pos += count;
+	*ppos = pos;
+	error = count;
+out:
+	mutex_unlock(&preserved_mutex);
+	return error;
+}
+
+static ssize_t kcrash_write(struct file *file, const char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	/*
+	 * A write to kcrash does nothing but reset it.
+	 */
+	mutex_lock(&preserved_mutex);
+	if (preserved_is_valid()) {
+		preserved->cursor = 0;
+		preserved->ksize = 0;
+	}
+	mutex_unlock(&preserved_mutex);
+	return count;
+}
+
+static const struct file_operations kcrash_operations = {
+	.read	= kcrash_read,
+	.write	= kcrash_write,
+};
+
+/*
+ * For emergency_restart: at the time of a bug, oops or panic.
+ */
 
 static void kcrash_append(unsigned int log_size)
 {
@@ -123,6 +200,8 @@ static bool __init preserved_is_reserved(void)
 
 static int __init preserved_init(void)
 {
+	struct dentry *dir;
+
 	/*
 	 * Whether or not it can preserve an oops or other bug trace, ChromeOS
 	 * prefers to reboot the machine immediately when a kernel bug occurs.
@@ -136,7 +215,18 @@ static int __init preserved_init(void)
 	 * for us: this kernel might be running on a machine without it.
 	 * But to be even safer, we don't access that memory until asked.
 	 */
-	preserved_is_reserved();
+	if (preserved_is_reserved()) {
+		/*
+		 * If error occurs in setting up /sys/kernel/debug/preserved/,
+		 * we cannot do better than ignore it.
+		 */
+		dir = debugfs_create_dir("preserved", NULL);
+		if (dir && !IS_ERR(dir)) {
+			debugfs_create_file("kcrash", S_IFREG|S_IRUSR|S_IWUSR,
+						dir, NULL, &kcrash_operations);
+		}
+	}
+
 	return 0;
 }
 postcore_initcall(preserved_init);
