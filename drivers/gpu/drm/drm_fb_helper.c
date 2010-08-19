@@ -354,6 +354,12 @@ bool drm_fb_helper_force_kernel_mode(void)
 	list_for_each_entry(helper, &kernel_fb_helper_list, kernel_fb_list) {
 		for (i = 0; i < helper->crtc_count; i++) {
 			struct drm_mode_set *mode_set = &helper->crtc_info[i].mode_set;
+			struct drm_crtc *crtc;
+
+			crtc = helper->crtc_info[i].mode_set.crtc;
+			if (!crtc->enabled)
+				continue;
+
 			ret = drm_crtc_helper_set_config(mode_set);
 			if (ret)
 				error = true;
