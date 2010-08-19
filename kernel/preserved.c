@@ -25,7 +25,7 @@ struct preserved {
 	unsigned int	cursor;
 	char		buf[CHROMEOS_PRESERVED_BUF_SIZE];
 	unsigned int	ksize;
-	unsigned int	pad;		/* up here to verify end of area */
+	unsigned int	usize;		/* up here to verify end of area */
 };
 static struct preserved *preserved = __va(CHROMEOS_PRESERVED_RAM_ADDR);
 
@@ -45,8 +45,9 @@ static bool preserved_is_valid(void)
 	    preserved->magic == DEBUGFS_MAGIC &&
 	    preserved->cursor < sizeof(preserved->buf) &&
 	    preserved->ksize <= sizeof(preserved->buf) &&
-	    preserved->ksize >= preserved->cursor &&
-	    preserved->pad == DEBUGFS_MAGIC)
+	    preserved->usize <= sizeof(preserved->buf) &&
+	    preserved->ksize + preserved->usize >= preserved->cursor &&
+	    preserved->ksize + preserved->usize <= sizeof(preserved->buf))
 		return true;
 
 	return false;
@@ -60,7 +61,7 @@ static bool preserved_make_valid(void)
 	preserved->magic = DEBUGFS_MAGIC;
 	preserved->cursor = 0;
 	preserved->ksize = 0;
-	preserved->pad = DEBUGFS_MAGIC;
+	preserved->usize = 0;
 
 	/*
 	 * But perhaps this reserved area is not actually backed by RAM?
@@ -123,12 +124,13 @@ static ssize_t kcrash_write(struct file *file, const char __user *buf,
 				size_t count, loff_t *ppos)
 {
 	/*
-	 * A write to kcrash does nothing but reset it.
+	 * A write to kcrash does nothing but reset both kcrash and utrace.
 	 */
 	mutex_lock(&preserved_mutex);
 	if (preserved_is_valid()) {
 		preserved->cursor = 0;
 		preserved->ksize = 0;
+		preserved->usize = 0;
 	}
 	mutex_unlock(&preserved_mutex);
 	return count;
@@ -139,15 +141,160 @@ static const struct file_operations kcrash_operations = {
 	.write	= kcrash_write,
 };
 
+static ssize_t utrace_read(struct file *file, char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	loff_t pos = *ppos;
+	unsigned int offset, limit, residue;
+	unsigned int supersize, origin;
+	int error = 0;
+
+	/*
+	 * Try to handle the case when utrace entries are being added
+	 * in between our sequential reads; but if they're being added
+	 * faster than we're reading them, this won't work very well.
+	 */
+	mutex_lock(&preserved_mutex);
+	if (!preserved_is_valid())
+		goto out;
+	supersize = preserved->usize;
+
+	if (pos == 0 || preserved->ksize != 0) {
+		origin = 0;
+		if (supersize == sizeof(preserved->buf) - preserved->ksize)
+			origin = preserved->cursor;
+		file->private_data = (void *)origin;
+	} else {	/* cursor may have moved since we started reading */
+		origin = (unsigned int)file->private_data;
+		if (supersize == sizeof(preserved->buf)) {
+			int advance = preserved->cursor - origin;
+			if (advance < 0)
+				advance += sizeof(preserved->buf);
+			supersize += advance;
+		}
+	}
+
+	if (pos < 0 || pos >= supersize)
+		goto out;
+	if (count > supersize - pos)
+		count = supersize - pos;
+
+	offset = origin + pos;
+	if (offset > sizeof(preserved->buf))
+		offset -= sizeof(preserved->buf);
+	limit = sizeof(preserved->buf) - offset;
+	residue = count;
+	error = -EFAULT;
+
+	if (residue > limit) {
+		if (copy_to_user(buf, preserved->buf + offset, limit))
+			goto out;
+		offset = 0;
+		residue -= limit;
+		buf += limit;
+	}
+
+	if (copy_to_user(buf, preserved->buf + offset, residue))
+		goto out;
+
+	pos += count;
+	*ppos = pos;
+	error = count;
+out:
+	mutex_unlock(&preserved_mutex);
+	return error;
+}
+
+static ssize_t utrace_write(struct file *file, const char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	unsigned int offset, limit, residue;
+	unsigned int usize = 0;
+	int error;
+
+	/*
+	 * Originally, writing to the preserved area was implemented
+	 * just for testing that it is all preserved.  But it might be
+	 * useful for debugging a kernel crash if we allow userspace
+	 * to write trace records to that area as a circular buffer.
+	 * But don't allow any utrace writes once a kcrash is present.
+	 */
+	mutex_lock(&preserved_mutex);
+	if (!preserved_is_valid() && !preserved_make_valid()) {
+		error = -ENXIO;
+		goto out;
+	}
+	if (preserved->ksize != 0) {
+		error = -ENOSPC;
+		goto out;
+	}
+
+	if (count > sizeof(preserved->buf)) {
+		buf += count - sizeof(preserved->buf);
+		count = sizeof(preserved->buf);
+	}
+
+	offset = preserved->cursor;
+	limit = sizeof(preserved->buf) - offset;
+	residue = count;
+	error = -EFAULT;
+
+	if (residue > limit) {
+		if (copy_from_user(preserved->buf + offset, buf, limit))
+			goto out;
+		usize = sizeof(preserved->buf);
+		offset = 0;
+		residue -= limit;
+		buf += limit;
+	}
+
+	if (copy_from_user(preserved->buf + offset, buf, residue))
+		goto out;
+
+	offset += residue;
+	if (usize < offset)
+		usize = offset;
+	if (preserved->usize < usize)
+		preserved->usize = usize;
+	if (offset == sizeof(preserved->buf))
+		offset = 0;
+	preserved->cursor = offset;
+
+	/*
+	 * We always append, ignoring ppos: don't even pretend to maintain it.
+	 */
+	error = count;
+out:
+	mutex_unlock(&preserved_mutex);
+	return error;
+}
+
+static const struct file_operations utrace_operations = {
+	.read	= utrace_read,
+	.write	= utrace_write,
+};
+
 /*
  * For emergency_restart: at the time of a bug, oops or panic.
  */
 
 static void kcrash_append(unsigned int log_size)
 {
-	preserved->ksize += log_size;
-	if (preserved->ksize > sizeof(preserved->buf))
+	int excess = preserved->usize + preserved->ksize +
+			log_size - sizeof(preserved->buf);
+
+	if (excess <= 0) {
+		/* kcrash fits without losing any utrace */
+		preserved->ksize += log_size;
+	} else if (excess <= preserved->usize) {
+		/* some of utrace was overwritten by kcrash */
+		preserved->usize -= excess;
+		preserved->ksize += log_size;
+	} else {
+		/* no utrace left and kcrash is full */
+		preserved->usize = 0;
 		preserved->ksize = sizeof(preserved->buf);
+	}
 
 	preserved->cursor += log_size;
 	if (preserved->cursor >= sizeof(preserved->buf))
@@ -224,6 +371,8 @@ static int __init preserved_init(void)
 		if (dir && !IS_ERR(dir)) {
 			debugfs_create_file("kcrash", S_IFREG|S_IRUSR|S_IWUSR,
 						dir, NULL, &kcrash_operations);
+			debugfs_create_file("utrace", S_IFREG|S_IRUSR|S_IWUGO,
+						dir, NULL, &utrace_operations);
 		}
 	}
 
