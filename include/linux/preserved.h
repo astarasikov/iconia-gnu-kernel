@@ -8,5 +8,7 @@
 /* in kernel/printk.c */
 extern unsigned int copy_log_buf(char *buf, unsigned int buf_size,
 					    unsigned int cursor);
+/* in drivers/acpi/sleep.c */
+extern void acpi_S3_reboot(void);
 
 #endif /* _LINUX_PRESERVED_H */
