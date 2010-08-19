@@ -1547,6 +1547,15 @@ config KEXEC_JUMP
 	  Jump between original kernel and kexeced kernel and invoke
 	  code in physical address mode via KEXEC
 
+config PRESERVED_RAM
+	bool "Save crash log in preserved RAM"
+	---help---
+	  Boot firmware may reserve an area of RAM to be preserved across
+	  reboot, in the event of a kernel BUG or oops or panic - perhaps
+	  even across normal reboot.  If you say "Y", then the kernel
+	  will try to copy its printk log buffer (as shown by dmesg) there
+	  before rebooting when it crashes, for examination after reboot.
+
 config PHYSICAL_START
 	hex "Physical address where the kernel is loaded" if (EXPERT || CRASH_DUMP)
 	default "0x1000000"
