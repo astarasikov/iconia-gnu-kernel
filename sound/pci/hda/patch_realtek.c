@@ -1127,6 +1127,7 @@ static void alc_automute_speaker(struct hda_codec *codec, int pinctl)
 	unsigned int mute;
 	hda_nid_t nid;
 	int i;
+	unsigned int hdmi_present = 0;
 
 	spec->jack_present = 0;
 	for (i = 0; i < ARRAY_SIZE(spec->autocfg.hp_pins); i++) {
@@ -1139,6 +1140,19 @@ static void alc_automute_speaker(struct hda_codec *codec, int pinctl)
 
 	mute = spec->jack_present ? HDA_AMP_MUTE : 0;
 	/* Toggle internal speakers muting */
+
+	if (!nid)
+		return;
+	spec->jack_present = snd_hda_jack_detect(codec, nid);
+	if (codec->subsystem_id == 0x1025047c) {
+		hdmi_present = snd_hda_codec_read(codec, 0x1e, 0,
+						  AC_VERB_GET_PIN_SENSE, 0);
+		hdmi_present = (hdmi_present & AC_PINSENSE_PRESENCE) ? 1 : 0;
+		snd_hda_codec_write(codec, spec->multiout.dig_out_nid, 0,
+				    AC_VERB_SET_DIGI_CONVERT_1,
+				    spec->jack_present ? 0 : 1);
+	}
+
 	for (i = 0; i < ARRAY_SIZE(spec->autocfg.speaker_pins); i++) {
 		nid = spec->autocfg.speaker_pins[i];
 		if (!nid)
@@ -1146,7 +1160,8 @@ static void alc_automute_speaker(struct hda_codec *codec, int pinctl)
 		if (pinctl) {
 			snd_hda_codec_write(codec, nid, 0,
 				    AC_VERB_SET_PIN_WIDGET_CONTROL,
-				    spec->jack_present ? 0 : PIN_OUT);
+				    (spec->jack_present | hdmi_present) ? 
+				    0 : PIN_OUT);
 		} else {
 			snd_hda_codec_amp_stereo(codec, nid, HDA_OUTPUT, 0,
 					 HDA_AMP_MUTE, mute);
@@ -1254,6 +1269,7 @@ static void alc_sku_unsol_event(struct hda_codec *codec, unsigned int res)
 		res >>= 26;
 	switch (res) {
 	case ALC880_HP_EVENT:
+	case ALC880_FRONT_EVENT:
 		alc_automute_pin(codec);
 		break;
 	case ALC880_MIC_EVENT:
@@ -14477,6 +14493,8 @@ static struct hda_verb alc271_acer_dmic_verbs[] = {
 	{0x21, AC_VERB_SET_CONNECT_SEL, 0x00},
 	{0x21, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN | ALC880_HP_EVENT},
 	{0x18, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN | ALC880_MIC_EVENT},
+	{0x1e, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN
+	 | ALC880_FRONT_EVENT},
 	{0x22, AC_VERB_SET_CONNECT_SEL, 6},
 	{ }
 };
