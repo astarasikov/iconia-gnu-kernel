@@ -8,11 +8,9 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/magic.h>
-#include <linux/mmzone.h>
-#include <linux/mm_types.h>
+#include <linux/mm.h>
 #include <linux/mutex.h>
 #include <linux/nvram.h>
-#include <linux/page-flags.h>
 #include <linux/preserved.h>
 #include <linux/reboot.h>
 #include <linux/rtc.h>
