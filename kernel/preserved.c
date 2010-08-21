@@ -97,7 +97,13 @@ static bool preserved_is_valid(void)
 	return false;
 }
 
-static bool preserved_make_valid(void)
+/*
+ * The noinline below works around a compiler bug, which inlined both calls to
+ * preserved_make_valid(), but omitted its tail call to preserved_is_valid():
+ * so the first write to utrace failed with ENXIO, or the first attempt to
+ * save kernel crash messages skipped immediately to reboot.
+ */
+static noinline bool preserved_make_valid(void)
 {
 	if (!preserved_was_reserved)
 		return false;
