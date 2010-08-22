@@ -288,6 +288,7 @@ static void __init harmony_i2c_init(void)
 
 static struct platform_device *harmony_devices[] __initdata = {
 	&debug_uart,
+	&tegra_pmu_device,
 	&tegra_nand_device,
 	&pda_power_device,
 	&tegra_sdhci_device1,
