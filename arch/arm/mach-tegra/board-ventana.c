@@ -197,6 +197,7 @@ static struct platform_device ventana_keys_device = {
 
 static struct platform_device *ventana_devices[] __initdata = {
 	&debug_uart,
+	&tegra_pmu_device,
 	&tegra_sdhci_device1,
 	&tegra_sdhci_device3,
 	&tegra_sdhci_device4,
