@@ -52,6 +52,7 @@ struct tegra_dc_mode {
 
 enum {
 	TEGRA_DC_OUT_RGB,
+	TEGRA_DC_OUT_HDMI,
 };
 
 struct tegra_dc_out {
