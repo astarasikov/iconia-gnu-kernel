@@ -52,5 +52,6 @@ extern struct platform_device tegra_ehci1_device;
 extern struct platform_device tegra_ehci2_device;
 extern struct platform_device tegra_ehci3_device;
 extern struct platform_device tegra_gart_device;
+extern struct platform_device tegra_wdt_device;
 
 #endif
