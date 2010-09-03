@@ -1143,25 +1143,26 @@ EXPORT_SYMBOL_GPL(tpm_pm_suspend);
 int tpm_pm_resume(struct device *dev)
 {
 	struct tpm_chip *chip = dev_get_drvdata(dev);
-        u8 startrestorestate[] = {
+	u8 startrestorestate[] = {
 		0, 0xc1,	/* TPM_TAG_RQU_COMMAND */
 		0, 0, 0, 0xc,	/* blob length (in bytes) */
 		0, 0, 0, 0x99,	/* TPM_ORD_Startup */
-                0, 0x2          /* ST_STATE */
+		0, 0x2		/* ST_STATE */
 	};
-        struct tpm_cmd_t* start_cmd = (struct tpm_cmd_t*) startrestorestate;
+	struct tpm_cmd_t* start_cmd = (struct tpm_cmd_t*) startrestorestate;
 
 	if (chip == NULL)
 		return -ENODEV;
 
-        /* For the Chrome OS dogfood devices: attempt to restore state, but
-         * ignore errors if the BIOS has already done it.  If successful, run
-         * the self test again.
-         */
-        tpm_transmit(chip, startrestorestate, sizeof(startrestorestate));
-        if (start_cmd->header.out.return_code == 0) {
-          tpm_continue_selftest(chip);
-        }
+	/* For the Chrome OS dogfood devices: attempt to restore state, but
+	 * ignore errors if the BIOS has already done it.  If successful, run
+	 * the self test again.
+	 */
+	tpm_transmit(chip, startrestorestate, sizeof(startrestorestate));
+	if (start_cmd->header.out.return_code == 0) {
+		printk(KERN_WARNING "TPM resumed by kernel");
+		tpm_continue_selftest(chip);
+	}
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tpm_pm_resume);
