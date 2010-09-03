@@ -34,6 +34,7 @@ obj-$(CONFIG_SMP)			+= headsmp.o
 obj-$(CONFIG_TEGRA_SYSTEM_DMA)		+= dma.o
 obj-$(CONFIG_CPU_FREQ)                  += cpu-tegra.o
 obj-$(CONFIG_TEGRA_PCI)			+= pcie.o
+obj-$(CONFIG_TEGRA_PWM)			+= pwm.o
 obj-$(CONFIG_USB_SUPPORT)		+= usb_phy.o
 obj-$(CONFIG_CPU_IDLE)			+= cpuidle.o
 obj-$(CONFIG_TEGRA_IOVMM)               += iovmm.o
