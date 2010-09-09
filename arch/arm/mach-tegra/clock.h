@@ -83,9 +83,13 @@ struct clk {
 #endif
 	bool			set;
 	struct clk_ops		*ops;
+	unsigned long		dvfs_rate;
 	unsigned long		rate;
+	unsigned long		requested_rate;
 	unsigned long		max_rate;
 	unsigned long		min_rate;
+	bool			is_dvfs;
+	bool			auto_dvfs;
 	u32			flags;
 	const char		*name;
 
@@ -130,6 +134,7 @@ struct clk {
 		} shared_bus_user;
 	} u;
 
+	struct list_head dvfs;
 	spinlock_t spinlock;
 };
 
@@ -156,5 +161,6 @@ void tegra_clk_init_from_table(struct tegra_clk_init_table *table);
 unsigned long clk_get_rate_locked(struct clk *c);
 int clk_set_rate_locked(struct clk *c, unsigned long rate);
 void tegra2_sdmmc_tap_delay(struct clk *c, int delay);
+void tegra_clk_set_dvfs_rates(void);
 
 #endif

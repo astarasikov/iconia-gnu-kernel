@@ -32,6 +32,7 @@
 
 #include "board.h"
 #include "clock.h"
+#include "dvfs.h"
 
 /*
  * Locking:
@@ -61,6 +62,18 @@
  */
 static DEFINE_MUTEX(clock_list_lock);
 static LIST_HEAD(clocks);
+
+static inline bool clk_is_auto_dvfs(struct clk *c)
+{
+	smp_rmb();
+	return c->auto_dvfs;
+};
+
+static inline bool clk_is_dvfs(struct clk *c)
+{
+	smp_rmb();
+	return c->is_dvfs;
+};
 
 struct clk *tegra_get_clock_by_name(const char *name)
 {
@@ -131,6 +144,8 @@ void clk_init(struct clk *c)
 {
 	spin_lock_init(&c->spinlock);
 
+	INIT_LIST_HEAD(&c->dvfs);
+
 	if (c->ops && c->ops->init)
 		c->ops->init(c);
 
@@ -153,13 +168,20 @@ int clk_enable(struct clk *c)
 	int ret = 0;
 	unsigned long flags;
 
+	if (clk_is_auto_dvfs(c)) {
+		lock_dvfs();
+		ret = tegra_dvfs_set_rate(c, c->rate);
+		if (ret)
+			goto out;
+	}
+
 	spin_lock_irqsave(&c->spinlock, flags);
 
 	if (c->refcnt == 0) {
 		if (c->parent) {
 			ret = clk_enable(c->parent);
 			if (ret)
-				goto out;
+				goto out_unlock;
 		}
 
 		if (c->ops && c->ops->enable) {
@@ -167,15 +189,19 @@ int clk_enable(struct clk *c)
 			if (ret) {
 				if (c->parent)
 					clk_disable(c->parent);
-				goto out;
+				goto out_unlock;
 			}
 			c->state = ON;
 			c->set = true;
 		}
 	}
 	c->refcnt++;
-out:
+out_unlock:
 	spin_unlock_irqrestore(&c->spinlock, flags);
+out:
+	if (clk_is_auto_dvfs(c))
+		unlock_dvfs();
+
 	return ret;
 }
 EXPORT_SYMBOL(clk_enable);
@@ -183,6 +209,9 @@ EXPORT_SYMBOL(clk_enable);
 void clk_disable(struct clk *c)
 {
 	unsigned long flags;
+
+	if (clk_is_auto_dvfs(c))
+		lock_dvfs();
 
 	spin_lock_irqsave(&c->spinlock, flags);
 
@@ -203,32 +232,52 @@ void clk_disable(struct clk *c)
 	c->refcnt--;
 
 	spin_unlock_irqrestore(&c->spinlock, flags);
+
+	if (clk_is_auto_dvfs(c)) {
+		if (c->refcnt == 0)
+			tegra_dvfs_set_rate(c, 0);
+		unlock_dvfs();
+	}
 }
 EXPORT_SYMBOL(clk_disable);
 
 int clk_set_parent(struct clk *c, struct clk *parent)
 {
-	int ret;
+	int ret = 0;
 	unsigned long flags;
 	unsigned long new_rate;
 	unsigned long old_rate;
+
+	new_rate = clk_predict_rate_from_parent(c, parent);
+	old_rate = clk_get_rate_locked(c);
+
+	if (clk_is_auto_dvfs(c)) {
+		lock_dvfs();
+		if (c->refcnt > 0 && (!c->parent || new_rate > c->rate))
+			ret = tegra_dvfs_set_rate(c, new_rate);
+		if (!ret)
+			goto out;
+	}
 
 	spin_lock_irqsave(&c->spinlock, flags);
 
 	if (!c->ops || !c->ops->set_parent) {
 		ret = -ENOSYS;
-		goto out;
+		goto out_unlock;
 	}
-
-	new_rate = clk_predict_rate_from_parent(c, parent);
-	old_rate = clk_get_rate_locked(c);
 
 	ret = c->ops->set_parent(c, parent);
 	if (ret)
-		goto out;
+		goto out_unlock;
 
-out:
+	if (clk_is_auto_dvfs(c) && c->refcnt > 0)
+		ret = tegra_dvfs_set_rate(c, new_rate);
+
+out_unlock:
 	spin_unlock_irqrestore(&c->spinlock, flags);
+out:
+	if (clk_is_auto_dvfs(c))
+		unlock_dvfs();
 	return ret;
 }
 EXPORT_SYMBOL(clk_set_parent);
@@ -243,11 +292,16 @@ int clk_set_rate_locked(struct clk *c, unsigned long rate)
 {
 	long new_rate;
 
+	if (rate == c->requested_rate)
+		return 0;
+
 	if (!c->ops || !c->ops->set_rate)
 		return -ENOSYS;
 
 	if (rate > c->max_rate)
 		rate = c->max_rate;
+
+	c->requested_rate = rate;
 
 	if (c->ops && c->ops->round_rate) {
 		new_rate = c->ops->round_rate(c, rate);
@@ -263,8 +317,16 @@ int clk_set_rate_locked(struct clk *c, unsigned long rate)
 
 int clk_set_rate(struct clk *c, unsigned long rate)
 {
-	int ret;
+	int ret = 0;
 	unsigned long flags;
+
+	if (clk_is_auto_dvfs(c)) {
+		lock_dvfs();
+		if (rate > c->rate && c->refcnt > 0)
+			ret = tegra_dvfs_set_rate(c, rate);
+		if (ret)
+			goto out;
+	}
 
 	spin_lock_irqsave(&c->spinlock, flags);
 
@@ -272,6 +334,15 @@ int clk_set_rate(struct clk *c, unsigned long rate)
 
 	spin_unlock_irqrestore(&c->spinlock, flags);
 
+	if (ret)
+		goto out;
+
+	if (clk_is_auto_dvfs(c) && c->refcnt > 0)
+		ret = tegra_dvfs_set_rate(c, rate);
+
+out:
+	if (clk_is_auto_dvfs(c))
+		unlock_dvfs();
 	return ret;
 }
 EXPORT_SYMBOL(clk_set_rate);
@@ -416,6 +487,21 @@ void tegra_sdmmc_tap_delay(struct clk *c, int delay)
 	spin_unlock_irqrestore(&c->spinlock, flags);
 }
 
+void __init tegra_clk_set_dvfs_rates(void)
+{
+	struct clk *c;
+	list_for_each_entry(c, &clocks, node) {
+		if (clk_is_auto_dvfs(c)) {
+			if (c->refcnt > 0)
+				tegra_dvfs_set_rate(c, c->rate);
+			else
+				tegra_dvfs_set_rate(c, 0);
+		} else if (clk_is_dvfs(c)) {
+			tegra_dvfs_set_rate(c, c->dvfs_rate);
+		}
+	}
+}
+
 static bool tegra_keep_boot_clocks = false;
 static int __init tegra_keep_boot_clocks_setup(char *__unused)
 {
@@ -432,6 +518,7 @@ static int __init tegra_init_disable_boot_clocks(void)
 {
 	struct clk *c;
 
+	lock_dvfs();
 	mutex_lock(&clock_list_lock);
 
 	list_for_each_entry(c, &clocks, node) {
@@ -456,6 +543,7 @@ static int __init tegra_init_disable_boot_clocks(void)
 	}
 
 	mutex_unlock(&clock_list_lock);
+	unlock_dvfs();
 
 	return 0;
 }
@@ -527,11 +615,20 @@ static void clk_unlock_all(void)
 
 static struct dentry *clk_debugfs_root;
 
+static void dvfs_show_one(struct seq_file *s, struct dvfs *d, int level)
+{
+	seq_printf(s, "%*s  %-*s%21s%d mV\n",
+			level * 3 + 1, "",
+			30 - level * 3, d->reg_id,
+			"",
+			d->cur_millivolts);
+}
 
 static void clock_tree_show_one(struct seq_file *s, struct clk *c, int level)
 {
 	struct clk *child;
 	const char *state = "uninit";
+	struct dvfs *d;
 	char div[8] = {0};
 
 	if (c->state == ON)
@@ -562,6 +659,9 @@ static void clock_tree_show_one(struct seq_file *s, struct clk *c, int level)
 		!c->set ? '*' : ' ',
 		30 - level * 3, c->name,
 		state, c->refcnt, div, clk_get_rate_all_locked(c));
+
+	list_for_each_entry(d, &c->dvfs, node)
+		dvfs_show_one(s, d, level + 1);
 
 	list_for_each_entry(child, &clocks, node) {
 		if (child->parent != c)
@@ -699,6 +799,9 @@ static int __init clk_debugfs_init(void)
 	d = debugfs_create_file("clock_tree", S_IRUGO, clk_debugfs_root, NULL,
 		&clock_tree_fops);
 	if (!d)
+		goto err_out;
+
+	if (dvfs_debugfs_init(clk_debugfs_root))
 		goto err_out;
 
 	list_for_each_entry(c, &clocks, node) {
