@@ -56,6 +56,7 @@ struct tegra_dc_out {
 
 	unsigned		order;
 	unsigned		align;
+	unsigned		depth;
 
 	struct tegra_dc_mode	*modes;
 	int			n_modes;
