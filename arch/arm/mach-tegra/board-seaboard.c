@@ -37,6 +37,7 @@
 #include <mach/pinmux.h>
 #include <mach/pinmux-t2.h>
 #include <mach/kbc.h>
+#include <mach/suspend.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -560,8 +561,21 @@ static void __init seaboard_common_init(void)
 	seaboard_kbc_init();
 }
 
+static struct tegra_suspend_platform_data seaboard_suspend = {
+	.cpu_timer = 5000,
+	.cpu_off_timer = 5000,
+	.core_timer = 0x7e7e,
+	.core_off_timer = 0x7f,
+	.separate_req = true,
+	.corereq_high = false,
+	.sysclkreq_high = true,
+	.suspend_mode = TEGRA_SUSPEND_LP1,
+};
+
 static void __init tegra_seaboard_init(void)
 {
+	tegra_init_suspend(&seaboard_suspend);
+
 	/* Seaboard uses UARTD for the debug port. */
 	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTD_BASE);
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTD_BASE;
