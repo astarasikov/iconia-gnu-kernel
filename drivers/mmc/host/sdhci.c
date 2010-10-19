@@ -1903,6 +1903,8 @@ int sdhci_add_host(struct sdhci_host *host)
 	    mmc_card_is_removable(mmc))
 		mmc->caps |= MMC_CAP_NEEDS_POLL;
 
+	mmc->caps |= MMC_CAP_ERASE;
+
 	ocr_avail = 0;
 	if (caps & SDHCI_CAN_VDD_330)
 		ocr_avail |= MMC_VDD_32_33 | MMC_VDD_33_34;
