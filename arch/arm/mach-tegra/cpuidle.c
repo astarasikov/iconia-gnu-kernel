@@ -478,6 +478,7 @@ static int tegra_idle_enter(unsigned int cpu)
 	state->flags = CPUIDLE_FLAG_TIME_VALID;
 	state->enter = tegra_idle_enter_lp2;
 
+	dev->power_specified = 1;
 	dev->safe_state = state;
 	dev->state_count++;
 
