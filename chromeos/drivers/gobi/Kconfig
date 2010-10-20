@@ -1,0 +1,4 @@
+config GOBI
+	tristate "Qualcomm GOBI2k support"
+	help
+	This module adds support for GOBI2k 3G radios.

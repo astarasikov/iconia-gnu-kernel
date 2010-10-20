@@ -1,3 +1,5 @@
 menu "Chromeos Supplied Third-Party Device Drivers"
 
+source "chromeos/drivers/gobi/Kconfig"
+
 endmenu
