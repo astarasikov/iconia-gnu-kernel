@@ -211,9 +211,16 @@ typedef efi_status_t efi_set_virtual_address_map_t (unsigned long memory_map_siz
 #define UV_SYSTEM_TABLE_GUID \
     EFI_GUID(  0x3b13a7d4, 0x633e, 0x11dd, 0x93, 0xec, 0xda, 0x25, 0x56, 0xd8, 0x95, 0x93 )
 
+#ifdef CONFIG_EFI64
+#define PAD_EFI64(A) u32 pad##A
+#else
+#define PAD_EFI64(A)
+#endif
+
 typedef struct {
 	efi_guid_t guid;
 	unsigned long table;
+        PAD_EFI64(1);
 } efi_config_table_t;
 
 #define EFI_SYSTEM_TABLE_SIGNATURE ((u64)0x5453595320494249ULL)
@@ -221,17 +228,29 @@ typedef struct {
 typedef struct {
 	efi_table_hdr_t hdr;
 	unsigned long fw_vendor;	/* physical addr of CHAR16 vendor string */
+        PAD_EFI64(1);
 	u32 fw_revision;
+        PAD_EFI64(2);
 	unsigned long con_in_handle;
+        PAD_EFI64(3);
 	unsigned long con_in;
+        PAD_EFI64(4);
 	unsigned long con_out_handle;
+        PAD_EFI64(5);
 	unsigned long con_out;
+        PAD_EFI64(6);
 	unsigned long stderr_handle;
+        PAD_EFI64(7);
 	unsigned long stderr;
+        PAD_EFI64(8);
 	efi_runtime_services_t *runtime;
+        PAD_EFI64(9);
 	unsigned long boottime;
+        PAD_EFI64(10);
 	unsigned long nr_tables;
+        PAD_EFI64(11);
 	unsigned long tables;
+        PAD_EFI64(12);
 } efi_system_table_t;
 
 struct efi_memory_map {

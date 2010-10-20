@@ -1466,6 +1466,15 @@ config EFI
 	  resultant kernel should continue to boot on existing non-EFI
 	  platforms.
 
+config EFI64
+	bool "64-bit EFI runtime service present"
+	depends on EFI && X86_32
+	---help---
+	  Enable this if the EFI/BIOS is running in 64-bit mode (IA-32e,
+	  long mode). This option is useful for 64-bit EFI/BIOS to boot
+	  32-bit kernel. Enabling this would stop kernel calling EFI
+	  services, and handle pads in efi-related structures for 64-bit.
+
 config SECCOMP
 	def_bool y
 	prompt "Enable seccomp to safely compute untrusted bytecode"
