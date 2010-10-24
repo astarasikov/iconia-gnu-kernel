@@ -115,13 +115,6 @@ void tegra_clocksource_us_resume(struct clocksource *cs)
 	tegra_us_clocksource_offset = tegra_us_resume_offset;
 }
 
-static cycle_t tegra_clocksource_32k_read(struct clocksource *cs)
-{
-	u32 ms = readl(rtc_base + RTC_MILLISECONDS);
-	u32 s = readl(rtc_base + RTC_SHADOW_SECONDS);
-	return (u64)s * 1000 + ms;
-}
-
 static struct clock_event_device tegra_clockevent = {
 	.name		= "timer0",
 	.rating		= 300,
@@ -138,14 +131,6 @@ static struct clocksource tegra_clocksource_us = {
 	.resume = tegra_clocksource_us_resume,
 	.mask	= CLOCKSOURCE_MASK(32),
 	.flags	= CLOCK_SOURCE_IS_CONTINUOUS,
-};
-
-static struct clocksource tegra_clocksource_32k = {
-	.name	= "rtc_32k",
-	.rating	= 100,
-	.read = tegra_clocksource_32k_read,
-	.mask = CLOCKSOURCE_MASK(32),
-	.flags = CLOCK_SOURCE_IS_CONTINUOUS,
 };
 
 static DEFINE_CLOCK_DATA(cd);
@@ -279,11 +264,6 @@ static void __init tegra_init_timer(void)
 
 	if (clocksource_register_hz(&tegra_clocksource_us, 1000000)) {
 		printk(KERN_ERR "Failed to register us clocksource\n");
-		BUG();
-	}
-
-	if (clocksource_register_hz(&tegra_clocksource_32k, 1000)) {
-		printk(KERN_ERR "Failed to register 32k clocksource\n");
 		BUG();
 	}
 
