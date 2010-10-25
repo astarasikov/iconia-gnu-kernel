@@ -2556,6 +2556,7 @@ void DeregisterQMIDevice( sQCUSBNet * pDev )
    struct file * pFilp;
    unsigned long flags;
    int count = 0;
+   int tries;
 
    // Should never happen, but check anyway
    if (IsDeviceValid( pDev ) == false)
@@ -2634,6 +2635,24 @@ void DeregisterQMIDevice( sQCUSBNet * pDev )
       device_destroy( pDev->mQMIDev.mpDevClass, 
                       pDev->mQMIDev.mDevNum );   
    }
+
+   // Hold onto cdev memory location until everyone is through using it.
+   // Timeout after 30 seconds (10 ms interval).  Timeout should never happen,
+   // but exists to prevent an infinate loop just in case.
+   for (tries = 0; tries < 30 * 100; tries++)
+   {
+      int ref = atomic_read( &pDev->mQMIDev.mCdev.kobj.kref.refcount );
+      if (ref > 1)
+      {
+         DBG( "cdev in use by %d tasks\n", ref - 1 ); 
+         msleep( 10 );
+      }
+      else
+      {
+         break;
+      }
+   }
+
    cdev_del( &pDev->mQMIDev.mCdev );
    
    unregister_chrdev_region( pDev->mQMIDev.mDevNum, 1 );
