@@ -56,6 +56,11 @@ extern ssize_t tpm_show_owned(struct device *, struct device_attribute *attr,
 				char *);
 extern ssize_t tpm_show_temp_deactivated(struct device *,
 					 struct device_attribute *attr, char *);
+extern ssize_t tpm_s3power_get(struct device *,
+			       struct device_attribute *attr, char *);
+extern ssize_t tpm_s3power_set(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count);
 
 struct tpm_chip;
 
