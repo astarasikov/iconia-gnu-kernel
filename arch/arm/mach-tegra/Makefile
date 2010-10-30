@@ -11,6 +11,7 @@ obj-y                                   += pinmux.o
 obj-y                                   += powergate.o
 obj-y					+= fuse.o
 obj-y					+= suspend.o
+obj-y					+= mc.o
 obj-$(CONFIG_FIQ)			+= fiq.o
 obj-$(CONFIG_TEGRA_PWM)			+= pwm.o
 obj-$(CONFIG_USB_SUPPORT)		+= usb_phy.o
