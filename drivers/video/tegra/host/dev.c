@@ -108,7 +108,7 @@ static int nvhost_channelopen(struct inode *inode, struct file *filp)
 	gather_size = sizeof(struct nvhost_op_pair) * NVHOST_MAX_GATHERS;
 	priv->gather_mem = nvmap_alloc(ch->dev->nvmap, gather_size, 32,
 				       NVMAP_HANDLE_CACHEABLE);
-	if (IS_ERR(priv->gather_mem))
+	if (IS_ERR_OR_NULL(priv->gather_mem))
 		goto fail;
 
 	if (ch->ctxhandler.alloc) {
