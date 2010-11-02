@@ -1338,7 +1338,7 @@ static int tegra_clk_shared_bus_update(struct clk *bus)
 	if (rate == clk_get_rate_locked(bus))
 		return 0;
 
-	return clk_set_rate_locked(bus, rate);
+	return clk_set_rate(bus, rate);
 };
 
 static void tegra_clk_shared_bus_init(struct clk *c)
