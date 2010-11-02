@@ -143,6 +143,10 @@ int nvmap_ioctl_getid(struct file *filp, void __user *arg)
 
 	h = nvmap_get_handle_id(client, op.handle);
 
+	/* Check for device-wide global handles */
+	if (!h)
+	h = nvmap_validate_get(client, op.handle);
+
 	if (!h)
 		return -EPERM;
 
