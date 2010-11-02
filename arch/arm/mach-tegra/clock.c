@@ -598,7 +598,6 @@ static int __init tegra_init_disable_boot_clocks(void)
 	}
 
 	mutex_unlock(&clock_list_lock);
-	unlock_dvfs();
 
 	return 0;
 }
