@@ -395,6 +395,7 @@ static void tegra_suspend_dram(bool do_lp0)
 	}
 
 	suspend_cpu_complex();
+	stop_critical_timings();
 	flush_cache_all();
 	outer_flush_all();
 	outer_disable();
@@ -403,6 +404,7 @@ static void tegra_suspend_dram(bool do_lp0)
 	barrier();
 	cpu_init();
 	restore_cpu_complex();
+	start_critical_timings();
 
 	writel(orig, evp_reset);
 	tegra_init_cache();
