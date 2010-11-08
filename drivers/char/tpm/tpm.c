@@ -1181,14 +1181,14 @@ int tpm_pm_resume(struct device *dev)
 		return -ENODEV;
 
 	/* For the Chrome OS dogfood devices: attempt to restore state, but
-	 * ignore errors if the BIOS has already done it.  If successful, run
-	 * the self test again.
+	 * ignore errors if the BIOS has already done it.  Then make sure
+	 * the self test is completed.
 	 */
 	tpm_transmit(chip, startrestorestate, sizeof(startrestorestate));
-	if (start_cmd->header.out.return_code == 0) {
-		printk(KERN_WARNING "TPM resumed by kernel");
-		tpm_continue_selftest(chip);
-	}
+	printk(KERN_WARNING "TPM resume returned 0x%x (may be byte swapped).",
+		start_cmd->header.out.return_code);
+	tpm_continue_selftest(chip);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tpm_pm_resume);
