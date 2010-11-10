@@ -113,6 +113,8 @@ POSSIBILITY OF SUCH DAMAGE.
 //---------------------------------------------------------------------------
 // Include Files
 //---------------------------------------------------------------------------
+#include <linux/sched.h>
+
 #include "QMIDevice.h"
 
 //-----------------------------------------------------------------------------
@@ -2169,7 +2171,6 @@ int UserspaceClose(
    fl_owner_t          unusedFileTable )
 {
    sQMIFilpStorage * pFilpData = (sQMIFilpStorage *)pFilp->private_data;
-   struct list_head * pTasks;
    struct task_struct * pEachTask;
    struct fdtable * pFDT;
    int count = 0;
@@ -2187,9 +2188,9 @@ int UserspaceClose(
    {
       // "group_leader" points to the main process' task, which resides in
       // the global "tasks" list.
-      list_for_each( pTasks, &current->group_leader->tasks )
+      rcu_read_lock();
+      for_each_process(pEachTask)
       {
-         pEachTask = container_of( pTasks, struct task_struct, tasks );
          if (pEachTask == NULL || pEachTask->files == NULL)
          {
             // Some tasks may not have files (e.g. Xsession)
@@ -2210,6 +2211,7 @@ int UserspaceClose(
          }
          spin_unlock_irqrestore( &pEachTask->files->file_lock, flags );
       }
+      rcu_read_unlock();
       
       if (used > 0)
       {
