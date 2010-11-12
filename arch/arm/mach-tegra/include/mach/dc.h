@@ -141,7 +141,7 @@ struct tegra_fb_data {
 
 	int		xres;
 	int		yres;
-	int		bits_per_pixel;
+	int		bits_per_pixel; /* -1 means autodetect */
 
 	unsigned long	flags;
 };
