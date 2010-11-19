@@ -87,7 +87,7 @@ static inline bool clk_is_auto_dvfs(struct clk *c)
 
 static inline bool clk_is_dvfs(struct clk *c)
 {
-	return c->is_dvfs;
+	return (c->dvfs != NULL);
 }
 
 static inline bool clk_cansleep(struct clk *c)
@@ -217,8 +217,6 @@ int clk_reparent(struct clk *c, struct clk *parent)
 void clk_init(struct clk *c)
 {
 	clk_lock_init(c);
-
-	INIT_LIST_HEAD(&c->dvfs);
 
 	if (c->ops && c->ops->init)
 		c->ops->init(c);
@@ -527,36 +525,6 @@ void tegra_sdmmc_tap_delay(struct clk *c, int delay)
 	clk_unlock_restore(c, flags);
 }
 
-
-/*
- * Iterate through all clocks, setting the dvfs rate to the current clock
- * rate on all auto dvfs clocks, and to the saved dvfs rate on all manual
- * dvfs clocks.  Used to enable dvfs during late init, after the regulators
- * are available.
- */
-void __init tegra_clk_set_dvfs_rates(void)
-{
-	unsigned long flags;
-	struct clk *c;
-
-	mutex_lock(&clock_list_lock);
-
-	list_for_each_entry(c, &clocks, node) {
-		spin_lock_irqsave(&c->spinlock, flags);
-
-		if (clk_is_auto_dvfs(c)) {
-			if (c->refcnt > 0)
-				tegra_dvfs_set_rate(c, clk_get_rate_locked(c));
-			else
-				tegra_dvfs_set_rate(c, 0);
-		} else if (clk_is_dvfs(c)) {
-			tegra_dvfs_set_rate(c, c->dvfs_rate);
-		}
-		spin_unlock_irqrestore(&c->spinlock, flags);
-	}
-	mutex_unlock(&clock_list_lock);
-}
-
 static bool tegra_keep_boot_clocks = false;
 static int __init tegra_keep_boot_clocks_setup(char *__unused)
 {
@@ -601,16 +569,7 @@ static int __init tegra_init_disable_boot_clocks(void)
 
 	return 0;
 }
-
-int __init tegra_late_init_clock(void)
-{
-       tegra_init_disable_boot_clocks();
-       tegra_clk_set_dvfs_rates();
-       return 0;
-}
-late_initcall(tegra_late_init_clock);
-
-
+late_initcall(tegra_init_disable_boot_clocks);
 
 #ifdef CONFIG_DEBUG_FS
 
@@ -731,7 +690,7 @@ static void dvfs_show_one(struct seq_file *s, struct dvfs *d, int level)
 {
 	seq_printf(s, "%*s  %-*s%21s%d mV\n",
 			level * 3 + 1, "",
-			30 - level * 3, d->reg_id,
+			30 - level * 3, d->dvfs_rail->reg_id,
 			"",
 			d->cur_millivolts);
 }
@@ -740,7 +699,6 @@ static void clock_tree_show_one(struct seq_file *s, struct clk *c, int level)
 {
 	struct clk *child;
 	const char *state = "uninit";
-	struct dvfs *d;
 	char div[8] = {0};
 
 	if (c->state == ON)
@@ -772,8 +730,8 @@ static void clock_tree_show_one(struct seq_file *s, struct clk *c, int level)
 		30 - level * 3, c->name,
 		state, c->refcnt, div, clk_get_rate_all_locked(c));
 
-	list_for_each_entry(d, &c->dvfs, node)
-		dvfs_show_one(s, d, level + 1);
+	if (c->dvfs)
+		dvfs_show_one(s, c->dvfs, level + 1);
 
 	list_for_each_entry(child, &clocks, node) {
 		if (child->parent != c)

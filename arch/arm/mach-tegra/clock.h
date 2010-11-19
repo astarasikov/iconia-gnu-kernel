@@ -76,7 +76,7 @@ enum clk_state {
 struct clk {
 	/* node for master clocks list */
 	struct list_head	node;		/* node for list of all clocks */
-	struct list_head	dvfs;		/* list of dvfs dependencies */
+	struct dvfs 		*dvfs;
 	struct clk_lookup	lookup;
 
 #ifdef CONFIG_DEBUG_FS
@@ -88,7 +88,6 @@ struct clk {
 	unsigned long		rate;
 	unsigned long		max_rate;
 	unsigned long		min_rate;
-	bool			is_dvfs;
 	bool			auto_dvfs;
 	bool			cansleep;
 	u32			flags;
@@ -162,7 +161,6 @@ void tegra_clk_init_from_table(struct tegra_clk_init_table *table);
 unsigned long clk_get_rate_locked(struct clk *c);
 int clk_set_rate_locked(struct clk *c, unsigned long rate);
 void tegra2_sdmmc_tap_delay(struct clk *c, int delay);
-void tegra_clk_set_dvfs_rates(void);
 void clk_set_cansleep(struct clk *c);
 unsigned long clk_get_rate_locked(struct clk *c);
 
