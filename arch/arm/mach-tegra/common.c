@@ -28,6 +28,7 @@
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/system.h>
 
+#include <mach/dma.h>
 #include <mach/iomap.h>
 #include <mach/powergate.h>
 #include <mach/system.h>
@@ -155,6 +156,15 @@ void __init tegra_init_early(void)
 	tegra_init_power();
 	tegra_init_cache();
 }
+
+int __init tegra_init_postcore(void)
+{
+	tegra_dma_init();
+	tegra_init_fuse_dma();
+
+	return 0;
+}
+postcore_initcall(tegra_init_postcore);
 
 static int __init tegra_bootloader_fb_arg(char *options)
 {
