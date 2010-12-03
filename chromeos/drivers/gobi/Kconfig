@@ -1,4 +1,9 @@
-config GOBI
-	tristate "Qualcomm GOBI2k support"
+config GOBI_USBNET
+	tristate "Qualcomm GOBI2k and QCQMI support using Code Aurora driver"
 	help
-	This module adds support for GOBI2k 3G radios.
+	This module adds network device support for GOBI2k 3G radios.
+
+config GOBI_QCSERIAL
+	tristate "Qualcomm GOBI2k serial support using Code Aurora driver"
+	help
+	This module adds serial port support for GOBI2k 3G radios.

@@ -89,12 +89,15 @@ POSSIBILITY OF SUCH DAMAGE.
 //-----------------------------------------------------------------------------
 
 // Version Information
-#define DRIVER_VERSION "1.0.110"
+#define DRIVER_VERSION "1.0.120"
 #define DRIVER_AUTHOR "Qualcomm Innovation Center"
 #define DRIVER_DESC "QCUSBNet2k"
 
 // Debug flag
 int debug;
+
+// Wait 5 seconds after enumeration for firmware to be ready?
+int safeEnumDelay = 1;
 
 // Class should be created during module init, so needs to be global
 static struct class * gpClass;
@@ -251,7 +254,7 @@ int QCResume( struct usb_interface * pIntf )
       }
 
       // Kick Auto PM thread to process any queued URBs
-      complete( &pQCDev->mAutoPM.mThreadHasWork );
+      complete( &pQCDev->mAutoPM.mThreadDoWork );
    }
    else
    {
@@ -291,7 +294,7 @@ static int QCNetDriverBind(
    if (pIntf->num_altsetting != 1)
    {
       DBG( "invalid num_altsetting %u\n", pIntf->num_altsetting );
-      return -EINVAL;
+      return -ENODEV;
    }
 
    // Verify correct interface (0)
@@ -299,7 +302,7 @@ static int QCNetDriverBind(
    {
       DBG( "invalid interface %d\n", 
            pIntf->cur_altsetting->desc.bInterfaceNumber );
-      return -EINVAL;
+      return -ENODEV;
    }
    
    // Collect In and Out endpoints
@@ -310,7 +313,7 @@ static int QCNetDriverBind(
       if (pEndpoint == NULL)
       {
          DBG( "invalid endpoint %u\n", endpointIndex );
-         return -EINVAL;
+         return -ENODEV;
       }
       
       if (usb_endpoint_dir_in( &pEndpoint->desc ) == true
@@ -327,7 +330,7 @@ static int QCNetDriverBind(
    if (pIn == NULL || pOut == NULL)
    {
       DBG( "invalid endpoints\n" );
-      return -EINVAL;
+      return -ENODEV;
    }
 
    if (usb_set_interface( pDev->udev, 
@@ -335,7 +338,7 @@ static int QCNetDriverBind(
                           0 ) != 0)
    {
       DBG( "unable to set interface\n" );
-      return -EINVAL;
+      return -ENODEV;
    }
 
    pDev->in = usb_rcvbulkpipe( pDev->udev,
@@ -431,7 +434,7 @@ void QCUSBNetURBCallback( struct urb * pURB )
 
    spin_unlock_irqrestore( &pAutoPM->mActiveURBLock, activeURBflags );
 
-   complete( &pAutoPM->mThreadHasWork );
+   complete( &pAutoPM->mThreadDoWork );
    
    usb_free_urb( pURB );
 }
@@ -497,7 +500,7 @@ void QCUSBNetTXTimeout( struct net_device * pNet )
 
    spin_unlock_irqrestore( &pAutoPM->mURBListLock, URBListFlags );
 
-   complete( &pAutoPM->mThreadHasWork );
+   complete( &pAutoPM->mThreadDoWork );
 
    return;
 }
@@ -536,7 +539,8 @@ static int QCUSBNetAutoPMThread( void * pData )
 
    while (pAutoPM->mbExit == false)
    {
-      wait_for_completion_interruptible( &pAutoPM->mThreadHasWork );
+      // Wait for someone to poke us
+      wait_for_completion_interruptible( &pAutoPM->mThreadDoWork );
 
       // Time to exit?
       if (pAutoPM->mbExit == true)
@@ -656,7 +660,7 @@ static int QCUSBNetAutoPMThread( void * pData )
          usb_autopm_put_interface( pAutoPM->mpIntf );
 
          // Loop again
-         complete( &pAutoPM->mThreadHasWork );
+         complete( &pAutoPM->mThreadDoWork );
       }
       
       kfree( pURBListEntry );
@@ -766,7 +770,7 @@ int QCUSBNetStartXmit(
 
    spin_unlock_irqrestore( &pAutoPM->mURBListLock, URBListFlags );
 
-   complete( &pAutoPM->mThreadHasWork );
+   complete( &pAutoPM->mThreadDoWork );
 
    // Start transfer timer
    pNet->trans_start = jiffies;
@@ -819,7 +823,7 @@ int QCUSBNetOpen( struct net_device * pNet )
    pQCDev->mAutoPM.mpActiveURB = NULL;
    spin_lock_init( &pQCDev->mAutoPM.mURBListLock );
    spin_lock_init( &pQCDev->mAutoPM.mActiveURBLock );
-   init_completion( &pQCDev->mAutoPM.mThreadHasWork );
+   init_completion( &pQCDev->mAutoPM.mThreadDoWork );
    
    pQCDev->mAutoPM.mpThread = kthread_run( QCUSBNetAutoPMThread, 
                               &pQCDev->mAutoPM, 
@@ -894,7 +898,7 @@ int QCUSBNetStop( struct net_device * pNet )
 
    // Tell traffic thread to exit
    pQCDev->mAutoPM.mbExit = true;
-   complete( &pQCDev->mAutoPM.mThreadHasWork );
+   complete( &pQCDev->mAutoPM.mThreadDoWork );
    
    // Wait for it to exit
    while( pQCDev->mAutoPM.mpThread != NULL )
@@ -1111,6 +1115,7 @@ int QCUSBNetProbe(
    if (pDev == NULL || pDev->net == NULL)
    {
       DBG( "failed to get netdevice\n" );
+      usbnet_disconnect( pIntf );
       return -ENXIO;
    }
 
@@ -1118,6 +1123,7 @@ int QCUSBNetProbe(
    if (pQCDev == NULL)
    {
       DBG( "falied to allocate device buffers" );
+      usbnet_disconnect( pIntf );
       return -ENOMEM;
    }
    
@@ -1138,6 +1144,7 @@ int QCUSBNetProbe(
    if (pNetDevOps == NULL)
    {
       DBG( "falied to allocate net device ops" );
+      usbnet_disconnect( pIntf );
       return -ENOMEM;
    }
    memcpy( pNetDevOps, pDev->net->netdev_ops, sizeof( struct net_device_ops ) );
@@ -1166,10 +1173,11 @@ int QCUSBNetProbe(
 
    pQCDev->mbQMIValid = false;
    memset( &pQCDev->mQMIDev, 0, sizeof( sQMIDev ) );
+   pQCDev->mQMIDev.mbCdevIsInitialized = false;
 
    pQCDev->mQMIDev.mpDevClass = gpClass;
    
-   init_completion( &pQCDev->mAutoPM.mThreadHasWork );
+   init_completion( &pQCDev->mAutoPM.mThreadDoWork );
    spin_lock_init( &pQCDev->mQMIDev.mClientMemLock );
 
    // Default to device down
@@ -1181,13 +1189,14 @@ int QCUSBNetProbe(
    status = RegisterQMIDevice( pQCDev );
    if (status != 0)
    {
-      // Clean up
-      DeregisterQMIDevice( pQCDev );
+      // usbnet_disconnect() will call QCUSBNetUnbind() which will call
+      // DeregisterQMIDevice() to clean up any partially created QMI device
+      usbnet_disconnect( pIntf );
       return status;
    }
    
    // Success
-   return status;
+   return 0;
 }
 
 EXPORT_SYMBOL_GPL( QCUSBNetProbe );
@@ -1263,3 +1272,6 @@ MODULE_LICENSE( "Dual BSD/GPL" );
 
 module_param( debug, bool, S_IRUGO | S_IWUSR );
 MODULE_PARM_DESC( debug, "Debuging enabled or not" );
+
+module_param( safeEnumDelay, bool, S_IRUGO | S_IWUSR );
+MODULE_PARM_DESC( safeEnumDelay, "Delay enumeration to allow firmware to be ready (needed on firmware < 3580)" );

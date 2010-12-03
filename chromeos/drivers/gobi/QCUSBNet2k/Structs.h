@@ -231,8 +231,8 @@ typedef struct sAutoPM
    /* Thread for atomic autopm function */
    struct task_struct *       mpThread;
 
-   /* Completion for 'there is work to be done' */
-   struct completion          mThreadHasWork;
+   /* Signal for completion when it's time for the thread to work */
+   struct completion          mThreadDoWork;
 
    /* Time to exit? */
    bool                       mbExit;
@@ -270,6 +270,9 @@ typedef struct sQMIDev
 
    /* cdev struct */
    struct cdev                mCdev;
+
+   /* is mCdev initialized? */
+   bool                       mbCdevIsInitialized;
 
    /* Pointer to read URB */
    struct urb *               mpReadURB;
@@ -352,5 +355,3 @@ typedef struct sQMIFilpStorage
    sQCUSBNet *          mpDev;
 
 } sQMIFilpStorage;
-
-
