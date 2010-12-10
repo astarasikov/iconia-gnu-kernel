@@ -153,7 +153,7 @@ struct file_operations UserspaceQMIFops =
    .owner     = THIS_MODULE,
    .read      = UserspaceRead,
    .write     = UserspaceWrite,
-   .ioctl     = UserspaceIOCTL,
+   .unlocked_ioctl     = UserspaceIOCTL,
    .open      = UserspaceOpen,
    .flush     = UserspaceClose,
 };
@@ -2044,7 +2044,6 @@ RETURN VALUE:
          Negative errno for failure
 ===========================================================================*/
 int UserspaceIOCTL( 
-   struct inode *    pUnusedInode, 
    struct file *     pFilp,
    unsigned int      cmd, 
    unsigned long     arg )

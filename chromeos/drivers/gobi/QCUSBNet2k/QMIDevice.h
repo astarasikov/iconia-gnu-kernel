@@ -276,7 +276,6 @@ int UserspaceOpen(
 
 // Userspace ioctl
 int UserspaceIOCTL( 
-   struct inode *    pUnusedInode, 
    struct file *     pFilp,
    unsigned int      cmd, 
    unsigned long     arg );
