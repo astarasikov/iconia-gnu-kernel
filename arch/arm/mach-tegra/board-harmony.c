@@ -50,6 +50,7 @@
 #include "clock.h"
 #include "devices.h"
 #include "gpio-names.h"
+#include "pm.h"
 
 static struct tegra_nand_chip_parms nand_chip_parms[] = {
 	/* Samsung K5E2G1GACM */
@@ -367,8 +368,20 @@ static struct tegra_sdhci_platform_data sdhci_pdata4 = {
 	.is_8bit	= 1,
 };
 
+static struct tegra_suspend_platform_data harmony_suspend = {
+	.cpu_timer = 5000,
+	.cpu_off_timer = 5000,
+	.core_timer = 0x7e7e,
+	.core_off_timer = 0x7f,
+	.corereq_high = false,
+	.sysclkreq_high = true,
+	.suspend_mode = TEGRA_SUSPEND_LP0,
+};
+
 static void __init tegra_harmony_init(void)
 {
+	tegra_init_suspend(&harmony_suspend);
+
 	tegra_clk_init_from_table(harmony_clk_init_table);
 
 	harmony_pinmux_init();
