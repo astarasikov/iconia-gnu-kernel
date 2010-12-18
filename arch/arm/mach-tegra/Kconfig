@@ -99,3 +99,10 @@ config TEGRA_EMC_SCALING_ENABLE
 	bool "Enable scaling the memory frequency"
 
 endif
+
+config TEGRA_THERMAL_THROTTLE
+       bool "Enable throttling of CPU speed on overtemp"
+       depends on CPU_FREQ
+       default y
+       help
+         Also requires enabling a temperature sensor such as NCT1008.
