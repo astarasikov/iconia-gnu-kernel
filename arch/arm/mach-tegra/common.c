@@ -33,6 +33,7 @@
 #include <mach/powergate.h>
 #include <mach/system.h>
 
+#include "apbio.h"
 #include "board.h"
 #include "clock.h"
 #include "fuse.h"
@@ -163,7 +164,7 @@ void __init tegra_init_early(void)
 int __init tegra_init_postcore(void)
 {
 	tegra_dma_init();
-	tegra_init_fuse_dma();
+	tegra_init_apb_dma();
 
 	return 0;
 }
