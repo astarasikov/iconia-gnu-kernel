@@ -2250,7 +2250,16 @@ bool wlc_bmac_radio_read_hwdisabled(struct wlc_hw_info *wlc_hw)
 		wlc_mctrl_reset(wlc_hw);
 	}
 
-	v = ((R_REG(wlc_hw->osh, &wlc_hw->regs->phydebug) & PDBG_RFD) != 0);
+        /*
+         * Disabling this register read. If the read returns true
+         * (i.e. radio off), the driver will lock up the kernel and hose 
+         * the system. Broadcom has this on a TODO list.
+         *
+         * See the following linux-wireless thread for more details:
+         *   http://thread.gmane.org/gmane.linux.kernel.wireless.general/61383 
+         */
+        //v = ((R_REG(wlc_hw->osh, &wlc_hw->regs->phydebug) & PDBG_RFD) != 0);
+        v = false;
 
 	/* put core back into reset */
 	if (!clk)
