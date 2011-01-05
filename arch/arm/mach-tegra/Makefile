@@ -10,6 +10,7 @@ obj-y                                   += gpio.o
 obj-y                                   += pinmux.o
 obj-y                                   += powergate.o
 obj-y					+= fuse.o
+obj-y					+= kfuse.o
 obj-y					+= suspend.o
 obj-y					+= mc.o
 obj-$(CONFIG_FIQ)			+= fiq.o
