@@ -106,7 +106,7 @@ static void nvhost_debug_handle_word(struct seq_file *s, int *state, int *count,
 	switch (*state) {
 	case NVHOST_DBG_STATE_CMD:
 		if (addr)
-			seq_printf(s, "%d: %08x: %08x:", channel, addr, val);
+			seq_printf(s, "%d: %08lx: %08x:", channel, addr, val);
 		else
 			seq_printf(s, "%d: %08x:", channel, val);
 
@@ -185,7 +185,6 @@ static int nvhost_debug_show(struct seq_file *s, void *unused)
 		 * check if we're executing a fetch, and if so dump
 		 * it. */
 		if (size) {
-			u32 offset = dmaget - m->channels[i].cdma.push_buffer.phys;
 			u32 map_base = phys_addr & PAGE_MASK;
 			u32 map_size = (size * 4 + PAGE_SIZE - 1) & PAGE_MASK;
 			u32 map_offset = phys_addr - map_base;
