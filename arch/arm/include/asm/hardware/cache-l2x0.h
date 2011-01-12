@@ -74,9 +74,14 @@
 
 #ifndef __ASSEMBLY__
 extern void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask);
+extern bool l2x0_disabled;
+#ifdef CONFIG_CACHE_L2X0
 extern void l2x0_shutdown(void);
 extern void l2x0_restart(void);
-extern bool l2x0_disabled;
+#else
+static inline void l2x0_shutdown(void) { }
+static inline void l2x0_restart(void) { }
+#endif
 #endif
 
 #endif
