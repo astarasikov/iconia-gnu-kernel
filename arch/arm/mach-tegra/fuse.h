@@ -25,6 +25,9 @@ enum tegra_revision {
 	TEGRA_REVISION_MAX,
 };
 
+#define SKU_ID_T20	8
+#define SKU_ID_T25	24
+
 unsigned long long tegra_chip_uid(void);
 int tegra_sku_id(void);
 int tegra_cpu_process_id(void);
