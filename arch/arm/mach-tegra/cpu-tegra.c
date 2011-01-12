@@ -36,11 +36,15 @@
 #include <mach/hardware.h>
 #include <mach/clk.h>
 
+#include "fuse.h"
+
 /*
  * Frequency table index must be sequential starting at 0 and frequencies
  * must be ascending.
  */
-static struct cpufreq_frequency_table freq_table[] = {
+
+/* Frequency table index must be sequential starting at 0 and frequencies must be ascending*/
+static struct cpufreq_frequency_table freq_table_t20[] = {
 	{ 0, 216000 },
 	{ 1, 312000 },
 	{ 2, 456000 },
@@ -51,6 +55,21 @@ static struct cpufreq_frequency_table freq_table[] = {
 	{ 7, 1000000 },
 	{ 8, CPUFREQ_TABLE_END },
 };
+
+static struct cpufreq_frequency_table freq_table_t25[] = {
+	{ 0, 216000 },
+	{ 1, 312000 },
+	{ 2, 456000 },
+	{ 3, 608000 },
+	{ 4, 760000 },
+	{ 5, 816000 },
+	{ 6, 912000 },
+	{ 7, 1000000 },
+	{ 8, 1200000 },
+	{ 9, CPUFREQ_TABLE_END },
+};
+
+static struct cpufreq_frequency_table *freq_table;
 
 #define NUM_CPUS	2
 
@@ -322,6 +341,11 @@ static int tegra_cpu_init(struct cpufreq_policy *policy)
 {
 	if (policy->cpu >= NUM_CPUS)
 		return -EINVAL;
+
+	if (tegra_sku_id() == SKU_ID_T25)
+		freq_table = freq_table_t25;
+	else
+		freq_table = freq_table_t20;
 
 	cpu_clk = clk_get_sys(NULL, "cpu");
 	if (IS_ERR(cpu_clk))
