@@ -54,7 +54,7 @@ static int i915_get_intensity(struct backlight_device *bd)
 
 	blc_pwm_ctl = I915_READ(BLC_PWM_CTL);
 	pwm_val = CTL_TO_PWM(blc_pwm_ctl);
-	level = (pwm_val * MAX_BRIGHTNESS) / PWM_FREQUENCY;
+	level = (pwm_val * MAX_BRIGHTNESS + PWM_FREQUENCY / 2) / PWM_FREQUENCY;
 
 	return level;
 }
@@ -70,7 +70,7 @@ static int i915_set_intensity(struct backlight_device *bd)
 	if (level > MAX_BRIGHTNESS)
 		level = MAX_BRIGHTNESS;
 
-	pwm_val = (level * PWM_FREQUENCY) / MAX_BRIGHTNESS;
+	pwm_val = (level * PWM_FREQUENCY + MAX_BRIGHTNESS / 2) / MAX_BRIGHTNESS;
 	blc_pwm_ctl = (PWM_FREQUENCY << BACKLIGHT_MODULATION_FREQ_SHIFT) |
 		PWM_TO_CTL(pwm_val);
 	I915_WRITE(BLC_PWM_CTL, blc_pwm_ctl);
