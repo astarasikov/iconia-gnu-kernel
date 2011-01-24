@@ -78,14 +78,14 @@ static inline unsigned int gic_irq(struct irq_data *d)
 /*
  * Routines to acknowledge, disable and enable interrupts
  */
-static void gic_ack_irq(struct irq_data *d)
+void gic_ack_irq(struct irq_data *d)
 {
 	spin_lock(&irq_controller_lock);
 	writel(gic_irq(d), gic_cpu_base(d) + GIC_CPU_EOI);
 	spin_unlock(&irq_controller_lock);
 }
 
-static void gic_mask_irq(struct irq_data *d)
+void gic_mask_irq(struct irq_data *d)
 {
 	u32 mask = 1 << (d->irq % 32);
 
@@ -94,7 +94,7 @@ static void gic_mask_irq(struct irq_data *d)
 	spin_unlock(&irq_controller_lock);
 }
 
-static void gic_unmask_irq(struct irq_data *d)
+void gic_unmask_irq(struct irq_data *d)
 {
 	u32 mask = 1 << (d->irq % 32);
 
@@ -103,7 +103,7 @@ static void gic_unmask_irq(struct irq_data *d)
 	spin_unlock(&irq_controller_lock);
 }
 
-static int gic_set_type(struct irq_data *d, unsigned int type)
+int gic_set_type(struct irq_data *d, unsigned int type)
 {
 	void __iomem *base = gic_dist_base(d);
 	unsigned int gicirq = gic_irq(d);
@@ -149,8 +149,7 @@ static int gic_set_type(struct irq_data *d, unsigned int type)
 }
 
 #ifdef CONFIG_SMP
-static int
-gic_set_cpu(struct irq_data *d, const struct cpumask *mask_val, bool force)
+int gic_set_cpu(struct irq_data *d, const struct cpumask *mask_val, bool force)
 {
 	void __iomem *reg = gic_dist_base(d) + GIC_DIST_TARGET + (gic_irq(d) & ~3);
 	unsigned int shift = (d->irq % 4) * 8;

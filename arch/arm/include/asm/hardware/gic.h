@@ -33,6 +33,8 @@
 #define GIC_DIST_SOFTINT		0xf00
 
 #ifndef __ASSEMBLY__
+struct irq_data;
+
 extern void __iomem *gic_cpu_base_addr;
 
 void gic_init(unsigned int, unsigned int, void __iomem *, void __iomem *);
@@ -43,6 +45,14 @@ void gic_cpu_exit(unsigned int gic_nr);
 void gic_cascade_irq(unsigned int gic_nr, unsigned int irq);
 void gic_raise_softirq(const struct cpumask *mask, unsigned int irq);
 void gic_enable_ppi(unsigned int);
+
+void gic_ack_irq(struct irq_data *d);
+void gic_mask_irq(struct irq_data *d);
+void gic_unmask_irq(struct irq_data *d);
+int gic_set_type(struct irq_data *d, unsigned int type);
+#ifdef CONFIG_SMP
+int gic_set_cpu(struct irq_data *d, const struct cpumask *mask_val, bool force);
+#endif
 #endif
 
 #endif
