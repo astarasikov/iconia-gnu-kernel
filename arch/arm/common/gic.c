@@ -42,6 +42,13 @@ struct gic_chip_data {
 	unsigned int irq_offset;
 	void __iomem *dist_base;
 	void __iomem *cpu_base;
+#ifdef CONFIG_PM
+	u32 saved_enable[DIV_ROUND_UP(1020, 32)];
+	u32 saved_conf[DIV_ROUND_UP(1020, 16)];
+	u32 saved_pri[DIV_ROUND_UP(1020, 4)];
+	u32 saved_target[DIV_ROUND_UP(1020, 4)];
+#endif
+	unsigned int gic_irqs;
 };
 
 #ifndef MAX_GIC_NR
@@ -216,10 +223,9 @@ void __init gic_cascade_irq(unsigned int gic_nr, unsigned int irq)
 	set_irq_chained_handler(irq, gic_handle_cascade_irq);
 }
 
-static void __init gic_dist_init(struct gic_chip_data *gic,
-	unsigned int irq_start)
+static unsigned int _gic_dist_init(struct gic_chip_data *gic)
 {
-	unsigned int gic_irqs, irq_limit, i;
+	unsigned int gic_irqs, i;
 	void __iomem *base = gic->dist_base;
 	u32 cpumask = 1 << smp_processor_id();
 
@@ -262,10 +268,25 @@ static void __init gic_dist_init(struct gic_chip_data *gic,
 	for (i = 32; i < gic_irqs; i += 32)
 		writel(0xffffffff, base + GIC_DIST_ENABLE_CLEAR + i * 4 / 32);
 
+	return gic_irqs;
+}
+
+static void _gic_dist_exit(unsigned int gic_nr)
+{
+	writel(0, gic_data[gic_nr].dist_base + GIC_DIST_CTRL);
+}
+
+void __init gic_dist_init(struct gic_chip_data *gic, unsigned int irq_start)
+{
+	unsigned int irq_limit;
+	unsigned int i;
+
+	gic->gic_irqs = _gic_dist_init(gic);
+
 	/*
 	 * Limit number of interrupts registered to the platform maximum
 	 */
-	irq_limit = gic->irq_offset + gic_irqs;
+	irq_limit = gic->irq_offset + gic->gic_irqs;
 	if (WARN_ON(irq_limit > NR_IRQS))
 		irq_limit = NR_IRQS;
 
@@ -279,7 +300,15 @@ static void __init gic_dist_init(struct gic_chip_data *gic,
 		set_irq_flags(i, IRQF_VALID | IRQF_PROBE);
 	}
 
-	writel(1, base + GIC_DIST_CTRL);
+	writel(1, gic->dist_base + GIC_DIST_CTRL);
+}
+
+void gic_dist_exit(unsigned int gic_nr)
+{
+	if (gic_nr >= MAX_GIC_NR)
+		BUG();
+
+	_gic_dist_exit(gic_nr);
 }
 
 static void __cpuinit gic_cpu_init(struct gic_chip_data *gic)
@@ -303,6 +332,14 @@ static void __cpuinit gic_cpu_init(struct gic_chip_data *gic)
 
 	writel(0xf0, base + GIC_CPU_PRIMASK);
 	writel(1, base + GIC_CPU_CTRL);
+}
+
+void gic_cpu_exit(unsigned int gic_nr)
+{
+	if (gic_nr >= MAX_GIC_NR)
+		BUG();
+
+	writel(0, gic_data[gic_nr].cpu_base + GIC_CPU_CTRL);
 }
 
 void __init gic_init(unsigned int gic_nr, unsigned int irq_start,
@@ -348,5 +385,85 @@ void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
 
 	/* this always happens on GIC0 */
 	writel(map << 16 | irq, gic_data[0].dist_base + GIC_DIST_SOFTINT);
+}
+#endif
+
+#ifdef CONFIG_PM
+/*
+ * Saves the GIC distributor registers during suspend or idle.  Must be called
+ * with interrupts disabled but before powering down the GIC.  After calling
+ * this function, no interrupts will be delivered by the GIC, and another
+ * platform-specific wakeup source must be enabled.
+ */
+void gic_dist_save(unsigned int gic_nr)
+{
+	unsigned int gic_irqs = gic_data[gic_nr].gic_irqs;
+	void __iomem *dist_base = gic_data[gic_nr].dist_base;
+	int i;
+
+	if (gic_nr >= MAX_GIC_NR)
+		BUG();
+
+	_gic_dist_exit(gic_nr);
+
+	for (i = 0; i < DIV_ROUND_UP(gic_irqs, 16); i++)
+		gic_data[gic_nr].saved_conf[i] =
+			readl(dist_base + GIC_DIST_CONFIG + i * 4);
+
+	for (i = 0; i < DIV_ROUND_UP(gic_irqs, 4); i++)
+		gic_data[gic_nr].saved_pri[i] =
+			readl(dist_base + GIC_DIST_PRI + i * 4);
+
+	for (i = 0; i < DIV_ROUND_UP(gic_irqs, 4); i++)
+		gic_data[gic_nr].saved_target[i] =
+			readl(dist_base + GIC_DIST_TARGET + i * 4);
+
+	for (i = 0; i < DIV_ROUND_UP(gic_irqs, 32); i++)
+		gic_data[gic_nr].saved_enable[i] =
+			readl(dist_base + GIC_DIST_ENABLE_SET + i * 4);
+}
+
+/*
+ * Restores the GIC distributor registers during resume or when coming out of
+ * idle.  Must be called before enabling interrupts.  If a level interrupt
+ * that occured while the GIC was suspended is still present, it will be
+ * handled normally, but any edge interrupts that occured will not be seen by
+ * the GIC and need to be handled by the platform-specific wakeup source.
+ */
+void gic_dist_restore(unsigned int gic_nr)
+{
+	unsigned int gic_irqs;
+	unsigned int i;
+	void __iomem *dist_base;
+	void __iomem *cpu_base;
+
+	if (gic_nr >= MAX_GIC_NR)
+		BUG();
+
+	_gic_dist_init(&gic_data[gic_nr]);
+
+	gic_irqs = gic_data[gic_nr].gic_irqs;
+	dist_base = gic_data[gic_nr].dist_base;
+	cpu_base = gic_data[gic_nr].cpu_base;
+
+	for (i = 0; i < DIV_ROUND_UP(gic_irqs, 16); i++)
+		writel(gic_data[gic_nr].saved_conf[i],
+			dist_base + GIC_DIST_CONFIG + i * 4);
+
+	for (i = 0; i < DIV_ROUND_UP(gic_irqs, 4); i++)
+		writel(gic_data[gic_nr].saved_pri[i],
+			dist_base + GIC_DIST_PRI + i * 4);
+
+	for (i = 0; i < DIV_ROUND_UP(gic_irqs, 4); i++)
+		writel(gic_data[gic_nr].saved_target[i],
+			dist_base + GIC_DIST_TARGET + i * 4);
+
+	for (i = 0; i < DIV_ROUND_UP(gic_irqs, 32); i++)
+		writel(gic_data[gic_nr].saved_enable[i],
+			dist_base + GIC_DIST_ENABLE_SET + i * 4);
+
+	writel(1, dist_base + GIC_DIST_CTRL);
+	writel(0xf0, cpu_base + GIC_CPU_PRIMASK);
+	writel(1, cpu_base + GIC_CPU_CTRL);
 }
 #endif
