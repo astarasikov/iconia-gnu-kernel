@@ -184,6 +184,7 @@ static int tegra_ehci_hub_control(
 	/* For USB1 port we need to issue Port Reset twice internally */
 	if (tegra->phy->instance == 0 &&
 	   (typeReq == SetPortFeature && wValue == USB_PORT_FEAT_RESET)) {
+		spin_unlock_irqrestore(&ehci->lock, flags);
 		return tegra_ehci_internal_port_reset(ehci, status_reg);
 	}
 
