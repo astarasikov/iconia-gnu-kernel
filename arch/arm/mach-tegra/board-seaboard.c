@@ -376,6 +376,7 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&tegra_pcm_device,
 	&seaboard_audio_device,
 	&bt_rfkill_device,
+	&tegra_avp_device,
 };
 
 static struct i2c_board_info __initdata isl29018_device = {
