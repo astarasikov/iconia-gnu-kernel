@@ -342,7 +342,7 @@ static int tegra_cpu_init(struct cpufreq_policy *policy)
 	if (policy->cpu >= NUM_CPUS)
 		return -EINVAL;
 
-	if (tegra_sku_id() == SKU_ID_T25)
+	if (tegra_sku_id == SKU_ID_T25)
 		freq_table = freq_table_t25;
 	else
 		freq_table = freq_table_t20;
