@@ -30,6 +30,8 @@
 #define FUSE_SKU_INFO		0x110
 #define FUSE_SPARE_BIT		0x200
 
+int tegra_sku_id;
+
 static const char *tegra_revision_name[TEGRA_REVISION_MAX] = {
 	[TEGRA_REVISION_UNKNOWN] = "unknown",
 	[TEGRA_REVISION_A02] = "A02",
@@ -58,9 +60,11 @@ void tegra_init_fuse(void)
 	reg |= 1 << 28;
 	writel(reg, IO_TO_VIRT(TEGRA_CLK_RESET_BASE + 0x48));
 
+	tegra_sku_id = tegra_fuse_readl(FUSE_SKU_INFO) & 0xff;
+
 	pr_info("Tegra Revision: %s SKU: %d CPU Process: %d Core Process: %d\n",
 		tegra_revision_name[tegra_get_revision()],
-		tegra_sku_id(), tegra_cpu_process_id(),
+		tegra_sku_id, tegra_cpu_process_id(),
 		tegra_core_process_id());
 }
 
@@ -71,14 +75,6 @@ unsigned long long tegra_chip_uid(void)
 	lo = tegra_fuse_readl(FUSE_UID_LOW);
 	hi = tegra_fuse_readl(FUSE_UID_HIGH);
 	return (hi << 32ull) | lo;
-}
-
-int tegra_sku_id(void)
-{
-	int sku_id;
-	u32 reg = tegra_fuse_readl(FUSE_SKU_INFO);
-	sku_id = reg & 0xFF;
-	return sku_id;
 }
 
 int tegra_cpu_process_id(void)

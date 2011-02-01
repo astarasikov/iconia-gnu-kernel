@@ -730,13 +730,11 @@ static struct clk_ops tegra_pll_ops = {
 
 static void tegra2_pllx_clk_init(struct clk *c)
 {
-	int sku_id = tegra_sku_id();
-
 	tegra2_pll_clk_init(c);
 
-	if (sku_id == 7) {
+	if (tegra_sku_id == 7) {
 		c->max_rate = 750000000;
-	} else if (sku_id == SKU_ID_T20) {
+	} else if (tegra_sku_id == SKU_ID_T20) {
 		/* make adjustment for T20 */
 		/* the default max_rate is set at 1.2GHz for T25 */
 		c->max_rate = 1000000000;
