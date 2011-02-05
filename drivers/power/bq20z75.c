@@ -309,36 +309,27 @@ static enum bq20z75_battery_mode
 bq20z75_set_battery_mode(struct i2c_client *client,
 	enum bq20z75_battery_mode mode)
 {
-	int ret, originalVal;
+	int ret, original_val;
 
-	originalVal = bq20z75_read_word_data(client, BATTERY_MODE_OFFSET);
-	if (originalVal < 0)
-		return originalVal;
+	original_val = bq20z75_read_word_data(client, BATTERY_MODE_OFFSET);
+	if (original_val < 0)
+		return original_val;
 
-	if ((originalVal & BATTERY_MODE_MASK) == mode)
+	if ((original_val & BATTERY_MODE_MASK) == mode)
 		return mode;
 
 	if (mode == BATTERY_MODE_AMPS)
-		ret = originalVal & ~BATTERY_MODE_MASK;
+		ret = original_val & ~BATTERY_MODE_MASK;
 	else
-		ret = originalVal | BATTERY_MODE_MASK;
+		ret = original_val | BATTERY_MODE_MASK;
 
 	ret = bq20z75_write_word_data(client, BATTERY_MODE_OFFSET, ret);
 	if (ret < 0)
 		return ret;
 
-	return originalVal & BATTERY_MODE_MASK;
+	return original_val & BATTERY_MODE_MASK;
 }
 
-#define PROP_NEEDS_AMPS(PSP) \
-	((PSP == POWER_SUPPLY_PROP_CHARGE_NOW) || \
-	 (PSP == POWER_SUPPLY_PROP_CHARGE_FULL) || \
-	 (PSP == POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN))
-
-#define PROP_NEEDS_WATTS(PSP) \
-	((PSP == POWER_SUPPLY_PROP_ENERGY_NOW) || \
-	 (PSP == POWER_SUPPLY_PROP_ENERGY_FULL) || \
-	 (PSP == POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN))
 static int bq20z75_get_battery_capacity(struct i2c_client *client,
 	int reg_offset, enum power_supply_property psp,
 	union power_supply_propval *val)
@@ -346,7 +337,7 @@ static int bq20z75_get_battery_capacity(struct i2c_client *client,
 	s32 ret;
 	enum bq20z75_battery_mode mode = BATTERY_MODE_WATTS;
 
-	if (PROP_NEEDS_AMPS(psp))
+	if (power_supply_is_amp_property(psp))
 		mode = BATTERY_MODE_AMPS;
 
 	mode = bq20z75_set_battery_mode(client, mode);
