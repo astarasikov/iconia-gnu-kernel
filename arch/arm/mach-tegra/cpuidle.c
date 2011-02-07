@@ -447,6 +447,7 @@ static int tegra_idle_enter_lp2(struct cpuidle_device *dev,
 		return tegra_idle_enter_lp3(dev, state);
 
 	local_irq_disable();
+	clockevents_notify(CLOCK_EVT_NOTIFY_BROADCAST_ENTER, &dev->cpu);
 	local_fiq_disable();
 	enter = ktime_get();
 
@@ -465,10 +466,8 @@ static int tegra_idle_enter_lp2(struct cpuidle_device *dev,
 	us = ktime_to_us(exit);
 
 	local_fiq_enable();
+	clockevents_notify(CLOCK_EVT_NOTIFY_BROADCAST_EXIT, &dev->cpu);
 	local_irq_enable();
-
-	/* cpu clockevents may have been reset by powerdown */
-	hrtimer_peek_ahead_timers();
 
 	smp_rmb();
 	state->exit_latency = tegra_lp2_exit_latency;
