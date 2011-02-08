@@ -1256,7 +1256,7 @@ MODULE_LICENSE ("GPL");
 
 #ifdef CONFIG_ARCH_TEGRA
 #include "ehci-tegra.c"
-#define	PLATFORM_DRIVER         tegra_ehci_driver
+#define PLATFORM_DRIVER		tegra_ehci_driver
 #endif
 
 #if !defined(PCI_DRIVER) && !defined(PLATFORM_DRIVER) && \
