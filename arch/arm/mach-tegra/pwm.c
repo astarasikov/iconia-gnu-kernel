@@ -72,26 +72,39 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
 	u32 val = 0;
 
 	/* convert from duty_ns / period_ns to a fixed number of duty
-	 * ticks per (1 << PWM_DUTY_WIDTH) cycles. */
+	 * ticks per (1 << PWM_DUTY_WIDTH) cycles.
+	 */
 	c = duty_ns * ((1 << PWM_DUTY_WIDTH) - 1);
 	do_div(c, period_ns);
 
 	val = (u32)c << PWM_DUTY_SHIFT;
 
 	/* compute the prescaler value for which (1 << PWM_DUTY_WIDTH)
-	 * cycles at the PWM clock rate will take period_ns nanoseconds. */
+	 * cycles at the PWM clock rate will take period_ns nanoseconds.
+	 */
 	rate = clk_get_rate(pwm->clk) >> PWM_DUTY_WIDTH;
 	hz = 1000000000ul / period_ns;
 
 	rate = (rate + (hz / 2)) / hz;
 
+	/* Since the actual PWM divider is the register's frequency divider
+	 * field minus 1, we need to decrement to get the correct value to write
+	 * to the register.
+	 */
+	if (rate > 0)
+		rate--;
+
+	/* Make sure that the rate will fit in the register's frequency divider
+	 * field.
+	 */
 	if (rate >> PWM_SCALE_WIDTH)
 		return -EINVAL;
 
 	val |= (rate << PWM_SCALE_SHIFT);
 
 	/* the struct clk may be shared across multiple PWM devices, so
-	 * only enable the PWM if this device has been enabled */
+	 * only enable the PWM if this device has been enabled
+	 */
 	if (pwm->clk_enb)
 		val |= PWM_ENABLE;
 

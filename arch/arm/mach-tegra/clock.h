@@ -40,6 +40,7 @@
 #define PERIPH_MANUAL_RESET	(1 << 12)
 #define PLL_ALT_MISC_REG	(1 << 13)
 #define PLLU			(1 << 14)
+#define PERIPH_SOURCE_CLK_4BIT	(1 << 15)
 #define ENABLE_ON_INIT		(1 << 28)
 
 struct clk;
