@@ -737,6 +737,8 @@ static void __init tegra_seaboard_init(void)
 
 	seaboard_common_init();
 
+	seaboard_emc_init();
+
 	seaboard_i2c_register_devices();
 	seaboard_i2c_init();
 }
