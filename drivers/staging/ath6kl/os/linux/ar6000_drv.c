@@ -1606,10 +1606,9 @@ ar6000_avail_ev(void *context, void *hif_handle)
     int init_status = 0;
     HIF_DEVICE_OS_DEVICE_INFO osDevInfo;
 
-    A_MEMZERO(&osDevInfo, sizeof(osDevInfo));
-    if ( A_FAILED( HIFConfigureDevice(hif_handle, HIF_DEVICE_GET_OS_DEVICE,
-                    &osDevInfo, sizeof(osDevInfo))) )
-    {
+    memset(&osDevInfo, 0, sizeof(osDevInfo));
+    if (HIFConfigureDevice(hif_handle, HIF_DEVICE_GET_OS_DEVICE,
+        &osDevInfo, sizeof(osDevInfo))) {
         AR_DEBUG_PRINTF(ATH_DEBUG_ERR,("%s: Failed to get OS device instance\n", __func__));
         return A_ERROR;
     }
