@@ -61,7 +61,6 @@ struct dvfs_rail {
 struct dvfs {
 	/* Used only by tegra2_clock.c */
 	const char *clk_name;
-	int cpu_process_id;
 
 	/* Must be initialized before tegra_dvfs_init */
 	int freqs_mult;
