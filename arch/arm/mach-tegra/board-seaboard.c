@@ -28,6 +28,7 @@
 #include <mach/usb_phy.h>
 #include <linux/platform_data/tegra_usb.h>
 #include <linux/nct1008.h>
+#include <linux/power/bq20z75.h>
 
 #include <sound/wm8903.h>
 
@@ -477,8 +478,13 @@ static struct i2c_board_info __initdata nct1008_device = {
 	.platform_data = &nct1008_pdata,
 };
 
+static struct bq20z75_platform_data bq20z75_pdata = {
+	.i2c_retry_count	= 2,
+};
+
 static struct i2c_board_info __initdata bq20z75_device = {
 	I2C_BOARD_INFO("bq20z75", 0x0b),
+	.platform_data	= &bq20z75_pdata,
 };
 
 static struct i2c_board_info __initdata ak8975_device = {
@@ -593,6 +599,10 @@ static void __init tegra_kaen_init(void)
 	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
 	debug_uart_platform_data[0].irq = INT_UARTB;
+
+	bq20z75_pdata.battery_detect = TEGRA_GPIO_BATT_DETECT;
+	/* battery present is low */
+	bq20z75_pdata.battery_detect_present = 0;
 
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
