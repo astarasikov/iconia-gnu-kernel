@@ -26,6 +26,7 @@
 #include <linux/gpio_keys.h>
 #include <linux/i2c-tegra.h>
 #include <linux/clk.h>
+#include <linux/power/bq20z75.h>
 
 #include <sound/wm8903.h>
 
@@ -426,8 +427,13 @@ static struct i2c_board_info __initdata wm8903_device = {
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
 };
 
+static struct bq20z75_platform_data bq20z75_pdata = {
+	.i2c_retry_count	= 2,
+};
+
 static struct i2c_board_info __initdata bq20z75_device = {
 	I2C_BOARD_INFO("bq20z75", 0x0b),
+	.platform_data	= &bq20z75_pdata,
 };
 
 static struct i2c_board_info __initdata ak8975_device = {
@@ -553,6 +559,10 @@ static void __init tegra_aebl_init(void)
 	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
 	debug_uart_platform_data[0].irq = INT_UARTB;
+
+	bq20z75_pdata.battery_detect = TEGRA_GPIO_BATT_DETECT;
+	/* battery present is low */
+	bq20z75_pdata.battery_detect_present = 0;
 
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
