@@ -24,3 +24,14 @@ config SND_TEGRA_SOC_HARMONY
 	  Say Y or M here if you want to add support for SoC audio on the
 	  Tegra Harmony reference board.
 
+config SND_TEGRA_SOC_SEABOARD
+	tristate "SoC Audio support for Tegra Seaboard reference board"
+	depends on SND_TEGRA_SOC && I2C
+	depends on MACH_SEABOARD
+	default m
+	select SND_TEGRA_SOC_I2S
+	select SND_SOC_WM8903
+	help
+	  Say Y or M here if you want to add support for SoC audio on the
+	  Tegra Seaboard reference board.
+

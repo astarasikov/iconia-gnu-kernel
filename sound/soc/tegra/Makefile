@@ -11,5 +11,7 @@ obj-$(CONFIG_SND_TEGRA_SOC_I2S) += snd-soc-tegra-i2s.o
 
 # Tegra machine Support
 snd-soc-tegra-harmony-objs := harmony.o
+snd-soc-tegra-seaboard-objs := seaboard.o
 
 obj-$(CONFIG_SND_TEGRA_SOC_HARMONY) += snd-soc-tegra-harmony.o
+obj-$(CONFIG_SND_TEGRA_SOC_SEABOARD) += snd-soc-tegra-seaboard.o
