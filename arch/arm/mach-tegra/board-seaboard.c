@@ -39,6 +39,7 @@
 #include <mach/pinmux-t2.h>
 #include <mach/kbc.h>
 #include <mach/suspend.h>
+#include <mach/seaboard_audio.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -423,6 +424,19 @@ static struct tegra_sdhci_platform_data sdhci_pdata4 = {
 	.is_8bit	= 1,
 };
 
+static struct seaboard_audio_platform_data audio_pdata = {
+	.gpio_spkr_en = GPIO_WM8903(2),
+	.gpio_hp_det = TEGRA_GPIO_PX1,
+};
+
+static struct platform_device audio_device = {
+	.name = "tegra-snd-seaboard",
+	.id   = 0,
+	.dev  = {
+		.platform_data = &audio_pdata,
+	},
+};
+
 static struct platform_device *seaboard_devices[] __initdata = {
 	&debug_uart,
 	&tegra_pmu_device,
@@ -431,6 +445,7 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&tegra_sdhci_device3,
 	&tegra_sdhci_device4,
 	&seaboard_gpio_keys_device,
+	&audio_device,
 	&tegra_avp_device,
 };
 
