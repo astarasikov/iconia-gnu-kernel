@@ -429,6 +429,7 @@ static struct i2c_board_info __initdata wm8903_device = {
 
 static struct bq20z75_platform_data bq20z75_pdata = {
 	.i2c_retry_count	= 2,
+	.battery_detect		= -1,
 };
 
 static struct i2c_board_info __initdata bq20z75_device = {
