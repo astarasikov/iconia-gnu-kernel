@@ -447,6 +447,10 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&seaboard_gpio_keys_device,
 	&audio_device,
 	&tegra_avp_device,
+	&tegra_i2s_device1,
+	&tegra_das_device,
+	&tegra_pcm_device,
+	&tegra_spdif_device,
 };
 
 static struct nct1008_platform_data nct1008_pdata = {
