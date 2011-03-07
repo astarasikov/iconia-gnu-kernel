@@ -14,6 +14,15 @@ config SND_TEGRA_SOC_I2S
 	  Tegra I2S interface. You will also need to select the individual
 	  machine drivers to support below.
 
+config SND_TEGRA_SOC_SPDIF
+	tristate
+	depends on SND_TEGRA_SOC
+	default m
+	help
+	  Say Y or M if you want to add support for the SPDIF interface.
+	  You will also need to select the individual machine drivers to support
+	  below.
+
 config SND_TEGRA_SOC_HARMONY
 	tristate "SoC Audio support for Tegra Harmony reference board"
 	depends on SND_TEGRA_SOC && MACH_HARMONY && I2C
@@ -30,7 +39,9 @@ config SND_TEGRA_SOC_SEABOARD
 	depends on MACH_SEABOARD
 	default m
 	select SND_TEGRA_SOC_I2S
+	select SND_TEGRA_SOC_SPDIF
 	select SND_SOC_WM8903
+	select SND_SOC_SPDIF
 	help
 	  Say Y or M here if you want to add support for SoC audio on the
 	  Tegra Seaboard reference board.
