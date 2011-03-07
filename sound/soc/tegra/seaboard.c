@@ -128,6 +128,49 @@ static struct snd_soc_ops seaboard_asoc_ops = {
 	.hw_params = seaboard_asoc_hw_params,
 };
 
+static int seaboard_spdif_hw_params(struct snd_pcm_substream *substream,
+					struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_codec *codec = rtd->codec;
+	struct snd_soc_card *card = codec->card;
+	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
+	int srate, mclk, mclk_change;
+	int err;
+
+	/*
+	 * FIXME: Refactor mclk into PCM-specific function; SPDIF doesn't
+	 * need it
+	 */
+	srate = params_rate(params);
+	switch (srate) {
+	case 64000:
+	case 88200:
+	case 96000:
+		mclk = 128 * srate;
+		break;
+	default:
+		mclk = 256 * srate;
+		break;
+	}
+	/* FIXME: Codec only requires >= 3MHz if OSR==0 */
+	while (mclk < 6000000)
+		mclk *= 2;
+
+	err = tegra_asoc_utils_set_rate(&seaboard->util_data, srate, mclk,
+					&mclk_change);
+	if (err < 0) {
+		dev_err(card->dev, "Can't configure clocks\n");
+		return err;
+	}
+
+	return 0;
+}
+
+static struct snd_soc_ops seaboard_spdif_ops = {
+	.hw_params = seaboard_spdif_hw_params,
+};
+
 static struct snd_soc_jack seaboard_hp_jack;
 
 static struct snd_soc_jack_pin seaboard_hp_jack_pins[] = {
@@ -248,21 +291,32 @@ static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
 	return 0;
 }
 
-static struct snd_soc_dai_link seaboard_wm8903_dai = {
-	.name = "WM8903",
-	.stream_name = "WM8903 PCM",
-	.codec_name = "wm8903.0-001a",
-	.platform_name = "tegra-pcm-audio",
-	.cpu_dai_name = "tegra-i2s.0",
-	.codec_dai_name = "wm8903-hifi",
-	.init = seaboard_asoc_init,
-	.ops = &seaboard_asoc_ops,
+static struct snd_soc_dai_link seaboard_links[] = {
+	{
+		.name = "WM8903",
+		.stream_name = "WM8903 PCM",
+		.codec_name = "wm8903.0-001a",
+		.platform_name = "tegra-pcm-audio",
+		.cpu_dai_name = "tegra-i2s.0",
+		.codec_dai_name = "wm8903-hifi",
+		.init = seaboard_asoc_init,
+		.ops = &seaboard_asoc_ops,
+	},
+	{
+		.name = "SPDIF",
+		.stream_name = "spdif",
+		.codec_name = "spdif-dit",
+		.platform_name = "tegra-pcm-audio",
+		.cpu_dai_name = "tegra-spdif",
+		.codec_dai_name = "dit-hifi",
+		.ops = &seaboard_spdif_ops,
+	},
 };
 
 static struct snd_soc_card snd_soc_seaboard = {
 	.name = "tegra-seaboard",
-	.dai_link = &seaboard_wm8903_dai,
-	.num_links = 1,
+	.dai_link = seaboard_links,
+	.num_links = ARRAY_SIZE(seaboard_links),
 };
 
 static __devinit int tegra_snd_seaboard_probe(struct platform_device *pdev)
