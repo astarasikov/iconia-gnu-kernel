@@ -158,7 +158,7 @@ const struct tegra_hdmi_audio_config tegra_hdmi_audio_32k[] = {
 };
 
 const struct tegra_hdmi_audio_config tegra_hdmi_audio_44_1k[] = {
-	{25200000,	14112,	63125},
+	{25200000,	5656,	25250},
 	{27000000,	6272,	30000},
 	{54000000,	6272,	60000},
 	{74250000,	6272,	82500},
