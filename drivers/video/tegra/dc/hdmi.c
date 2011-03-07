@@ -714,12 +714,11 @@ static void tegra_dc_hdmi_setup_audio_fs_tables(struct tegra_dc *dc)
 	}
 }
 
-static int tegra_dc_hdmi_setup_audio(struct tegra_dc *dc)
+static int tegra_dc_hdmi_setup_audio(struct tegra_dc *dc, unsigned audio_freq)
 {
 	struct tegra_dc_hdmi_data *hdmi = tegra_dc_get_outdata(dc);
 	const struct tegra_hdmi_audio_config *config;
 	unsigned long audio_n;
-	unsigned audio_freq = 44100; /* TODO: find some way of configuring this */
 
 	tegra_hdmi_writel(hdmi,
 			  AUDIO_CNTRL0_ERROR_TOLERANCE(6) |
@@ -758,6 +757,28 @@ static int tegra_dc_hdmi_setup_audio(struct tegra_dc *dc)
 
 	return 0;
 }
+
+int tegra_dc_hdmi_set_audio_sample_rate(unsigned audio_freq)
+{
+	int i, ret;
+	struct tegra_dc *dc;
+	struct tegra_dc_hdmi_data *hdmi;
+
+	for (i = 0; i < TEGRA_MAX_DC; i++) {
+		dc = tegra_dc_get_dc(i);
+		if (!dc)
+			continue;
+		hdmi = tegra_dc_get_outdata(dc);
+		if (!hdmi)
+			continue;
+		ret = tegra_dc_hdmi_setup_audio(dc, audio_freq);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(tegra_dc_hdmi_set_audio_sample_rate);
 
 static void tegra_dc_hdmi_write_infopack(struct tegra_dc *dc, int header_reg,
 					 u8 type, u8 version, void *data, int len)
@@ -965,9 +986,8 @@ static void tegra_dc_hdmi_enable(struct tegra_dc *dc)
 			  SOR_REFCLK_DIV_FRAC(dispclk_div_8_2),
 			  HDMI_NV_PDISP_SOR_REFCLK);
 
-
 	if (!hdmi->dvi) {
-		err = tegra_dc_hdmi_setup_audio(dc);
+		err = tegra_dc_hdmi_setup_audio(dc, 44100);
 
 		if (err < 0)
 			hdmi->dvi = true;
