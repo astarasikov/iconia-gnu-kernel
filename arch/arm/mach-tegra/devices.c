@@ -613,7 +613,7 @@ struct platform_device tegra_w1_device = {
 };
 
 struct platform_device tegra_spdif_device = {
-	.name		= "spdif_out",
+	.name		= "tegra-spdif",
 	.id		= -1,
 	.resource	= spdif_resource,
 	.num_resources	= ARRAY_SIZE(spdif_resource),
