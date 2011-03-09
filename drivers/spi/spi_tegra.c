@@ -26,6 +26,7 @@
 #include <linux/dmapool.h>
 #include <linux/clk.h>
 #include <linux/interrupt.h>
+#include <linux/of.h>
 #include <linux/delay.h>
 
 #include <linux/spi/spi.h>
@@ -556,6 +557,7 @@ static int __init spi_tegra_probe(struct platform_device *pdev)
 	tspi->rx_dma_req.req_sel = spi_tegra_req_sels[pdev->id];
 	tspi->rx_dma_req.dev = tspi;
 
+	master->dev.of_node = of_node_get(pdev->dev.of_node);
 	ret = spi_register_master(master);
 
 	if (ret < 0)
@@ -564,6 +566,7 @@ static int __init spi_tegra_probe(struct platform_device *pdev)
 	return ret;
 
 err5:
+	of_node_put(master->dev.of_node);
 	dma_free_coherent(&pdev->dev, sizeof(u32) * BB_LEN,
 			  tspi->rx_bb, tspi->rx_bb_phys);
 err4:
@@ -649,10 +652,21 @@ static int spi_tegra_resume(struct platform_device *pdev)
 
 MODULE_ALIAS("platform:spi_tegra");
 
+#ifdef CONFIG_OF
+static struct of_device_id spi_tegra_of_match_table[] __devinitdata = {
+	{ .compatible = "nvidia,tegra250-spi", },
+	{}
+};
+MODULE_DEVICE_TABLE(of, spi_tegra_of_match_table);
+#else /* CONFIG_OF */
+#define spi_tegra_of_match_table NULL
+#endif /* CONFIG_OF */
+
 static struct platform_driver spi_tegra_driver = {
 	.driver = {
 		.name =		"spi_tegra",
 		.owner =	THIS_MODULE,
+		.of_match_table = spi_tegra_of_match_table,
 	},
 	.remove =	__devexit_p(spi_tegra_remove),
 #ifdef CONFIG_PM
