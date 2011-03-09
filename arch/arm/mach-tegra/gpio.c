@@ -23,6 +23,7 @@
 
 #include <linux/io.h>
 #include <linux/gpio.h>
+#include <linux/of.h>
 
 #include <mach/iomap.h>
 #include <mach/suspend.h>
@@ -365,6 +366,11 @@ static int __init tegra_gpio_init(void)
 			__raw_writel(0x00, GPIO_INT_ENB(gpio));
 		}
 	}
+
+#if defined(CONFIG_OF_GPIO)
+	tegra_gpio_chip.of_node = of_find_compatible_node(NULL, NULL,
+						"nvidia,tegra250-gpio");
+#endif /* CONFIG_OF_GPIO */
 
 	gpiochip_add(&tegra_gpio_chip);
 
