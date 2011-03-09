@@ -38,6 +38,12 @@ config OF_IRQ
 	def_bool y
 	depends on !SPARC
 
+config OF_CLOCK
+	def_bool y
+	depends on HAVE_CLK
+	help
+	  OpenFirmware clock accessors
+
 config OF_DEVICE
 	def_bool y
 
