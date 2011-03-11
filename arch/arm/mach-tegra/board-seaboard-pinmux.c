@@ -178,6 +178,8 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_HP_DET,		.enable = true },
 	{ .gpio = TEGRA_GPIO_WM8903_IRQ,	.enable = true },
 	{ .gpio = TEGRA_GPIO_CYTP_INT,		.enable = true },
+	{ .gpio = TEGRA_GPIO_MXT_RST,		.enable = true },
+	{ .gpio = TEGRA_GPIO_MXT_IRQ,		.enable = true },
 };
 
 void __init seaboard_pinmux_init(void)
