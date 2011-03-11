@@ -25,6 +25,7 @@
 #include <linux/gpio.h>
 #include <linux/gpio_keys.h>
 #include <linux/i2c-tegra.h>
+#include <linux/i2c/atmel_mxt_ts.h>
 #include <linux/clk.h>
 #include <linux/power/bq20z75.h>
 
@@ -442,6 +443,61 @@ static struct i2c_board_info __initdata ak8975_device = {
 	.irq		= TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MAGNETOMETER),
 };
 
+
+static const u8 mxt_config_data[] = {
+	/* MXT_GEN_COMMAND(6) */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	/* MXT_GEN_POWER(7) */
+	0xFF, 0xff, 0x32,
+	/* MXT_GEN_ACQUIRE(8) */
+	0x0a, 0x00, 0x14, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	/* MXT_TOUCH_MULTI(9) */
+	0x0F, 0x00, 0x00, 0x1b, 0x2a, 0x00, 0x10, 0x32, 0x02, 0x05,
+	0x00, 0x02, 0x01, 0x00, 0x0a, 0x0a, 0x0a, 0x0a, 0x00, 0x03,
+	0x56, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x0a, 0x00, 0x00, 0x00,
+	/* MXT_TOUCH_KEYARRAY(15) */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00,
+	/* MXT_PROCG_NOISE(22) */
+	0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x19, 0x00,
+	0x00, 0x00, 0x05, 0x0a, 0x14, 0x1e, 0x00,
+	/* MXT_PROCI_ONETOUCH(24) */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	/* MXT_PROCI_TWOTOUCH(27) */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	/* MXT_SPT_SELFTEST(25) */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00,
+	/* MXT_SPT_CTECONFIG(28) */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+static struct mxt_platform_data mxt_platform_data = {
+	.x_line			= 27,
+	.y_line			= 42,
+	.x_size			= 768,
+	.y_size			= 1386,
+	.blen			= 0x16,
+	.threshold		= 0x28,
+	.voltage		= 3300000,	/* 3.3V */
+	.orient			= MXT_DIAGONAL,
+	.irqflags		= IRQF_TRIGGER_FALLING,
+	.config			= mxt_config_data,
+	.config_length		= sizeof(mxt_config_data),
+};
+
+static struct i2c_board_info __initdata mxt_device = {
+	I2C_BOARD_INFO("atmel_mxt_ts", 0x5a),
+	.platform_data = &mxt_platform_data,
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MXT_IRQ),
+};
+
+static __initdata struct tegra_pingroup_config mxt_pinmux_config[] = {
+	{TEGRA_PINGROUP_LVP0,  TEGRA_MUX_RSVD4,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
+};
+
 static int seaboard_ehci_init(void)
 {
 	int gpio_status;
@@ -467,6 +523,15 @@ static int seaboard_ehci_init(void)
 
 static void __init seaboard_i2c_init(void)
 {
+	tegra_pinmux_config_table(mxt_pinmux_config, ARRAY_SIZE(mxt_pinmux_config));
+
+	gpio_request(TEGRA_GPIO_MXT_RST, "TSP_LDO_ON");
+	gpio_direction_output(TEGRA_GPIO_MXT_RST, 1);
+	gpio_export(TEGRA_GPIO_MXT_RST, 0);
+
+	gpio_request(TEGRA_GPIO_MXT_RST, "TSP_INT");
+	gpio_direction_input(TEGRA_GPIO_MXT_RST);
+
 	gpio_request(TEGRA_GPIO_ISL29018_IRQ, "isl29018");
 	gpio_direction_input(TEGRA_GPIO_ISL29018_IRQ);
 
@@ -475,6 +540,7 @@ static void __init seaboard_i2c_init(void)
 
 	i2c_register_board_info(0, &isl29018_device, 1);
 	i2c_register_board_info(0, &wm8903_device, 1);
+	i2c_register_board_info(0, &mxt_device, 1);
 
 	i2c_register_board_info(2, &bq20z75_device, 1);
 

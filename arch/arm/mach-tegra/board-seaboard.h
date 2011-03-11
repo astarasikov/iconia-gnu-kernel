@@ -42,6 +42,8 @@
 #define TEGRA_GPIO_KAEN_HP_MUTE		TEGRA_GPIO_PA5
 #define TEGRA_GPIO_BATT_DETECT		TEGRA_GPIO_PP2
 #define TEGRA_GPIO_WLAN_POWER		TEGRA_GPIO_PK6
+#define TEGRA_GPIO_MXT_RST		TEGRA_GPIO_PV7
+#define TEGRA_GPIO_MXT_IRQ		TEGRA_GPIO_PV6
 
 void seaboard_pinmux_init(void);
 int seaboard_power_init(void);
