@@ -19598,11 +19598,23 @@ static void alc272_fixup_mario(struct hda_codec *codec,
 		       "hda_codec: failed to override amp caps for NID 0x2\n");
 }
 
+static void alc272_fixup_alex(struct hda_codec *codec,
+			       const struct alc_fixup *fix, int pre_init) {
+	if (snd_hda_override_amp_caps(codec, 0x2, HDA_OUTPUT,
+				      (0x3c << AC_AMPCAP_OFFSET_SHIFT) |
+				      (0x3c << AC_AMPCAP_NUM_STEPS_SHIFT) |
+				      (0x03 << AC_AMPCAP_STEP_SIZE_SHIFT) |
+				      (0 << AC_AMPCAP_MUTE_SHIFT)))
+		printk(KERN_WARNING
+		       "hda_codec: failed to override amp caps for NID 0x2\n");
+}
+
 enum {
 	ALC662_FIXUP_ASPIRE,
 	ALC662_FIXUP_IDEAPAD,
 	ALC272_FIXUP_MARIO,
 	ALC662_FIXUP_CZC_P10T,
+	ALC272_FIXUP_ALEX,
 };
 
 static const struct alc_fixup alc662_fixups[] = {
@@ -19631,6 +19643,10 @@ static const struct alc_fixup alc662_fixups[] = {
 			{}
 		}
 	},
+	[ALC272_FIXUP_ALEX] = {
+		.type = ALC_FIXUP_FUNC,
+		.v.func = alc272_fixup_alex,
+	}
 };
 
 static struct snd_pci_quirk alc662_fixup_tbl[] = {
@@ -19645,6 +19661,7 @@ static struct snd_pci_quirk alc662_fixup_tbl[] = {
 
 static const struct alc_model_fixup alc662_fixup_models[] = {
 	{.id = ALC272_FIXUP_MARIO, .name = "mario"},
+	{.id = ALC272_FIXUP_ALEX, .name = "alex"},
 	{}
 };
 
