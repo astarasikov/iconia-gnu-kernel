@@ -313,13 +313,13 @@ int ar6000_configure_target(AR_SOFTC_T *ar);
 
 static void ar6000_target_failure(void *Instance, int Status);
 
-static void ar6000_rx(void *Context, HTC_PACKET *pPacket);
+static void ar6000_rx(void *Context, struct htc_packet *pPacket);
 
 static void ar6000_rx_refill(void *Context,HTC_ENDPOINT_ID Endpoint);
 
 static void ar6000_tx_complete(void *Context, HTC_PACKET_QUEUE *pPackets);
 
-static HTC_SEND_FULL_ACTION ar6000_tx_queue_full(void *Context, HTC_PACKET *pPacket);
+static HTC_SEND_FULL_ACTION ar6000_tx_queue_full(void *Context, struct htc_packet *pPacket);
 
 #ifdef ATH_AR6K_11N_SUPPORT
 static void ar6000_alloc_netbufs(A_NETBUF_QUEUE_T *q, u16 num);
@@ -327,7 +327,7 @@ static void ar6000_alloc_netbufs(A_NETBUF_QUEUE_T *q, u16 num);
 static void ar6000_deliver_frames_to_nw_stack(void * dev, void *osbuf);
 //static void ar6000_deliver_frames_to_bt_stack(void * dev, void *osbuf);
 
-static HTC_PACKET *ar6000_alloc_amsdu_rxbuf(void *Context, HTC_ENDPOINT_ID Endpoint, int Length);
+static struct htc_packet *ar6000_alloc_amsdu_rxbuf(void *Context, HTC_ENDPOINT_ID Endpoint, int Length);
 
 static void ar6000_refill_amsdu_rxbufs(AR_SOFTC_T *ar, int Count);
 
@@ -3377,7 +3377,7 @@ applyAPTCHeuristics(AR_SOFTC_T *ar)
 }
 #endif /* ADAPTIVE_POWER_THROUGHPUT_CONTROL */
 
-static HTC_SEND_FULL_ACTION ar6000_tx_queue_full(void *Context, HTC_PACKET *pPacket)
+static HTC_SEND_FULL_ACTION ar6000_tx_queue_full(void *Context, struct htc_packet *pPacket)
 {
     AR_SOFTC_T     *ar = (AR_SOFTC_T *)Context;
     HTC_SEND_FULL_ACTION    action = HTC_SEND_FULL_KEEP;
@@ -3471,7 +3471,7 @@ ar6000_tx_complete(void *Context, HTC_PACKET_QUEUE *pPacketQueue)
     HTC_ENDPOINT_ID   eid;
     bool          wakeEvent = false;
     struct sk_buff_head  skb_queue;
-    HTC_PACKET      *pPacket;
+    struct htc_packet      *pPacket;
     struct sk_buff  *pktSkb;
     bool          flushing = false;
 
@@ -3643,7 +3643,7 @@ sta_t *ieee80211_find_conn_for_aid(AR_SOFTC_T *ar, u8 aid)
  */
 int pktcount;
 static void
-ar6000_rx(void *Context, HTC_PACKET *pPacket)
+ar6000_rx(void *Context, struct htc_packet *pPacket)
 {
     AR_SOFTC_T *ar = (AR_SOFTC_T *)Context;
     struct sk_buff *skb = (struct sk_buff *)pPacket->pPktContext;
@@ -3992,7 +3992,7 @@ ar6000_rx_refill(void *Context, HTC_ENDPOINT_ID Endpoint)
     void        *osBuf;
     int         RxBuffers;
     int         buffersToRefill;
-    HTC_PACKET  *pPacket;
+    struct htc_packet  *pPacket;
     HTC_PACKET_QUEUE queue;
 
     buffersToRefill = (int)AR6000_MAX_RX_BUFFERS -
@@ -4015,7 +4015,7 @@ ar6000_rx_refill(void *Context, HTC_ENDPOINT_ID Endpoint)
         }
             /* the HTC packet wrapper is at the head of the reserved area
              * in the skb */
-        pPacket = (HTC_PACKET *)(A_NETBUF_HEAD(osBuf));
+        pPacket = (struct htc_packet *)(A_NETBUF_HEAD(osBuf));
             /* set re-fill info */
         SET_HTC_PACKET_INFO_RX_REFILL(pPacket,osBuf,A_NETBUF_DATA(osBuf),AR6000_BUFFER_SIZE,Endpoint);
             /* add to queue */
@@ -4032,7 +4032,7 @@ ar6000_rx_refill(void *Context, HTC_ENDPOINT_ID Endpoint)
   /* clean up our amsdu buffer list */
 static void ar6000_cleanup_amsdu_rxbufs(AR_SOFTC_T *ar)
 {
-    HTC_PACKET  *pPacket;
+    struct htc_packet  *pPacket;
     void        *osBuf;
 
         /* empty AMSDU buffer queue and free OS bufs */
@@ -4061,7 +4061,7 @@ static void ar6000_cleanup_amsdu_rxbufs(AR_SOFTC_T *ar)
     /* refill the amsdu buffer list */
 static void ar6000_refill_amsdu_rxbufs(AR_SOFTC_T *ar, int Count)
 {
-    HTC_PACKET  *pPacket;
+    struct htc_packet  *pPacket;
     void        *osBuf;
 
     while (Count > 0) {
@@ -4071,7 +4071,7 @@ static void ar6000_refill_amsdu_rxbufs(AR_SOFTC_T *ar, int Count)
         }
             /* the HTC packet wrapper is at the head of the reserved area
              * in the skb */
-        pPacket = (HTC_PACKET *)(A_NETBUF_HEAD(osBuf));
+        pPacket = (struct htc_packet *)(A_NETBUF_HEAD(osBuf));
             /* set re-fill info */
         SET_HTC_PACKET_INFO_RX_REFILL(pPacket,osBuf,A_NETBUF_DATA(osBuf),AR6000_AMSDU_BUFFER_SIZE,0);
 
@@ -4091,9 +4091,9 @@ static void ar6000_refill_amsdu_rxbufs(AR_SOFTC_T *ar, int Count)
      * keep the allocation size the same to optimize cached-slab allocations.
      *
      * */
-static HTC_PACKET *ar6000_alloc_amsdu_rxbuf(void *Context, HTC_ENDPOINT_ID Endpoint, int Length)
+static struct htc_packet *ar6000_alloc_amsdu_rxbuf(void *Context, HTC_ENDPOINT_ID Endpoint, int Length)
 {
-    HTC_PACKET  *pPacket = NULL;
+    struct htc_packet  *pPacket = NULL;
     AR_SOFTC_T  *ar = (AR_SOFTC_T *)Context;
     int         refillCount = 0;
 
