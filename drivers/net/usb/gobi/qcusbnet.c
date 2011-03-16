@@ -21,9 +21,9 @@
 #include "qmi.h"
 #include "qcusbnet.h"
 
-#define DRIVER_VERSION "1.0.110"
+#define DRIVER_VERSION "1.0.110+google"
 #define DRIVER_AUTHOR "Qualcomm Innovation Center"
-#define DRIVER_DESC "QCUSBNet2k"
+#define DRIVER_DESC "gobi"
 
 int qcusbnet_debug;
 static struct class *devclass;
@@ -132,7 +132,8 @@ static int qcnet_bind(struct usbnet *usbnet, struct usb_interface *iface)
 		return -EINVAL;
 	}
 
-	if (iface->cur_altsetting->desc.bInterfaceNumber != 0) {
+	if (iface->cur_altsetting->desc.bInterfaceNumber != 0
+	    && iface->cur_altsetting->desc.bInterfaceNumber != 5) {
 		DBG("invalid interface %d\n",
 			  iface->cur_altsetting->desc.bInterfaceNumber);
 		return -EINVAL;
@@ -531,6 +532,9 @@ static const struct usb_device_id qc_vidpids[] = {
 	MKVIDPID(0x05c6, 0x9225),	/* Sony Gobi 2000 */
 	MKVIDPID(0x05c6, 0x9235),	/* Top Global Gobi 2000 */
 	MKVIDPID(0x05c6, 0x9275),	/* iRex Technologies Gobi 2000 */
+
+	MKVIDPID(0x05c6, 0x920d),	/* Qualcomm Gobi 3000 */
+	MKVIDPID(0x1410, 0xa021),	/* Novatel Gobi 3000 */
 	{ }
 };
 
@@ -612,7 +616,7 @@ int qcnet_probe(struct usb_interface *iface, const struct usb_device_id *vidpids
 EXPORT_SYMBOL_GPL(qcnet_probe);
 
 static struct usb_driver qcusbnet = {
-	.name       = "QCUSBNet2k",
+	.name       = "gobi",
 	.id_table   = qc_vidpids,
 	.probe      = qcnet_probe,
 	.disconnect = usbnet_disconnect,
