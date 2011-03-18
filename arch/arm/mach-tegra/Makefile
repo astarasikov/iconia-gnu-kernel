@@ -50,6 +50,7 @@ obj-${CONFIG_MACH_PAZ00}		+= board-paz00-pinmux.o
 obj-${CONFIG_MACH_SEABOARD}             += board-seaboard.o
 obj-${CONFIG_MACH_SEABOARD}             += board-seaboard-panel.o
 obj-${CONFIG_MACH_SEABOARD}             += board-seaboard-pinmux.o
+obj-${CONFIG_MACH_SEABOARD}             += board-seaboard-power.o
 
 obj-${CONFIG_MACH_TRIMSLICE}            += board-trimslice.o
 obj-${CONFIG_MACH_TRIMSLICE}            += board-trimslice-pinmux.o

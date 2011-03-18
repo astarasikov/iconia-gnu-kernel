@@ -44,5 +44,6 @@
 
 void seaboard_pinmux_init(void);
 int seaboard_panel_init(void);
+int seaboard_power_init(void);
 
 #endif
