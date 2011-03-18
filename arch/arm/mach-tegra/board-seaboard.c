@@ -580,6 +580,20 @@ static void __init tegra_kaen_init(void)
 	seaboard_i2c_init();
 }
 
+static void __init tegra_aebl_init(void)
+{
+	/* Aebl uses UARTB for the debug port. */
+	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
+	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
+	debug_uart_platform_data[0].irq = INT_UARTB;
+
+	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
+
+	seaboard_common_init();
+
+	seaboard_i2c_init();
+}
+
 static void __init tegra_wario_init(void)
 {
 	/* Wario uses UARTB for the debug port. */
@@ -611,6 +625,15 @@ MACHINE_START(KAEN, "kaen")
 	.init_irq       = tegra_init_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_kaen_init,
+MACHINE_END
+
+MACHINE_START(AEBL, "aebl")
+	.boot_params    = 0x00000100,
+	.map_io         = tegra_map_common_io,
+	.init_early     = tegra_init_early,
+	.init_irq       = tegra_init_irq,
+	.timer          = &tegra_timer,
+	.init_machine   = tegra_aebl_init,
 MACHINE_END
 
 MACHINE_START(WARIO, "wario")
