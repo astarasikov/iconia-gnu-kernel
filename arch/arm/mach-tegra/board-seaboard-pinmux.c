@@ -170,6 +170,10 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_USB1,		.enable = true },
 	{ .gpio = TEGRA_GPIO_NCT1008_THERM2_IRQ,.enable = true },
 	{ .gpio = TEGRA_GPIO_WLAN_POWER,	.enable = true },
+	{ .gpio = TEGRA_GPIO_BACKLIGHT,		.enable = true },
+	{ .gpio = TEGRA_GPIO_LVDS_SHUTDOWN,	.enable = true },
+	{ .gpio = TEGRA_GPIO_BACKLIGHT_VDD,	.enable = true },
+	{ .gpio = TEGRA_GPIO_EN_VDD_PNL,	.enable = true },
 };
 
 void __init seaboard_pinmux_init(void)

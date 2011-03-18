@@ -43,5 +43,6 @@
 #define GPIO_WM8903(_x_)                (TPS_GPIO_BASE + 4 + (_x_))
 
 void seaboard_pinmux_init(void);
+int seaboard_panel_init(void);
 
 #endif

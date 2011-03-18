@@ -555,6 +555,7 @@ static void __init seaboard_common_init(void)
 	platform_add_devices(seaboard_devices, ARRAY_SIZE(seaboard_devices));
 
 	seaboard_ehci_init();
+	seaboard_panel_init();
 	seaboard_kbc_init();
 }
 
