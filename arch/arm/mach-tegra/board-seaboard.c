@@ -478,6 +478,11 @@ static struct i2c_board_info __initdata bq20z75_device = {
 	I2C_BOARD_INFO("bq20z75", 0x0b),
 };
 
+static struct i2c_board_info __initdata ak8975_device = {
+	I2C_BOARD_INFO("ak8975", 0x0c),
+	.irq		= TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MAGNETOMETER),
+};
+
 static int seaboard_ehci_init(void)
 {
 	int gpio_status;
@@ -519,6 +524,7 @@ static void __init seaboard_i2c_init(void)
 	i2c_register_board_info(2, &bq20z75_device, 1);
 
 	i2c_register_board_info(4, &nct1008_device, 1);
+	i2c_register_board_info(4, &ak8975_device, 1);
 
 	tegra_i2c_device1.dev.platform_data = &seaboard_i2c1_platform_data;
 	tegra_i2c_device2.dev.platform_data = &seaboard_i2c2_platform_data;
