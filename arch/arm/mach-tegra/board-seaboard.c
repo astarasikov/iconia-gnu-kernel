@@ -29,6 +29,8 @@
 #include <linux/platform_data/tegra_usb.h>
 #include <linux/nct1008.h>
 
+#include <sound/wm8903.h>
+
 #include <mach/iomap.h>
 #include <mach/irqs.h>
 #include <mach/sdhci.h>
@@ -440,6 +442,26 @@ static struct nct1008_platform_data nct1008_pdata = {
 	.alarm_fn		= tegra_throttling_enable,
 };
 
+static struct wm8903_platform_data wm8903_pdata = {
+	.irq_active_low = 0,
+	.micdet_cfg = 0,
+	.micdet_delay = 100,
+	.gpio_base = GPIO_WM8903(0),
+	.gpio_cfg = {
+		WM8903_GPIO_NO_CONFIG,
+		WM8903_GPIO_NO_CONFIG,
+		0,
+		WM8903_GPIO_NO_CONFIG,
+		WM8903_GPIO_NO_CONFIG,
+	},
+};
+
+static struct i2c_board_info __initdata wm8903_device = {
+	I2C_BOARD_INFO("wm8903", 0x1a),
+	.platform_data = &wm8903_pdata,
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PX3),
+};
+
 static struct i2c_board_info __initdata isl29018_device = {
 	I2C_BOARD_INFO("isl29018", 0x44),
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_ISL29018_IRQ),
@@ -486,6 +508,7 @@ static void __init seaboard_i2c_init(void)
 	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
 	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
 
+	i2c_register_board_info(0, &wm8903_device, 1);
 	i2c_register_board_info(0, &isl29018_device, 1);
 
 	i2c_register_board_info(4, &nct1008_device, 1);
