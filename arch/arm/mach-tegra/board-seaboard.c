@@ -27,6 +27,7 @@
 #include <linux/gpio_keys.h>
 #include <mach/usb_phy.h>
 #include <linux/platform_data/tegra_usb.h>
+#include <linux/nct1008.h>
 
 #include <mach/iomap.h>
 #include <mach/irqs.h>
@@ -43,6 +44,8 @@
 #include "clock.h"
 #include "devices.h"
 #include "gpio-names.h"
+
+extern void tegra_throttling_enable(bool);
 
 static struct plat_serial8250_port debug_uart_platform_data[] = {
 	{
@@ -425,13 +428,27 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&seaboard_gpio_keys_device,
 };
 
+static struct nct1008_platform_data nct1008_pdata = {
+	.supported_hwrev	= true,
+	.ext_range		= false,
+	.conv_rate		= 0x08,
+	.offset			= 0,
+	.hysteresis		= 0,
+	.shutdown_ext_limit	= 115,
+	.shutdown_local_limit	= 120,
+	.throttling_ext_limit	= 90,
+	.alarm_fn		= tegra_throttling_enable,
+};
+
 static struct i2c_board_info __initdata isl29018_device = {
 	I2C_BOARD_INFO("isl29018", 0x44),
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_ISL29018_IRQ),
 };
 
-static struct i2c_board_info __initdata adt7461_device = {
-	I2C_BOARD_INFO("adt7461", 0x4c),
+static struct i2c_board_info __initdata nct1008_device = {
+	I2C_BOARD_INFO("nct1008", 0x4c),
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_NCT1008_THERM2_IRQ),
+	.platform_data = &nct1008_pdata,
 };
 
 static int seaboard_ehci_init(void)
@@ -461,15 +478,17 @@ static int seaboard_ehci_init(void)
 	return 0;
 }
 
-
 static void __init seaboard_i2c_init(void)
 {
 	gpio_request(TEGRA_GPIO_ISL29018_IRQ, "isl29018");
 	gpio_direction_input(TEGRA_GPIO_ISL29018_IRQ);
 
+	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
+	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
+
 	i2c_register_board_info(0, &isl29018_device, 1);
 
-	i2c_register_board_info(4, &adt7461_device, 1);
+	i2c_register_board_info(4, &nct1008_device, 1);
 
 	tegra_i2c_device1.dev.platform_data = &seaboard_i2c1_platform_data;
 	tegra_i2c_device2.dev.platform_data = &seaboard_i2c2_platform_data;
