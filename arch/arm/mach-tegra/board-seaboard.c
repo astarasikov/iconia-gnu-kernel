@@ -384,6 +384,7 @@ static struct platform_device seaboard_audio_device = {
 static struct platform_device *seaboard_devices[] __initdata = {
 	&debug_uart,
 	&tegra_pmu_device,
+	&tegra_rtc_device,
 	&tegra_sdhci_device1,
 	&tegra_sdhci_device3,
 	&tegra_sdhci_device4,
