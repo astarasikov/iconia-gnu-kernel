@@ -33,6 +33,7 @@
 #include <mach/sdhci.h>
 #include <mach/pinmux.h>
 #include <mach/pinmux-t2.h>
+#include <mach/kbc.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -263,6 +264,139 @@ static struct platform_device seaboard_gpio_keys_device = {
 	}
 };
 
+static const u32 cros_kbd_keymap[] = {
+	KEY(0, 2, KEY_LEFTCTRL),
+	KEY(0, 4, KEY_RIGHTCTRL),
+
+	KEY(1, 0, KEY_SEARCH),
+	KEY(1, 1, KEY_ESC),
+	KEY(1, 2, KEY_TAB),
+	KEY(1, 3, KEY_GRAVE),
+	KEY(1, 4, KEY_A),
+	KEY(1, 5, KEY_Z),
+	KEY(1, 6, KEY_1),
+	KEY(1, 7, KEY_Q),
+
+	KEY(2, 0, KEY_BACK),
+	KEY(2, 2, KEY_REFRESH),
+	KEY(2, 3, KEY_FORWARD),
+	KEY(2, 4, KEY_D),
+	KEY(2, 5, KEY_C),
+	KEY(2, 6, KEY_3),
+	KEY(2, 7, KEY_E),
+
+	KEY(4, 0, KEY_B),
+	KEY(4, 1, KEY_G),
+	KEY(4, 2, KEY_T),
+	KEY(4, 3, KEY_5),
+	KEY(4, 4, KEY_F),
+	KEY(4, 5, KEY_V),
+	KEY(4, 6, KEY_4),
+	KEY(4, 7, KEY_R),
+
+	KEY(5, 0, KEY_VOLUMEUP),
+	KEY(5, 1, KEY_BRIGHTNESSUP),
+	KEY(5, 2, KEY_BRIGHTNESSDOWN),
+	KEY(5, 4, KEY_S),
+	KEY(5, 5, KEY_X),
+	KEY(5, 6, KEY_2),
+	KEY(5, 7, KEY_W),
+
+	KEY(6, 2, KEY_RIGHTBRACE),
+	KEY(6, 4, KEY_K),
+	KEY(6, 5, KEY_COMMA),
+	KEY(6, 6, KEY_8),
+	KEY(6, 7, KEY_I),
+
+	KEY(8, 0, KEY_N),
+	KEY(8, 1, KEY_H),
+	KEY(8, 2, KEY_Y),
+	KEY(8, 3, KEY_6),
+	KEY(8, 4, KEY_J),
+	KEY(8, 5, KEY_M),
+	KEY(8, 6, KEY_7),
+	KEY(8, 7, KEY_U),
+
+	KEY(9, 5, KEY_LEFTSHIFT),
+	KEY(9, 7, KEY_RIGHTSHIFT),
+
+	KEY(10, 0, KEY_EQUAL),
+	KEY(10, 1, KEY_APOSTROPHE),
+	KEY(10, 2, KEY_LEFTBRACE),
+	KEY(10, 3, KEY_MINUS),
+	KEY(10, 4, KEY_SEMICOLON),
+	KEY(10, 5, KEY_SLASH),
+	KEY(10, 6, KEY_0),
+	KEY(10, 7, KEY_P),
+
+	KEY(11, 1, KEY_VOLUMEDOWN),
+	KEY(11, 2, KEY_MUTE),
+	KEY(11, 4, KEY_L),
+	KEY(11, 5, KEY_DOT),
+	KEY(11, 6, KEY_9),
+	KEY(11, 7, KEY_O),
+
+	KEY(13, 0, KEY_RIGHTALT),
+	KEY(13, 6, KEY_LEFTALT),
+
+	KEY(14, 1, KEY_BACKSPACE),
+	KEY(14, 3, KEY_BACKSLASH),
+	KEY(14, 4, KEY_ENTER),
+	KEY(14, 5, KEY_SPACE),
+	KEY(14, 6, KEY_DOWN),
+	KEY(14, 7, KEY_UP),
+	
+	KEY(15, 6, KEY_RIGHT),
+	KEY(15, 7, KEY_LEFT),
+};
+
+static const struct matrix_keymap_data cros_keymap_data = {
+        .keymap         = cros_kbd_keymap,
+        .keymap_size    = ARRAY_SIZE(cros_kbd_keymap),
+};
+
+static struct tegra_kbc_wake_key seaboard_wake_cfg[] = {
+       [0] = {
+               .row = 1,
+               .col = 7,
+       },
+       [1] = {
+               .row = 15,
+               .col = 0,
+       },
+};
+
+static struct tegra_kbc_platform_data seaboard_kbc_platform_data = {
+       .debounce_cnt = 2,
+       .repeat_cnt = 5 * 32,
+       .wake_cnt = ARRAY_SIZE(seaboard_wake_cfg),
+       .wake_cfg = seaboard_wake_cfg,
+};
+
+static void seaboard_kbc_init(void)
+{
+       struct tegra_kbc_platform_data *data = &seaboard_kbc_platform_data;
+       int i, j;
+
+       BUG_ON((KBC_MAX_ROW + KBC_MAX_COL) > KBC_MAX_GPIO);
+       /*
+        * Setup the pin configuration information.
+        */
+       for (i = 0; i < KBC_MAX_ROW; i++) {
+               data->pin_cfg[i].num = i;
+               data->pin_cfg[i].is_row = true;
+       }
+
+       for (j = 0; j < KBC_MAX_COL; j++) {
+               data->pin_cfg[i + j].num = j;
+               data->pin_cfg[i + j].is_row = false;
+       }
+
+       tegra_kbc_device.dev.platform_data = data;
+
+       platform_device_register(&tegra_kbc_device);
+}
+
 static struct tegra_sdhci_platform_data sdhci_pdata1 = {
 	.cd_gpio	= -1,
 	.wp_gpio	= -1,
@@ -361,6 +495,7 @@ static void __init seaboard_common_init(void)
 	platform_add_devices(seaboard_devices, ARRAY_SIZE(seaboard_devices));
 
 	seaboard_ehci_init();
+	seaboard_kbc_init();
 }
 
 static void __init tegra_seaboard_init(void)
@@ -382,6 +517,8 @@ static void __init tegra_kaen_init(void)
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
 	debug_uart_platform_data[0].irq = INT_UARTB;
 
+	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
+
 	seaboard_common_init();
 
 	seaboard_i2c_init();
@@ -393,6 +530,8 @@ static void __init tegra_wario_init(void)
 	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
 	debug_uart_platform_data[0].irq = INT_UARTB;
+
+	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
 	seaboard_common_init();
 
