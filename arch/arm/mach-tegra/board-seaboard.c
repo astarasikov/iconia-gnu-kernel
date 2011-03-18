@@ -423,6 +423,10 @@ static struct i2c_board_info __initdata wm8903_device = {
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
 };
 
+static struct i2c_board_info __initdata bq20z75_device = {
+	I2C_BOARD_INFO("bq20z75", 0x0b),
+};
+
 static int seaboard_ehci_init(void)
 {
 	int gpio_status;
@@ -456,6 +460,8 @@ static void __init seaboard_i2c_init(void)
 
 	i2c_register_board_info(0, &isl29018_device, 1);
 	i2c_register_board_info(0, &wm8903_device, 1);
+
+	i2c_register_board_info(2, &bq20z75_device, 1);
 
 	i2c_register_board_info(4, &adt7461_device, 1);
 
