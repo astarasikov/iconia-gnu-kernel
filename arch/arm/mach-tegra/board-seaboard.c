@@ -544,6 +544,10 @@ static void __init seaboard_common_init(void)
 
 	tegra_clk_init_from_table(seaboard_clk_init_table);
 
+	/* Power up WLAN */
+	gpio_request(TEGRA_GPIO_PK6, "wlan_pwr_rst");
+	gpio_direction_output(TEGRA_GPIO_PK6, 1);
+
 	tegra_sdhci_device1.dev.platform_data = &sdhci_pdata1;
 	tegra_sdhci_device3.dev.platform_data = &sdhci_pdata3;
 	tegra_sdhci_device4.dev.platform_data = &sdhci_pdata4;
