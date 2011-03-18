@@ -22,6 +22,7 @@
 
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/mm_types.h>
 
 #include <asm/pgtable.h>
 
