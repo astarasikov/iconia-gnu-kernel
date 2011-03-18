@@ -26,6 +26,12 @@ config TEGRA_PCI
 
 comment "Tegra board type"
 
+config MACH_AEBL
+       bool "Aebl board"
+       select MACH_SEABOARD
+       help
+         Support for the Aebl version of Seaboard
+
 config MACH_HARMONY
        bool "Harmony board"
        select MACH_HAS_SND_SOC_TEGRA_WM8903
