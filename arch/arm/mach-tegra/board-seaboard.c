@@ -678,6 +678,7 @@ static void __init seaboard_common_init(void)
 
 	seaboard_power_init();
 	seaboard_ehci_init();
+	seaboard_panel_init();
 	seaboard_kbc_init();
 
 	gpio_request(TEGRA_GPIO_RECOVERY_SWITCH, "recovery_switch");
