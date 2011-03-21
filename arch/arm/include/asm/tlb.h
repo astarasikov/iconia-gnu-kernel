@@ -18,10 +18,9 @@
 #define __ASMARM_TLB_H
 
 #include <asm/cacheflush.h>
+#include <linux/pagemap.h>
 
 #ifndef CONFIG_MMU
-
-#include <linux/pagemap.h>
 
 #define tlb_flush(tlb)	((void) tlb)
 
