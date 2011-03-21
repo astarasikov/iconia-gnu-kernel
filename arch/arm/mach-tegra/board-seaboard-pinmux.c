@@ -176,7 +176,6 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_EN_VDD_PNL,	.enable = true },
 	{ .gpio = TEGRA_GPIO_AC_ONLINE,		.enable = true },
 	{ .gpio = TEGRA_GPIO_HP_DET,		.enable = true },
-	{ .gpio = TEGRA_GPIO_WM8903_IRQ,	.enable = true },
 	{ .gpio = TEGRA_GPIO_CYTP_INT,		.enable = true },
 	{ .gpio = TEGRA_GPIO_MXT_RST,		.enable = true },
 	{ .gpio = TEGRA_GPIO_MXT_IRQ,		.enable = true },
@@ -184,6 +183,23 @@ static struct tegra_gpio_table gpio_table[] = {
 
 void __init seaboard_pinmux_init(void)
 {
+	/*
+	 * PINGROUP_SPIC contains two pins:
+	 * + PX2, DISABLE_CHRGR (output)
+	 * + PX3, WM8903 codec IRQ (input)
+	 *
+	 * The pinmux module can only configure TRISTATE vs. NORMAL on a
+	 * per-group rather than per-pin basis. The group must be NORMAL
+	 * since at least one pin is an output. However, we must ensure that
+	 * the WM8903 IRQ is never driven, since the WM8903 itself is driving
+	 * it, and we don't want multiple drivers. To ensure this, configure
+	 * PX3 as a GPIO here, and set is as an input, before the pinmux table
+	 * is written, which is when the pins will be un-tristated.
+	 */
+	tegra_gpio_enable(TEGRA_GPIO_WM8903_IRQ);
+	gpio_request(TEGRA_GPIO_WM8903_IRQ, "wm8903");
+	gpio_direction_input(TEGRA_GPIO_WM8903_IRQ);
+
 	tegra_pinmux_config_table(seaboard_pinmux, ARRAY_SIZE(seaboard_pinmux));
 
 	tegra_drive_pinmux_config_table(seaboard_drive_pinmux,
