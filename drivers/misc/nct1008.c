@@ -30,11 +30,14 @@
 #include <linux/gpio.h>
 
 #include <linux/nct1008.h>
+#include <linux/hwmon.h>
 
 #define DRIVER_NAME "nct1008"
 
 /* Register Addresses */
 #define LOCAL_TEMP_RD			0x00
+#define EXT_HI_TEMP_RD			0x01
+#define EXT_LO_TEMP_RD			0x10
 #define STATUS_RD			0x02
 #define CONFIG_RD			0x03
 
@@ -57,12 +60,119 @@
 #define STANDARD_RANGE_MAX		127U
 #define EXTENDED_RANGE_MAX		(150U + EXTENDED_RANGE_OFFSET)
 
+static inline u8 temperature_to_value(bool extended, u8 temp);
+
 struct nct1008_data {
+	struct device *hwmon_dev;
 	struct work_struct work;
 	struct i2c_client *client;
 	struct mutex mutex;
 	u8 config;
 	void (*alarm_fn)(bool raised);
+};
+
+static ssize_t nct1008_show_temp(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	signed int temp_value = 0;
+	u8 data = 0;
+
+	if (!dev || !buf || !attr)
+		return -EINVAL;
+
+	data = i2c_smbus_read_byte_data(client, LOCAL_TEMP_RD);
+	if (data < 0) {
+		dev_err(&client->dev, "%s: failed to read "
+			"temperature\n", __func__);
+		return -EINVAL;
+	}
+
+	temp_value = (signed int)data;
+	return sprintf(buf, "%d\n", temp_value);
+}
+
+static ssize_t nct1008_show_ext_temp(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	signed int temp_value = 0;
+	u8 data = 0;
+
+	if (!dev || !buf || !attr)
+		return -EINVAL;
+
+	data = i2c_smbus_read_byte_data(client, EXT_HI_TEMP_RD);
+	if (data < 0) {
+		dev_err(&client->dev, "%s: failed to read "
+			"ext_temperature\n", __func__);
+		return -EINVAL;
+	}
+
+	temp_value = (signed int)data;
+
+	data = i2c_smbus_read_byte_data(client, EXT_LO_TEMP_RD);
+
+	return sprintf(buf, "%d.%d\n", temp_value, (25 * (data >> 6)));
+}
+
+static ssize_t nct1008_store_throttle_ext_limit(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct nct1008_platform_data *pdata = client->dev.platform_data;
+	unsigned long res;
+	u8 ext_limit;
+	u8 value;
+	int err;
+
+	err = strict_strtoul(buf, 0, &res);
+	if (err)
+		return -EINVAL;
+
+	ext_limit = (u8)res;
+
+	/* External Temperature Throttling limit */
+	value = temperature_to_value(pdata->ext_range, ext_limit);
+	err = i2c_smbus_write_byte_data(client,
+					EXT_TEMP_HI_LIMIT_HI_BYTE, value);
+	if (err < 0)
+		return -EINVAL;
+
+	pdata->throttling_ext_limit = ext_limit;
+	return count;
+}
+
+static ssize_t nct1008_show_throttle_ext_limit(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct nct1008_platform_data *pdata = client->dev.platform_data;
+	u8 ext_limit = 0;
+
+	if (!dev || !buf || !attr)
+		return -EINVAL;
+
+	ext_limit = pdata->throttling_ext_limit;
+
+	return sprintf(buf, "%d\n", ext_limit);
+}
+
+static DEVICE_ATTR(temperature, S_IRUGO, nct1008_show_temp, NULL);
+static DEVICE_ATTR(ext_temperature, S_IRUGO, nct1008_show_ext_temp, NULL);
+static DEVICE_ATTR(throttle_ext_limit, S_IRUGO | S_IWUGO,
+		nct1008_show_throttle_ext_limit,
+		nct1008_store_throttle_ext_limit);
+
+static struct attribute *nct1008_attributes[] = {
+	&dev_attr_temperature.attr,
+	&dev_attr_ext_temperature.attr,
+	&dev_attr_throttle_ext_limit.attr,
+	NULL
+};
+
+static const struct attribute_group nct1008_attr_group = {
+	.attrs = nct1008_attributes,
 };
 
 static void nct1008_enable(struct i2c_client *client)
@@ -212,12 +322,27 @@ static int __devinit nct1008_probe(struct i2c_client *client, const struct i2c_d
 	if (err < 0)
 		goto error;
 
+	data->hwmon_dev = hwmon_device_register(&client->dev);
+	if (IS_ERR(data->hwmon_dev)) {
+		err = PTR_ERR(data->hwmon_dev);
+		dev_err(&client->dev, "%s: hwmon_device_register "
+			"failed\n", __func__);
+		goto error;
+	}
+
+	/* register sysfs hooks */
+	err = sysfs_create_group(&client->dev.kobj, &nct1008_attr_group);
+	if (err < 0)
+		goto fail_sys;
+
 	nct1008_enable(client);		/* sensor is running */
 
 	schedule_work(&data->work);		/* check initial state */
 
 	return 0;
 
+fail_sys:
+	hwmon_device_unregister(data->hwmon_dev);
 error:
 	kfree(data);
 	return err;
@@ -229,6 +354,8 @@ static int __devexit nct1008_remove(struct i2c_client *client)
 
 	free_irq(data->client->irq, data);
 	cancel_work_sync(&data->work);
+	hwmon_device_unregister(data->hwmon_dev);
+	sysfs_remove_group(&client->dev.kobj, &nct1008_attr_group);
 	kfree(data);
 
 	return 0;
