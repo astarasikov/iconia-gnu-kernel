@@ -49,7 +49,7 @@ static void syncpt_thresh_cascade(unsigned int irq, struct irq_desc *desc)
 	u32 reg;
 	int id;
 
-	desc->chip->ack(irq);
+	desc->chip->irq_ack(desc);
 
 	reg = readl(sync_regs + HOST1X_SYNC_SYNCPT_THRESH_CPU0_INT_STATUS);
 
@@ -58,7 +58,7 @@ static void syncpt_thresh_cascade(unsigned int irq, struct irq_desc *desc)
 		generic_handle_irq(id + INT_SYNCPT_THRESH_BASE);
 	}
 
-	desc->chip->unmask(irq);
+	desc->chip->irq_unmask(desc);
 }
 
 static struct irq_chip syncpt_thresh_irq = {
