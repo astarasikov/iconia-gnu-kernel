@@ -1558,6 +1558,30 @@ config PRESERVED_RAM
 	  will try to copy its printk log buffer (as shown by dmesg) there
 	  before rebooting when it crashes, for examination after reboot.
 
+	  The default address of the area is architecture-specific, but may be
+	  passed in to the kernel with the kcrashmem= parameter.
+
+config PRESERVED_RAM_START
+	hex "Physical address of preserved RAM" if (PRESERVED_RAM)
+	default "0x00f00000"
+	---help---
+	  Address of the memory area that is preserved over reboot.
+
+	  For this feature to be useful, the selected memory area must be
+	  preserved across reboot, so not used by the boot loader, for example.
+
+	  On X86 we normally use the spare memory at 15MB.
+
+config PRESERVED_RAM_SIZE
+	hex "Size of preserved RAM" if (PRESERVED_RAM)
+	default "0x00100000"
+	---help---
+	  Size of the memory area that is preserved over reboot. Typically
+	  1MB is the most you could possibly need for this. In most cases the
+	  crash dump is only 50KB or so.
+
+	  The default value is generally suitable for X86 systems.
+
 config PHYSICAL_START
 	hex "Physical address where the kernel is loaded" if (EXPERT || CRASH_DUMP)
 	default "0x1000000"

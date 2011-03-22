@@ -4,7 +4,9 @@
  * This file is released under the GPLv2: see the file COPYING for details.
  */
 
+#include <linux/bootmem.h>
 #include <linux/debugfs.h>
+#include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/magic.h>
@@ -18,6 +20,8 @@
 #include <linux/uaccess.h>
 
 /*
+ * x86 notes:
+ *
  * Much of the complexity here comes from a particular feature of the ChromeOS
  * boot firmware: although it reserves an area of RAM for our use, and that
  * area has been seen to be preserved across ordinary reboot, that can only
@@ -58,21 +62,47 @@ static int chromeos_nvram_index = -1;
 
 #endif /* CHROMEOS_S3_REBOOT */
 
-#define CHROMEOS_PRESERVED_RAM_ADDR 0x00f00000	/* 15MB */
-#define CHROMEOS_PRESERVED_RAM_SIZE 0x00100000	/*  1MB */
-#define CHROMEOS_PRESERVED_BUF_SIZE (CHROMEOS_PRESERVED_RAM_SIZE-4*sizeof(int))
-
 struct preserved {
 	unsigned int	magic;
 	unsigned int	cursor;
-	char		buf[CHROMEOS_PRESERVED_BUF_SIZE];
-	unsigned int	ksize;
-	unsigned int	usize;		/* up here to verify end of area */
+	char		buf[0];
 };
-static struct preserved *preserved = __va(CHROMEOS_PRESERVED_RAM_ADDR);
+
+/* This footer structure appears at the end of the preserve area */
+struct preserved_ftr {
+	unsigned int	ksize;
+	unsigned int	usize;
+};
+static struct preserved *preserved;
+static struct preserved_ftr *preserved_ftr;
 
 static bool preserved_was_reserved;
 static DEFINE_MUTEX(preserved_mutex);
+
+/* Default start and size of preserved area */
+/*
+ * The position and size of the buffer in memory are set by:
+ *
+ *  CONFIG_PRESERVED_RAM_START - default 0x00f00000 on x86 (15MB)
+ *  CONFIG_PRESERVED_RAM_SIZE  - default 0x00100000 (1MB)
+ *
+ */
+static unsigned long preserved_start = CONFIG_PRESERVED_RAM_START;
+static unsigned long preserved_size = CONFIG_PRESERVED_RAM_SIZE;
+
+static unsigned long preserved_bufsize;
+
+#ifndef CONFIG_NO_BOOTMEM
+
+/* Location of the reserved area for the kcrash buffer */
+struct resource kcrash_res = {
+	.name  = "Kcrash buffer",
+	.start = 0,
+	.end   = 0,
+	.flags = IORESOURCE_BUSY | IORESOURCE_MEM
+};
+
+#endif
 
 /*
  * We avoid writing or reading the preserved area until we have to,
@@ -81,15 +111,15 @@ static DEFINE_MUTEX(preserved_mutex);
  */
 static bool preserved_is_valid(void)
 {
-	BUILD_BUG_ON(sizeof(*preserved) != CHROMEOS_PRESERVED_RAM_SIZE);
-
 	if (preserved_was_reserved &&
 	    preserved->magic == DEBUGFS_MAGIC &&
-	    preserved->cursor < sizeof(preserved->buf) &&
-	    preserved->ksize <= sizeof(preserved->buf) &&
-	    preserved->usize <= sizeof(preserved->buf) &&
-	    preserved->ksize + preserved->usize >= preserved->cursor &&
-	    preserved->ksize + preserved->usize <= sizeof(preserved->buf))
+	    preserved->cursor < preserved_bufsize &&
+	    preserved_ftr->ksize <= preserved_bufsize &&
+	    preserved_ftr->usize <= preserved_bufsize &&
+	    preserved_ftr->ksize + preserved_ftr->usize >=
+		preserved->cursor &&
+	    preserved_ftr->ksize + preserved_ftr->usize <=
+		preserved_bufsize)
 		return true;
 
 	return false;
@@ -100,6 +130,7 @@ static bool preserved_is_valid(void)
  * preserved_make_valid(), but omitted its tail call to preserved_is_valid():
  * so the first write to utrace failed with ENXIO, or the first attempt to
  * save kernel crash messages skipped immediately to reboot.
+ * FIXME(sjg) do we still suffer from this compiler bug?
  */
 static noinline bool preserved_make_valid(void)
 {
@@ -108,8 +139,8 @@ static noinline bool preserved_make_valid(void)
 
 	preserved->magic = DEBUGFS_MAGIC;
 	preserved->cursor = 0;
-	preserved->ksize = 0;
-	preserved->usize = 0;
+	preserved_ftr->ksize = 0;
+	preserved_ftr->usize = 0;
 
 	/*
 	 * But perhaps this reserved area is not actually backed by RAM?
@@ -133,19 +164,19 @@ static ssize_t kcrash_read(struct file *file, char __user *buf,
 	mutex_lock(&preserved_mutex);
 	if (!preserved_is_valid())
 		goto out;
-	if (pos < 0 || pos >= preserved->ksize)
+	if (pos < 0 || pos >= preserved_ftr->ksize)
 		goto out;
-	if (count > preserved->ksize - pos)
-		count = preserved->ksize - pos;
+	if (count > preserved_ftr->ksize - pos)
+		count = preserved_ftr->ksize - pos;
 
-	offset = preserved->cursor - preserved->ksize;
+	offset = preserved->cursor - preserved_ftr->ksize;
 	if ((int)offset < 0)
-		offset += sizeof(preserved->buf);
+		offset += preserved_bufsize;
 	offset += pos;
-	if (offset > sizeof(preserved->buf))
-		offset -= sizeof(preserved->buf);
+	if (offset > preserved_bufsize)
+		offset -= preserved_bufsize;
 
-	limit = sizeof(preserved->buf) - offset;
+	limit = preserved_bufsize - offset;
 	residue = count;
 	error = -EFAULT;
 
@@ -177,8 +208,8 @@ static ssize_t kcrash_write(struct file *file, const char __user *buf,
 	mutex_lock(&preserved_mutex);
 	if (preserved_is_valid()) {
 		preserved->cursor = 0;
-		preserved->ksize = 0;
-		preserved->usize = 0;
+		preserved_ftr->ksize = 0;
+		preserved_ftr->usize = 0;
 	}
 	mutex_unlock(&preserved_mutex);
 	return count;
@@ -188,6 +219,8 @@ static const struct file_operations kcrash_operations = {
 	.read	= kcrash_read,
 	.write	= kcrash_write,
 };
+
+/* FIXME(sjg): very similar to kcrash_read(). Refactor to simplify */
 
 static ssize_t utrace_read(struct file *file, char __user *buf,
 				size_t count, loff_t *ppos)
@@ -205,19 +238,19 @@ static ssize_t utrace_read(struct file *file, char __user *buf,
 	mutex_lock(&preserved_mutex);
 	if (!preserved_is_valid())
 		goto out;
-	supersize = preserved->usize;
+	supersize = preserved_ftr->usize;
 
-	if (pos == 0 || preserved->ksize != 0) {
+	if (pos == 0 || preserved_ftr->ksize != 0) {
 		origin = 0;
-		if (supersize == sizeof(preserved->buf) - preserved->ksize)
+		if (supersize == preserved_bufsize - preserved_ftr->ksize)
 			origin = preserved->cursor;
 		file->private_data = (void *)origin;
 	} else {	/* cursor may have moved since we started reading */
 		origin = (unsigned int)file->private_data;
-		if (supersize == sizeof(preserved->buf)) {
+		if (supersize == preserved_bufsize) {
 			int advance = preserved->cursor - origin;
 			if (advance < 0)
-				advance += sizeof(preserved->buf);
+				advance += preserved_bufsize;
 			supersize += advance;
 		}
 	}
@@ -228,9 +261,9 @@ static ssize_t utrace_read(struct file *file, char __user *buf,
 		count = supersize - pos;
 
 	offset = origin + pos;
-	if (offset > sizeof(preserved->buf))
-		offset -= sizeof(preserved->buf);
-	limit = sizeof(preserved->buf) - offset;
+	if (offset > preserved_bufsize)
+		offset -= preserved_bufsize;
+	limit = preserved_bufsize - offset;
 	residue = count;
 	error = -EFAULT;
 
@@ -272,25 +305,25 @@ static ssize_t utrace_write(struct file *file, const char __user *buf,
 		error = -ENXIO;
 		goto out;
 	}
-	if (preserved->ksize != 0) {
+	if (preserved_ftr->ksize != 0) {
 		error = -ENOSPC;
 		goto out;
 	}
 
-	if (count > sizeof(preserved->buf)) {
-		buf += count - sizeof(preserved->buf);
-		count = sizeof(preserved->buf);
+	if (count > preserved_bufsize) {
+		buf += count - preserved_bufsize;
+		count = preserved_bufsize;
 	}
 
 	offset = preserved->cursor;
-	limit = sizeof(preserved->buf) - offset;
+	limit = preserved_bufsize - offset;
 	residue = count;
 	error = -EFAULT;
 
 	if (residue > limit) {
 		if (copy_from_user(preserved->buf + offset, buf, limit))
 			goto out;
-		usize = sizeof(preserved->buf);
+		usize = preserved_bufsize;
 		offset = 0;
 		residue -= limit;
 		buf += limit;
@@ -302,9 +335,9 @@ static ssize_t utrace_write(struct file *file, const char __user *buf,
 	offset += residue;
 	if (usize < offset)
 		usize = offset;
-	if (preserved->usize < usize)
-		preserved->usize = usize;
-	if (offset == sizeof(preserved->buf))
+	if (preserved_ftr->usize < usize)
+		preserved_ftr->usize = usize;
+	if (offset == preserved_bufsize)
 		offset = 0;
 	preserved->cursor = offset;
 
@@ -440,25 +473,25 @@ static inline void chromeos_S3_reboot(void)
 
 static void kcrash_append(unsigned int log_size)
 {
-	int excess = preserved->usize + preserved->ksize +
-			log_size - sizeof(preserved->buf);
+	int excess = preserved_ftr->usize + preserved_ftr->ksize +
+			log_size - preserved_bufsize;
 
 	if (excess <= 0) {
 		/* kcrash fits without losing any utrace */
-		preserved->ksize += log_size;
-	} else if (excess <= preserved->usize) {
+		preserved_ftr->ksize += log_size;
+	} else if (excess <= preserved_ftr->usize) {
 		/* some of utrace was overwritten by kcrash */
-		preserved->usize -= excess;
-		preserved->ksize += log_size;
+		preserved_ftr->usize -= excess;
+		preserved_ftr->ksize += log_size;
 	} else {
 		/* no utrace left and kcrash is full */
-		preserved->usize = 0;
-		preserved->ksize = sizeof(preserved->buf);
+		preserved_ftr->usize = 0;
+		preserved_ftr->ksize = preserved_bufsize;
 	}
 
 	preserved->cursor += log_size;
-	if (preserved->cursor >= sizeof(preserved->buf))
-		preserved->cursor -= sizeof(preserved->buf);
+	if (preserved->cursor >= preserved_bufsize)
+		preserved->cursor -= preserved_bufsize;
 }
 
 static void kcrash_preserve(bool first_time)
@@ -469,8 +502,8 @@ static void kcrash_preserve(bool first_time)
 
 	if (first_time) {
 		save_cursor = preserved->cursor;
-		save_ksize  = preserved->ksize;
-		save_usize  = preserved->usize;
+		save_ksize  = preserved_ftr->ksize;
+		save_usize  = preserved_ftr->usize;
 	} else {
 		/*
 		 * Restore original cursor etc. so that we can take a fresh
@@ -479,12 +512,15 @@ static void kcrash_preserve(bool first_time)
 		 * assume, reasonably, that log_size will not shrink.
 		 */
 		preserved->cursor = save_cursor;
-		preserved->ksize  = save_ksize;
-		preserved->usize  = save_usize;
+		preserved_ftr->ksize  = save_ksize;
+		preserved_ftr->usize  = save_usize;
 	}
 
 	kcrash_append(copy_log_buf(preserved->buf,
-			sizeof(preserved->buf), preserved->cursor));
+			preserved_bufsize, preserved->cursor));
+	pr_debug("preserved: saved, magic=%x, cursor=%x, ksize=%x, usize=%x\n",
+		preserved->magic, preserved->cursor,
+		preserved_ftr->ksize, preserved_ftr->usize);
 }
 
 void emergency_restart(void)	/* overriding the __weak one in kernel/sys.c */
@@ -502,6 +538,7 @@ void emergency_restart(void)	/* overriding the __weak one in kernel/sys.c */
 		 */
 		kcrash_preserve(true);
 
+		/* on x86, slip into S3 then reboot */
 		if (chromeos_nvram_index != -1) {
 			chromeos_S3_reboot();
 			/*
@@ -514,23 +551,75 @@ void emergency_restart(void)	/* overriding the __weak one in kernel/sys.c */
 }
 
 /*
+ * Pick out the preserved memory size.  We look for kcrashmem=size@start,
+ * where start and size are "size[KkMm]"
+ */
+static int __init early_kcrashmem(char *p)
+{
+	unsigned long size, start;
+	char *endp;
+
+	start = 0;
+	size  = memparse(p, &endp);
+	if (*endp == '@')
+		start = memparse(endp + 1, NULL);
+	else
+		size = 0; /* must specify start to get a valid region */
+
+	/* basic sanity check - both start and size must be page aligned */
+	if ((start | size) & (PAGE_SIZE - 1))
+		preserved_size = 0;
+	else {
+		preserved_start = start;
+		preserved_size = size;
+	}
+	return 0;
+}
+early_param("kcrashmem", early_kcrashmem);
+
+/*
  * Initialization: initialize early (once debugfs is ready) so that we are
  * ready to handle early panics (though S3-reboot can only be set up later).
  */
 
 static bool __init preserved_is_reserved(void)
 {
-	unsigned int pfn = CHROMEOS_PRESERVED_RAM_ADDR >> PAGE_SHIFT;
-	unsigned int efn = pfn + (CHROMEOS_PRESERVED_RAM_SIZE >> PAGE_SHIFT);
+#ifndef CONFIG_NO_BOOTMEM
+	/*
+	 * Where bootmem is available, we must reserve the memory early in
+	 * the boot process. This is done using reserve_bootmem().
+	 */
+	if (reserve_bootmem(preserved_start, preserved_size,
+		BOOTMEM_EXCLUSIVE < 0)) {
+		printk(KERN_WARNING "preserved: reservation failed - "
+		       "memory is in use (0x%lx)\n", preserved_start);
+		preserved_size = 0;
+		return 0;
+	}
+	kcrash_res.start = preserved_start;
+	kcrash_res.end = preserved_start + preserved_size - 1;
+	insert_resource(&iomem_resource, &kcrash_res);
+#elif defined CONFIG_X86
+	/* On x86 this memory is assumed already reserved, so check it */
+	unsigned int pfn = preserved_start >> PAGE_SHIFT;
+	unsigned int efn = pfn + (preserved_size >> PAGE_SHIFT);
 
 	while (pfn < efn) {
-		if (!pfn_valid(pfn))
+		if (!pfn_valid(pfn)) {
+			pr_warning("preserved: invalid pfn %#x\n", pfn);
 			return false;
-		if (!PageReserved(pfn_to_page(pfn)))
+		}
+		if (!PageReserved(pfn_to_page(pfn))) {
+			pr_warning("preserved: page not reserved %#x\n", pfn);
 			return false;
+		}
 		pfn++;
 	}
-
+#else
+	/* Sadly this architecture does not support preserved memory yet */
+	pr_warning("preserved: not supported on this architecture\n");
+	return false;
+#endif
 	preserved_was_reserved = true;
 	return true;
 }
@@ -546,6 +635,10 @@ static int __init preserved_init(void)
 	 */
 	panic_on_oops = 1;
 	panic_timeout = -1;		/* reboot without waiting */
+
+	/* we are only enabled if we have a valid region */
+	if (preserved_size == 0)
+		return 0;
 
 	/*
 	 * Check that the RAM we expect to use has indeed been reserved
@@ -568,6 +661,23 @@ static int __init preserved_init(void)
 			debugfs_create_file("utrace", S_IFREG|S_IRUSR|S_IWUGO,
 						dir, NULL, &utrace_operations);
 		}
+
+		/* get our pointers set up, now we know where the area is */
+		/* FIXME(sjg): change to use ioremap() and accessors */
+		preserved = __va(preserved_start);
+		preserved_ftr = __va(preserved_start + preserved_size -
+			sizeof(*preserved_ftr));
+		preserved_bufsize = preserved_size - sizeof(preserved) -
+			sizeof(*preserved_ftr);
+
+		pr_info("preserved: reserved %luMB at %#lx (virtual %p)\n",
+		       preserved_size >> 20, preserved_start, preserved);
+		pr_debug("preserved: magic=%x, cursor=%#x, ksize=%#x, "
+			"usize=%#x\n", preserved->magic, preserved->cursor,
+			preserved_ftr->ksize, preserved_ftr->usize);
+		if (preserved_is_valid())
+			pr_debug("preserved: %d bytes of kcrash data "
+					"available\n", preserved_ftr->ksize);
 	}
 
 	return 0;

@@ -1076,6 +1076,10 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 	js=		[HW,JOY] Analog joystick
 			See Documentation/input/joystick.txt.
 
+	kcrashmem=nn[KMG]@aa[KMG]	When using kcrashmem support
+			(CONFIG_PRESERVED_RAM) this specifies the memory region
+			to use. nn is the size and aa is the address.
+
 	keepinitrd	[HW,ARM]
 
 	kernelcore=nn[KMG]	[KNL,X86,IA-64,PPC] This parameter

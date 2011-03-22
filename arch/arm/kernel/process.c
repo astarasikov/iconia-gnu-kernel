@@ -104,6 +104,9 @@ void arm_machine_restart(char mode, const char *cmd)
 	 */
 	setup_mm_for_reboot(mode);
 
+	/* We must flush the L2 cache for preserved / kcrashmem */
+	outer_flush_all();
+
 	/* Clean and invalidate caches */
 	flush_cache_all();
 
