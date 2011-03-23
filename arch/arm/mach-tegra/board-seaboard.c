@@ -443,6 +443,10 @@ static struct i2c_board_info __initdata ak8975_device = {
 	.irq		= TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MAGNETOMETER),
 };
 
+static struct i2c_board_info __initdata mpu3050_device = {
+	I2C_BOARD_INFO("mpu3050", 0x68),
+	.irq            = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MPU3050_IRQ),
+};
 
 static const u8 mxt_config_data[] = {
 	/* MXT_GEN_COMMAND(6) */
@@ -532,6 +536,9 @@ static void __init seaboard_i2c_init(void)
 	gpio_request(TEGRA_GPIO_MXT_RST, "TSP_INT");
 	gpio_direction_input(TEGRA_GPIO_MXT_RST);
 
+	gpio_request(TEGRA_GPIO_MPU3050_IRQ, "mpu_int");
+	gpio_direction_input(TEGRA_GPIO_MPU3050_IRQ);
+
 	gpio_request(TEGRA_GPIO_ISL29018_IRQ, "isl29018");
 	gpio_direction_input(TEGRA_GPIO_ISL29018_IRQ);
 
@@ -541,6 +548,7 @@ static void __init seaboard_i2c_init(void)
 	i2c_register_board_info(0, &isl29018_device, 1);
 	i2c_register_board_info(0, &wm8903_device, 1);
 	i2c_register_board_info(0, &mxt_device, 1);
+	i2c_register_board_info(0, &mpu3050_device, 1);
 
 	i2c_register_board_info(2, &bq20z75_device, 1);
 
