@@ -29,6 +29,7 @@
 #include <linux/gpio.h>
 #include <linux/i2c.h>
 #include <linux/i2c-tegra.h>
+#include <linux/platform_data/tegra_usb.h>
 
 #include <sound/wm8903.h>
 
@@ -45,12 +46,29 @@
 #include <mach/pinmux.h>
 #include <mach/pinmux-t2.h>
 #include <mach/suspend.h>
+#include <mach/usb_phy.h>
 
 #include "board.h"
 #include "board-harmony.h"
 #include "clock.h"
 #include "devices.h"
 #include "gpio-names.h"
+
+static struct tegra_utmip_config utmi_phy_config = {
+	.hssync_start_delay = 0,
+	.idle_wait_delay = 17,
+	.elastic_limit = 16,
+	.term_range_adj = 6,
+	.xcvr_setup = 9,
+	.xcvr_lsfslew = 2,
+	.xcvr_lsrslew = 2,
+};
+
+static struct tegra_ehci_platform_data tegra_ehci_pdata = {
+	.phy_config = &utmi_phy_config,
+	.operating_mode = TEGRA_USB_HOST,
+	.power_down_on_bus_suspend = 1,
+};
 
 static struct tegra_nand_chip_parms nand_chip_parms[] = {
 	/* Samsung K5E2G1GACM */
@@ -291,15 +309,16 @@ static struct platform_device *harmony_devices[] __initdata = {
 	&debug_uart,
 	&tegra_pmu_device,
 	&tegra_nand_device,
+	&tegra_gart_device,
 	&pda_power_device,
 	&tegra_sdhci_device1,
 	&tegra_sdhci_device2,
 	&tegra_sdhci_device4,
+	&tegra_ehci3_device,
 	&tegra_i2s_device1,
 	&tegra_das_device,
 	&tegra_pcm_device,
 	&harmony_audio_device,
-	&tegra_gart_device,
 	&tegra_avp_device,
 };
 
@@ -366,9 +385,12 @@ static void __init tegra_harmony_init(void)
 	tegra_sdhci_device2.dev.platform_data = &sdhci_pdata2;
 	tegra_sdhci_device4.dev.platform_data = &sdhci_pdata4;
 
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata;
+
 	platform_add_devices(harmony_devices, ARRAY_SIZE(harmony_devices));
-	harmony_i2c_init();
 	harmony_regulator_init();
+	harmony_i2c_init();
+	harmony_panel_init();
 }
 
 MACHINE_START(HARMONY, "harmony")
