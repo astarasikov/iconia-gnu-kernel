@@ -680,6 +680,8 @@ static void __init tegra_seaboard_init(void)
 
 static void __init tegra_kaen_init(void)
 {
+	tegra_init_suspend(&seaboard_suspend);
+
 	/* Kaen uses UARTB for the debug port. */
 	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
@@ -698,6 +700,8 @@ static void __init tegra_kaen_init(void)
 
 static void __init tegra_aebl_init(void)
 {
+	tegra_init_suspend(&seaboard_suspend);
+
 	/* Aebl uses UARTB for the debug port. */
 	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
@@ -718,6 +722,8 @@ static void __init tegra_aebl_init(void)
 static void __init tegra_wario_init(void)
 {
 	struct clk *c, *p;
+
+	tegra_init_suspend(&seaboard_suspend);
 
 	/* Wario uses UARTB for the debug port. */
 	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
