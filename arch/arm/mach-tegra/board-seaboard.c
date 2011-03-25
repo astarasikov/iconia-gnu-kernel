@@ -622,6 +622,19 @@ static int seaboard_ehci_init(void)
 
 static void __init seaboard_i2c_init(void)
 {
+	tegra_i2c_device1.dev.platform_data = &seaboard_i2c1_platform_data;
+	tegra_i2c_device2.dev.platform_data = &seaboard_i2c2_platform_data;
+	tegra_i2c_device3.dev.platform_data = &seaboard_i2c3_platform_data;
+	tegra_i2c_device4.dev.platform_data = &seaboard_dvc_platform_data;
+
+	platform_device_register(&tegra_i2c_device1);
+	platform_device_register(&tegra_i2c_device2);
+	platform_device_register(&tegra_i2c_device3);
+	platform_device_register(&tegra_i2c_device4);
+}
+
+static void __init seaboard_i2c_register_devices(void)
+{
 	tegra_pinmux_config_table(mxt_pinmux_config, ARRAY_SIZE(mxt_pinmux_config));
 
 	gpio_request(TEGRA_GPIO_MXT_RST, "TSP_LDO_ON");
@@ -640,12 +653,8 @@ static void __init seaboard_i2c_init(void)
 	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
 	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
 
-	gpio_request(TEGRA_GPIO_CYTP_INT, "gpio_cytp_int");
-	gpio_direction_input(TEGRA_GPIO_CYTP_INT);
-
 	i2c_register_board_info(0, &wm8903_device, 1);
 	i2c_register_board_info(0, &isl29018_device, 1);
-	i2c_register_board_info(0, &cyapa_device, 1);
 	i2c_register_board_info(0, &mxt_device, 1);
 	i2c_register_board_info(0, &mpu3050_device, 1);
 
@@ -653,16 +662,81 @@ static void __init seaboard_i2c_init(void)
 
 	i2c_register_board_info(4, &nct1008_device, 1);
 	i2c_register_board_info(4, &ak8975_device, 1);
+}
 
-	tegra_i2c_device1.dev.platform_data = &seaboard_i2c1_platform_data;
-	tegra_i2c_device2.dev.platform_data = &seaboard_i2c2_platform_data;
-	tegra_i2c_device3.dev.platform_data = &seaboard_i2c3_platform_data;
-	tegra_i2c_device4.dev.platform_data = &seaboard_dvc_platform_data;
+static void __init kaen_i2c_register_devices(void)
+{
+	gpio_request(TEGRA_GPIO_MPU3050_IRQ, "mpu_int");
+	gpio_direction_input(TEGRA_GPIO_MPU3050_IRQ);
 
-	platform_device_register(&tegra_i2c_device1);
-	platform_device_register(&tegra_i2c_device2);
-	platform_device_register(&tegra_i2c_device3);
-	platform_device_register(&tegra_i2c_device4);
+	gpio_request(TEGRA_GPIO_ISL29018_IRQ, "isl29018");
+	gpio_direction_input(TEGRA_GPIO_ISL29018_IRQ);
+
+	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
+	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
+
+	gpio_request(TEGRA_GPIO_CYTP_INT, "gpio_cytp_int");
+	gpio_direction_input(TEGRA_GPIO_CYTP_INT);
+
+	i2c_register_board_info(0, &wm8903_device, 1);
+	i2c_register_board_info(0, &isl29018_device, 1);
+	i2c_register_board_info(0, &cyapa_device, 1);
+	i2c_register_board_info(0, &mpu3050_device, 1);
+
+	i2c_register_board_info(2, &bq20z75_device, 1);
+
+	i2c_register_board_info(4, &nct1008_device, 1);
+	i2c_register_board_info(4, &ak8975_device, 1);
+}
+
+static void __init wario_i2c_register_devices(void)
+{
+	gpio_request(TEGRA_GPIO_MPU3050_IRQ, "mpu_int");
+	gpio_direction_input(TEGRA_GPIO_MPU3050_IRQ);
+
+	gpio_request(TEGRA_GPIO_ISL29018_IRQ, "isl29018");
+	gpio_direction_input(TEGRA_GPIO_ISL29018_IRQ);
+
+	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
+	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
+
+	gpio_request(TEGRA_GPIO_CYTP_INT, "gpio_cytp_int");
+	gpio_direction_input(TEGRA_GPIO_CYTP_INT);
+
+	i2c_register_board_info(0, &wm8903_device, 1);
+	i2c_register_board_info(0, &isl29018_device, 1);
+	i2c_register_board_info(0, &cyapa_device, 1);
+	i2c_register_board_info(0, &mpu3050_device, 1);
+
+	i2c_register_board_info(2, &bq20z75_device, 1);
+
+	i2c_register_board_info(4, &nct1008_device, 1);
+	i2c_register_board_info(4, &ak8975_device, 1);
+}
+
+static void __init aebl_i2c_register_devices(void)
+{
+	gpio_request(TEGRA_GPIO_MPU3050_IRQ, "mpu_int");
+	gpio_direction_input(TEGRA_GPIO_MPU3050_IRQ);
+
+	gpio_request(TEGRA_GPIO_ISL29018_IRQ, "isl29018");
+	gpio_direction_input(TEGRA_GPIO_ISL29018_IRQ);
+
+	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
+	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
+
+	gpio_request(TEGRA_GPIO_CYTP_INT, "gpio_cytp_int");
+	gpio_direction_input(TEGRA_GPIO_CYTP_INT);
+
+	i2c_register_board_info(0, &wm8903_device, 1);
+	i2c_register_board_info(0, &isl29018_device, 1);
+	i2c_register_board_info(0, &cyapa_device, 1);
+	i2c_register_board_info(0, &mpu3050_device, 1);
+
+	i2c_register_board_info(2, &bq20z75_device, 1);
+
+	i2c_register_board_info(4, &nct1008_device, 1);
+	i2c_register_board_info(4, &ak8975_device, 1);
 }
 
 static void __init seaboard_common_init(void)
@@ -709,6 +783,7 @@ static void __init tegra_seaboard_init(void)
 
 	seaboard_common_init();
 
+	seaboard_i2c_register_devices();
 	seaboard_i2c_init();
 }
 
@@ -727,6 +802,7 @@ static void __init tegra_kaen_init(void)
 
 	seaboard_common_init();
 
+	kaen_i2c_register_devices();
 	seaboard_i2c_init();
 }
 
@@ -741,6 +817,7 @@ static void __init tegra_aebl_init(void)
 
 	seaboard_common_init();
 
+	aebl_i2c_register_devices();
 	seaboard_i2c_init();
 }
 
@@ -766,6 +843,7 @@ static void __init tegra_wario_init(void)
 		clk_enable(c);
 	}
 
+	wario_i2c_register_devices();
 	seaboard_i2c_init();
 }
 
