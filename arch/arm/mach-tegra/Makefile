@@ -41,6 +41,7 @@ obj-$(CONFIG_TEGRA_IOVMM)               += iovmm.o
 obj-$(CONFIG_TEGRA_IOVMM_GART)          += iovmm-gart.o
 
 obj-${CONFIG_MACH_HARMONY}              += board-harmony.o
+obj-${CONFIG_MACH_HARMONY}              += board-harmony-panel.o
 obj-${CONFIG_MACH_HARMONY}              += board-harmony-pinmux.o
 obj-${CONFIG_MACH_HARMONY}              += board-harmony-pcie.o
 obj-${CONFIG_MACH_HARMONY}              += board-harmony-power.o

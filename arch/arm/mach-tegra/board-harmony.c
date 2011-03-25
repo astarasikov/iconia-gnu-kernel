@@ -31,6 +31,7 @@
 #include <linux/gpio_keys.h>
 #include <linux/i2c.h>
 #include <linux/i2c-tegra.h>
+#include <linux/platform_data/tegra_usb.h>
 
 #include <sound/wm8903.h>
 
@@ -315,28 +316,6 @@ static void __init harmony_i2c_init(void)
 	i2c_register_board_info(0, &wm8903_board_info, 1);
 }
 
-static struct resource tegra_gart_resources[] = {
-    {
-	.name = "mc",
-	.flags = IORESOURCE_MEM,
-	.start = TEGRA_MC_BASE,
-	.end = TEGRA_MC_BASE + TEGRA_MC_SIZE - 1,
-    },
-    {
-	.name = "gart",
-	.flags = IORESOURCE_MEM,
-	.start = 0x58000000,
-	.end = 0x58000000 - 1 + 32 * 1024 * 1024,
-    }
-};
-
-static struct platform_device tegra_gart_dev = {
-    .name = "tegra_gart",
-    .id = -1,
-    .num_resources = ARRAY_SIZE(tegra_gart_resources),
-    .resource = tegra_gart_resources
-};
-
 static struct platform_device *harmony_devices[] __initdata = {
 	&debug_uart,
 	&tegra_pmu_device,
@@ -351,7 +330,7 @@ static struct platform_device *harmony_devices[] __initdata = {
 	&tegra_das_device,
 	&tegra_pcm_device,
 	&harmony_audio_device,
-	&tegra_gart_dev,
+	&tegra_gart_device,
 };
 
 static void __init tegra_harmony_fixup(struct machine_desc *desc,
@@ -500,6 +479,7 @@ static void __init tegra_harmony_init(void)
 	platform_add_devices(harmony_devices, ARRAY_SIZE(harmony_devices));
 	harmony_power_init();
 	harmony_i2c_init();
+	harmony_panel_init();
 }
 
 MACHINE_START(HARMONY, "harmony")

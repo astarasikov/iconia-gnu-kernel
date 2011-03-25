@@ -33,8 +33,14 @@
 #define TEGRA_GPIO_EXT_MIC_EN		TEGRA_GPIO_PX1
 
 #define TEGRA_GPIO_POWERKEY		TEGRA_GPIO_PV2
+#define TEGRA_GPIO_BACKLIGHT		TEGRA_GPIO_PB5
+#define TEGRA_GPIO_LVDS_SHUTDOWN	TEGRA_GPIO_PB2
+#define TEGRA_GPIO_BACKLIGHT_PWM	TEGRA_GPIO_PB4
+#define TEGRA_GPIO_BACKLIGHT_VDD	TEGRA_GPIO_PW0
+#define TEGRA_GPIO_EN_VDD_PNL		TEGRA_GPIO_PC6
 
 void harmony_pinmux_init(void);
 int harmony_power_init(void);
+int harmony_panel_init(void);
 
 #endif
