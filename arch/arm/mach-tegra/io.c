@@ -94,12 +94,6 @@ void __iomem *tegra_ioremap(unsigned long p, size_t size, unsigned int type)
 	if (v == NULL && p < SZ_1G)
 		v = __arm_ioremap(p, size, type);
 
-	/*
-	 * If the physical address was not physical memory or statically
-	 * mapped, there's nothing we can do to map it safely.
-	 */
-	BUG_ON(v == NULL);
-
 	return v;
 }
 EXPORT_SYMBOL(tegra_ioremap);
