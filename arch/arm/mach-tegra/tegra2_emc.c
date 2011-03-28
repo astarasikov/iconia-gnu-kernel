@@ -23,6 +23,7 @@
 
 #include <mach/iomap.h>
 
+#include "clock.h"
 #include "tegra2_emc.h"
 
 #ifdef CONFIG_TEGRA_EMC_SCALING_ENABLE
@@ -173,6 +174,23 @@ int tegra_emc_set_rate(unsigned long rate)
 
 void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 {
+	struct clk *c = tegra_get_clock_by_name("emc");
+	unsigned long max = 0;
+	int i;
+
+	BUG_ON(!table);
+
 	tegra_emc_table = table;
 	tegra_emc_table_size = table_size;
+
+	/* Since default max_rate on emc clock is the same as firmware set
+	 * it to before booting, raise it up here based on the known timings.
+	 */
+
+	for (i = 0; i < tegra_emc_table_size; i++) {
+		if (tegra_emc_table[i].rate > max)
+			max = tegra_emc_table[i].rate;
+	}
+
+	c->max_rate = max * 2 * 1000;
 }
