@@ -63,6 +63,8 @@ static int seaboard_backlight_notify(struct device *unused, int brightness)
 	return brightness;
 }
 
+static int seaboard_disp1_check_fb(struct device *dev, struct fb_info *info);
+
 static struct platform_pwm_backlight_data seaboard_backlight_data = {
 	.pwm_id		= 2,
 	.max_brightness	= 255,
@@ -71,6 +73,8 @@ static struct platform_pwm_backlight_data seaboard_backlight_data = {
 	.init		= seaboard_backlight_init,
 	.exit		= seaboard_backlight_exit,
 	.notify		= seaboard_backlight_notify,
+	/* Only toggle backlight on fb blank notifications for disp1 */
+	.check_fb	= seaboard_disp1_check_fb,
 };
 
 static struct platform_device seaboard_backlight_device = {
@@ -189,6 +193,11 @@ static struct nvhost_device seaboard_disp1_device = {
 		.platform_data = &seaboard_disp1_pdata,
 	},
 };
+
+static int seaboard_disp1_check_fb(struct device *dev, struct fb_info *info)
+{
+	return info->device == &seaboard_disp1_device.dev;
+}
 
 static struct nvmap_platform_carveout seaboard_carveouts[] = {
 	[0] = {
