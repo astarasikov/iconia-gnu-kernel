@@ -30,7 +30,7 @@
 
 #include "dev.h"
 
-#define ACM_TIMEOUT 1*HZ
+#define ACM_TIMEOUT (25*HZ/1000)
 
 #define DISABLE_3D_POWERGATING
 #define DISABLE_MPE_POWERGATING
