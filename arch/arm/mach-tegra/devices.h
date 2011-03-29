@@ -65,4 +65,6 @@ extern struct platform_device tegra_aes_device;
 extern struct platform_device tegra_kbc_device;
 extern struct platform_device tegra_rtc_device;
 
+extern struct nvhost_device tegra_camera_device;
+
 #endif

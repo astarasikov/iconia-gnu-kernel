@@ -51,5 +51,18 @@
 void seaboard_pinmux_init(void);
 int seaboard_panel_init(void);
 int seaboard_power_init(void);
+int seaboard_sensors_init(void);
+
+#ifdef CONFIG_MACH_KAEN
+int kaen_sensors_init(void);
+#else
+static inline int kaen_sensors_init(void) { return 0; }
+#endif
+
+#ifdef CONFIG_MACH_AEBL
+int aebl_sensors_init(void);
+#else
+static inline int aebl_sensors_init(void) { return 0; }
+#endif
 
 #endif

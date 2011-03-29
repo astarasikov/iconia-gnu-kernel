@@ -53,6 +53,9 @@ obj-${CONFIG_MACH_SEABOARD}             += board-seaboard.o
 obj-${CONFIG_MACH_SEABOARD}             += board-seaboard-panel.o
 obj-${CONFIG_MACH_SEABOARD}             += board-seaboard-pinmux.o
 obj-${CONFIG_MACH_SEABOARD}             += board-seaboard-power.o
+obj-${CONFIG_MACH_SEABOARD}             += board-seaboard-sensors.o
+obj-${CONFIG_MACH_KAEN}			+= board-kaen-sensors.o
+obj-${CONFIG_MACH_AEBL}			+= board-aebl-sensors.o
 
 obj-${CONFIG_MACH_TRIMSLICE}            += board-trimslice.o
 obj-${CONFIG_MACH_TRIMSLICE}            += board-trimslice-pinmux.o
@@ -60,4 +63,3 @@ obj-${CONFIG_MACH_TRIMSLICE}            += board-trimslice-pinmux.o
 obj-${CONFIG_MACH_VENTANA}		+= board-ventana.o
 obj-${CONFIG_MACH_VENTANA}		+= board-ventana-pinmux.o
 obj-${CONFIG_MACH_VENTANA}		+= board-ventana-power.o
-
