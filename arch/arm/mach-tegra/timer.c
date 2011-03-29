@@ -61,6 +61,8 @@ static void __iomem *rtc_base = IO_ADDRESS(TEGRA_RTC_BASE);
 
 static struct timespec persistent_ts;
 static u64 persistent_ms, last_persistent_ms;
+static u32 usec_offset;
+static bool usec_suspended;
 
 #define timer_writel(value, reg) \
 	__raw_writel(value, (u32)timer_reg_base + (reg))
@@ -133,15 +135,23 @@ static DEFINE_CLOCK_DATA(cd);
 #define SC_MULT		4194304000u
 #define SC_SHIFT	22
 
+static u32 notrace tegra_read_usec(void)
+{
+	u32 cyc = usec_offset;
+	if (!usec_suspended)
+		cyc += timer_readl(TIMERUS_CNTR_1US);
+	return cyc;
+}
+
 unsigned long long notrace sched_clock(void)
 {
-	u32 cyc = timer_readl(TIMERUS_CNTR_1US);
+	u32 cyc = tegra_read_usec();
 	return cyc_to_fixed_sched_clock(&cd, cyc, (u32)~0, SC_MULT, SC_SHIFT);
 }
 
 static void notrace tegra_update_sched_clock(void)
 {
-	u32 cyc = timer_readl(TIMERUS_CNTR_1US);
+	u32 cyc = tegra_read_usec();
 	update_sched_clock(&cd, cyc, (u32)~0);
 }
 
@@ -225,6 +235,26 @@ static struct irqaction tegra_lp2wake_irq = {
 	.irq		= INT_TMR4,
 };
 
+#ifdef CONFIG_PM
+static u32 usec_config;
+
+void tegra_timer_suspend(void)
+{
+	usec_config = timer_readl(TIMERUS_USEC_CFG);
+
+	usec_offset += timer_readl(TIMERUS_CNTR_1US);
+	usec_suspended = true;
+}
+
+void tegra_timer_resume(void)
+{
+	timer_writel(usec_config, TIMERUS_USEC_CFG);
+
+	usec_offset -= timer_readl(TIMERUS_CNTR_1US);
+	usec_suspended = false;
+}
+#endif
+
 static void __init tegra_init_timer(void)
 {
 	struct clk *clk;
@@ -300,23 +330,6 @@ static void __init tegra_init_timer(void)
 struct sys_timer tegra_timer = {
 	.init = tegra_init_timer,
 };
-
-#ifdef CONFIG_PM
-static u32 usec_config;
-
-void tegra_timer_suspend(void)
-{
-	tegra_sched_clock_suspend();
-	usec_config = timer_readl(TIMERUS_USEC_CFG);
-}
-
-void tegra_timer_resume(void)
-{
-	timer_writel(usec_config, TIMERUS_USEC_CFG);
-	tegra_sched_clock_resume();
-}
-#endif
-
 
 void tegra_lp2_set_trigger(unsigned long cycles)
 {
