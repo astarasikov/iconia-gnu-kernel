@@ -42,6 +42,8 @@
 #include <linux/firmware.h>
 #include <wl_cfg80211.h>
 
+void sdioh_sdio_set_host_pm_flags(int flag);
+
 static struct sdio_func *cfg80211_sdio_func;
 static struct wl_dev *wl_cfg80211_dev;
 
@@ -1980,8 +1982,6 @@ static s32 wl_cfg80211_suspend(struct wiphy *wiphy)
 	struct net_device *ndev = wl_to_ndev(wl);
 	s32 err = 0;
 
-	CHECK_SYS_UP();
-
 	set_bit(WL_STATUS_SCAN_ABORTING, &wl->status);
 	wl_term_iscan(wl);
 	if (wl->scan_request) {
@@ -1992,6 +1992,8 @@ static s32 wl_cfg80211_suspend(struct wiphy *wiphy)
 	}
 	clear_bit(WL_STATUS_SCANNING, &wl->status);
 	clear_bit(WL_STATUS_SCAN_ABORTING, &wl->status);
+
+	sdioh_sdio_set_host_pm_flags(MMC_PM_KEEP_POWER);
 
 	return err;
 }
