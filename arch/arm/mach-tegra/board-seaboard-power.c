@@ -125,7 +125,7 @@ static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2, 725, 1500);
 static struct regulator_init_data ldo3_data = REGULATOR_INIT(ldo3, 1250, 3300);
 static struct regulator_init_data ldo4_data = REGULATOR_INIT(ldo4, 1700, 2475);
 static struct regulator_init_data ldo5_data = REGULATOR_INIT(ldo5, 1250, 3300);
-static struct regulator_init_data ldo6_data = REGULATOR_INIT(ldo6, 1250, 3300);
+static struct regulator_init_data ldo6_data = REGULATOR_INIT(ldo6, 1800, 1800);
 static struct regulator_init_data ldo7_data = REGULATOR_INIT(ldo7, 1250, 3300);
 static struct regulator_init_data ldo8_data = REGULATOR_INIT(ldo8, 1250, 3300);
 static struct regulator_init_data ldo9_data = REGULATOR_INIT(ldo9, 1250, 3300);
@@ -186,6 +186,8 @@ int __init seaboard_regulator_init(void)
 	 */
 	pmc_ctrl = readl(pmc + PMC_CTRL);
 	writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
+
+	ldo6_data.constraints.apply_uV = 1;
 
 	i2c_register_board_info(4, seaboard_regulators, 1);
 	return 0;
