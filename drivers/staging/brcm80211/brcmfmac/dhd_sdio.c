@@ -61,9 +61,9 @@
 #define DHDSDIO_MEM_DUMP_FNAME         "mem_dump"
 #endif
 
-#define QLEN		256	/* bulk rx and tx queue lengths */
-#define FCHI		(QLEN - 10)
-#define FCLOW		(FCHI / 2)
+#define QLEN		2046	/* bulk rx and tx queue lengths */
+#define FCHI		(QLEN - 256)
+#define FCLOW		(FCHI - 256)
 #define PRIOMASK	7
 
 #define TXRETRIES	2	/* # of retries for tx frames */
@@ -5085,7 +5085,7 @@ static void *dhdsdio_probe(u16 venid, u16 devid, u16 bus_no,
 	sd1idle = true;
 	dhd_readahead = true;
 	retrydata = false;
-	dhd_doflow = false;
+	dhd_doflow = true;
 	dhd_dongle_memsize = 0;
 	dhd_txminmax = DHD_TXMINMAX;
 
