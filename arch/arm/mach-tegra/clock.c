@@ -782,6 +782,21 @@ static const struct file_operations parent_fops = {
 	.release	= single_release,
 };
 
+static int rate_get(void *data, u64 *val)
+{
+	struct clk *c = (struct clk *)data;
+	*val = (u64)clk_get_rate(c);
+	return 0;
+}
+
+static int rate_set(void *data, u64 val)
+{
+	struct clk *c = (struct clk *)data;
+	clk_set_rate(c, (unsigned long)val);
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(rate_fops, rate_get, rate_set, "%llu\n");
+
 static int clk_debugfs_register_one(struct clk *c)
 {
 	struct dentry *d, *child, *child_tmp;
@@ -795,11 +810,11 @@ static int clk_debugfs_register_one(struct clk *c)
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_u32("rate", S_IRUGO, c->dent, (u32 *)&c->rate);
+	d = debugfs_create_x32("flags", S_IRUGO, c->dent, (u32 *)&c->flags);
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_x32("flags", S_IRUGO, c->dent, (u32 *)&c->flags);
+	d = debugfs_create_file("rate", S_IRUGO | S_IWUGO, c->dent, c, &rate_fops);
 	if (!d)
 		goto err_out;
 
