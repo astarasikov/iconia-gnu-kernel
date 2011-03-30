@@ -53,6 +53,7 @@
 #define DRV_NAME "tegra-snd-seaboard"
 
 #define GPIO_SPKR_EN    BIT(0)
+#define GPIO_HP_MUTE    BIT(1)
 
 struct tegra_seaboard {
 	struct tegra_asoc_utils_data util_data;
@@ -212,9 +213,25 @@ static int seaboard_event_int_spk(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static int seaboard_event_hp(struct snd_soc_dapm_widget *w,
+				struct snd_kcontrol *k, int event)
+{
+	struct snd_soc_codec *codec = w->codec;
+	struct snd_soc_card *card = codec->card;
+	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
+	struct seaboard_audio_platform_data *pdata = seaboard->pdata;
+
+	if (!(seaboard->gpio_requested & GPIO_HP_MUTE))
+		return 0;
+
+	gpio_set_value_cansleep(pdata->gpio_hp_mute,
+				!SND_SOC_DAPM_EVENT_ON(event));
+
+	return 0;
+}
 static const struct snd_soc_dapm_widget seaboard_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Int Spk", seaboard_event_int_spk),
-	SND_SOC_DAPM_HP("Headphone Jack", NULL),
+	SND_SOC_DAPM_HP("Headphone Jack", seaboard_event_hp),
 	SND_SOC_DAPM_MIC("Mic Jack", NULL),
 };
 
@@ -225,6 +242,26 @@ static const struct snd_soc_dapm_route seaboard_audio_map[] = {
 	{"Int Spk", NULL, "RON"},
 	{"Int Spk", NULL, "LOP"},
 	{"Int Spk", NULL, "LON"},
+	{"Mic Bias", NULL, "Mic Jack"},
+	{"IN1R", NULL, "Mic Bias"},
+};
+
+static const struct snd_soc_dapm_route kaen_audio_map[] = {
+	{"Headphone Jack", NULL, "HPOUTR"},
+	{"Headphone Jack", NULL, "HPOUTL"},
+	{"Int Spk", NULL, "ROP"},
+	{"Int Spk", NULL, "RON"},
+	{"Int Spk", NULL, "LOP"},
+	{"Int Spk", NULL, "LON"},
+	{"Mic Bias", NULL, "Mic Jack"},
+	{"IN2R", NULL, "Mic Bias"},
+};
+
+static const struct snd_soc_dapm_route aebl_audio_map[] = {
+	{"Headphone Jack", NULL, "HPOUTR"},
+	{"Headphone Jack", NULL, "HPOUTL"},
+	{"Int Spk", NULL, "LINEOUTR"},
+	{"Int Spk", NULL, "LINEOUTL"},
 	{"Mic Bias", NULL, "Mic Jack"},
 	{"IN1R", NULL, "Mic Bias"},
 };
@@ -251,6 +288,17 @@ static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
 
 	gpio_direction_output(pdata->gpio_spkr_en, 0);
 
+	if (pdata->gpio_hp_mute != -1) {
+		ret = gpio_request(pdata->gpio_hp_mute, "hp_mute");
+		if (ret) {
+			dev_err(card->dev, "cannot get hp_mute gpio\n");
+			return ret;
+		}
+		seaboard->gpio_requested |= GPIO_HP_MUTE;
+
+		gpio_direction_output(pdata->gpio_hp_mute, 0);
+	}
+
 	ret = snd_soc_add_controls(codec, seaboard_controls,
 				   ARRAY_SIZE(seaboard_controls));
 	if (ret < 0)
@@ -259,8 +307,16 @@ static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_new_controls(dapm, seaboard_dapm_widgets,
 					ARRAY_SIZE(seaboard_dapm_widgets));
 
-	snd_soc_dapm_add_routes(dapm, seaboard_audio_map,
-				ARRAY_SIZE(seaboard_audio_map));
+	if (machine_is_seaboard()) {
+		snd_soc_dapm_add_routes(dapm, seaboard_audio_map,
+					ARRAY_SIZE(seaboard_audio_map));
+	} else if (machine_is_kaen()) {
+		snd_soc_dapm_add_routes(dapm, kaen_audio_map,
+					ARRAY_SIZE(kaen_audio_map));
+	} else {
+		snd_soc_dapm_add_routes(dapm, aebl_audio_map,
+					ARRAY_SIZE(aebl_audio_map));
+	}
 
 	seaboard_hp_jack_gpios[0].gpio = pdata->gpio_hp_det;
 	snd_soc_jack_new(codec, "Headphone Jack", SND_JACK_HEADPHONE,
@@ -281,10 +337,25 @@ static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
 
 	snd_soc_dapm_force_enable_pin(dapm, "Mic Bias");
 
-	snd_soc_dapm_nc_pin(dapm, "IN3L");
+	snd_soc_dapm_nc_pin(dapm, "IN1L");
+	if (machine_is_kaen())
+		snd_soc_dapm_nc_pin(dapm, "IN1R");
+	snd_soc_dapm_nc_pin(dapm, "IN2L");
+	if (!machine_is_kaen())
+		snd_soc_dapm_nc_pin(dapm, "IN2R");
+	snd_soc_dapm_nc_pin(dapm, "IN2L");
 	snd_soc_dapm_nc_pin(dapm, "IN3R");
-	snd_soc_dapm_nc_pin(dapm, "LINEOUTL");
-	snd_soc_dapm_nc_pin(dapm, "LINEOUTR");
+	snd_soc_dapm_nc_pin(dapm, "IN3L");
+
+	if (machine_is_aebl()) {
+		snd_soc_dapm_nc_pin(dapm, "LON");
+		snd_soc_dapm_nc_pin(dapm, "RON");
+		snd_soc_dapm_nc_pin(dapm, "ROP");
+		snd_soc_dapm_nc_pin(dapm, "LOP");
+	} else {
+		snd_soc_dapm_nc_pin(dapm, "LINEOUTR");
+		snd_soc_dapm_nc_pin(dapm, "LINEOUTL");
+	}
 
 	snd_soc_dapm_sync(dapm);
 
@@ -326,8 +397,9 @@ static __devinit int tegra_snd_seaboard_probe(struct platform_device *pdev)
 	struct seaboard_audio_platform_data *pdata;
 	int ret;
 
-	if (!machine_is_seaboard()) {
-		dev_err(&pdev->dev, "Not running on Tegra seaboard!\n");
+	if (!machine_is_seaboard() && !machine_is_kaen() &&
+	    !machine_is_aebl()) {
+		dev_err(&pdev->dev, "Not running on a supported board!\n");
 		return -ENODEV;
 	}
 
@@ -386,6 +458,8 @@ static int __devexit tegra_snd_seaboard_remove(struct platform_device *pdev)
 
 	tegra_asoc_utils_fini(&seaboard->util_data);
 
+	if (seaboard->gpio_requested & GPIO_HP_MUTE)
+		gpio_free(pdata->gpio_hp_mute);
 	if (seaboard->gpio_requested & GPIO_SPKR_EN)
 		gpio_free(pdata->gpio_spkr_en);
 

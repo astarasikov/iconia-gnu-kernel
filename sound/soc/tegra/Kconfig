@@ -44,5 +44,5 @@ config SND_TEGRA_SOC_SEABOARD
 	select SND_SOC_SPDIF
 	help
 	  Say Y or M here if you want to add support for SoC audio on the
-	  Tegra Seaboard reference board.
+	  Tegra Seaboard reference board, or its derivatives Kaen and Aebl.
 
