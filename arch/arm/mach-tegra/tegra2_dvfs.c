@@ -21,6 +21,7 @@
 #include <linux/init.h>
 #include <linux/string.h>
 #include <linux/module.h>
+#include <linux/reboot.h>
 
 #include "clock.h"
 #include "dvfs.h"
@@ -272,6 +273,21 @@ module_param_cb(disable_core, &tegra_dvfs_disable_core_ops,
 module_param_cb(disable_cpu, &tegra_dvfs_disable_cpu_ops,
 	&tegra_dvfs_cpu_disabled, 0644);
 
+static int tegra_dvfs_reboot_notify(struct notifier_block *nb,
+				unsigned long event, void *data)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(tegra2_dvfs_rails); i++)
+		tegra_dvfs_rail_disable(tegra2_dvfs_rails[i]);
+
+	return NOTIFY_OK;
+};
+
+static struct notifier_block tegra_dvfs_reboot_nb = {
+	.notifier_call = tegra_dvfs_reboot_notify,
+};
+
 static void __init dvfs_init_one(struct dvfs *d)
 {
 	struct clk *c;
@@ -328,4 +344,6 @@ void __init tegra2_init_dvfs(void)
 
 	if (tegra_dvfs_cpu_disabled)
 		tegra_dvfs_rail_disable(&tegra2_dvfs_rail_vdd_cpu);
+
+	register_reboot_notifier(&tegra_dvfs_reboot_nb);
 }
