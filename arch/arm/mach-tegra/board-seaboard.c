@@ -151,7 +151,7 @@ static __initdata struct tegra_clk_init_table seaboard_clk_init_table[] = {
 	{ "usb3",       "clk_m",        12000000,       true},
 	{ "isp",        "clk_m",        12000000,       false},
 	{ "csus",       "clk_m",        12000000,       false},
-	{ "pwm",        "clk_32k",      32768,          false},
+	{ "pwm",        "clk_m",        12000000,       false},
 	{ "clk_32k",    NULL,           32768,          true},
 	{ "pll_s",      "clk_32k",      32768,          false},
 	{ "rtc",        "clk_32k",      32768,          true},
