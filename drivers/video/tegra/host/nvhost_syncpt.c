@@ -132,6 +132,7 @@ u32 nvhost_syncpt_read(struct nvhost_syncpt *sp, u32 id)
 	nvhost_module_idle(&syncpt_to_dev(sp)->mod);
 	return val;
 }
+EXPORT_SYMBOL_GPL(nvhost_syncpt_read);
 
 /**
  * Write a cpu syncpoint increment to the hardware, without touching
@@ -224,6 +225,7 @@ done:
 	nvhost_module_idle(&syncpt_to_dev(sp)->mod);
 	return err;
 }
+EXPORT_SYMBOL_GPL(nvhost_syncpt_wait_timeout);
 
 static const char *s_syncpt_names[32] = {
 	"", "", "", "", "", "", "", "", "", "", "", "",
