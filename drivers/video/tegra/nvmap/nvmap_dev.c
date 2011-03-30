@@ -81,6 +81,7 @@ struct nvmap_device {
 };
 
 struct nvmap_device *nvmap_dev;
+EXPORT_SYMBOL_GPL(nvmap_dev);
 
 static struct backing_dev_info nvmap_bdi = {
 	.ra_pages	= 0,
@@ -628,6 +629,7 @@ struct nvmap_client *nvmap_create_client(struct nvmap_device *dev,
 
 	return client;
 }
+EXPORT_SYMBOL_GPL(nvmap_create_client);
 
 static void destroy_client(struct nvmap_client *client)
 {
