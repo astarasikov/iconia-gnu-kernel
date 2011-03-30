@@ -1662,6 +1662,8 @@ int sdhci_suspend_host(struct sdhci_host *host, pm_message_t state)
 	if (mmc->card && (mmc->card->type != MMC_TYPE_SDIO))
 		ret = mmc_suspend_host(host->mmc);
 
+	/* Save the original intmask to restore later */
+	host->save_intmask = sdhci_readl(host, SDHCI_INT_ENABLE);
 	sdhci_mask_irqs(host, SDHCI_INT_ALL_MASK);
 
 	if (host->vmmc)
@@ -1702,6 +1704,9 @@ int sdhci_resume_host(struct sdhci_host *host)
 		ret = mmc_resume_host(host->mmc);
 
 	sdhci_enable_card_detection(host);
+
+	/* Restore the original intmask */
+	sdhci_unmask_irqs(host, host->save_intmask);
 
 	return ret;
 }
