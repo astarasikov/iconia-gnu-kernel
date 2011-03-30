@@ -893,6 +893,11 @@ static int tegra_camera_try_fmt(struct soc_camera_device *icd,
 	pix->width	= mf.width;
 	pix->height	= mf.height;
 	pix->colorspace	= mf.colorspace;
+	/* width and height could have been changed, therefore update the
+	   bytesperline and sizeimage here. */
+	pix->bytesperline = soc_mbus_bytes_per_line(pix->width,
+						    xlate->host_fmt);
+	pix->sizeimage = pix->height * pix->bytesperline;
 
 	switch (mf.field) {
 	case V4L2_FIELD_ANY:
