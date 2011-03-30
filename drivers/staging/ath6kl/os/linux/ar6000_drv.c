@@ -2018,9 +2018,6 @@ ar6000_destroy(struct net_device *dev, unsigned int unregister)
     if (ar->arWlanPowerState != WLAN_POWER_STATE_CUT_PWR) {
         /* only stop endpoint if we are not stop it in suspend_ev */
         ar6000_stop_endpoint(dev, false, true);
-    } else {
-        /* clear up the platform power state before rmmod */
-        plat_setup_power(1,0);
     }
 
     ar->arWlanState = WLAN_DISABLED;
