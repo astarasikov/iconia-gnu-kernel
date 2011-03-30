@@ -26,6 +26,7 @@
 #include <linux/module.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/uaccess.h>
 
 #include <mach/clk.h>
 
@@ -732,6 +733,55 @@ static const struct file_operations possible_parents_fops = {
 	.release	= single_release,
 };
 
+static int parent_show(struct seq_file *s, void *data)
+{
+	struct clk *c = s->private;
+	struct clk *p = clk_get_parent(c);
+
+	seq_printf(s, "%s\n", p ? p->name : "clk_root");
+	return 0;
+}
+
+static int parent_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, parent_show, inode->i_private);
+}
+
+static ssize_t parent_write(struct file *file,
+	const char __user *userbuf, size_t count, loff_t *ppos)
+{
+	struct seq_file *s = file->private_data;
+	struct clk *c = s->private;
+	struct clk *p = NULL;
+	char buf[32];
+
+	if (sizeof(buf) <= count)
+		return -EINVAL;
+
+	if (copy_from_user(buf, userbuf, count))
+		return -EFAULT;
+
+	/* terminate buffer and trim - white spaces may be appended
+	 *  at the end when invoked from shell command line */
+	buf[count] = '\0';
+	strim(buf);
+
+	p = tegra_get_clock_by_name(buf);
+	if (!p)
+		return -EINVAL;
+
+	clk_set_parent(c, p);
+	return count;
+}
+
+static const struct file_operations parent_fops = {
+	.open		= parent_open,
+	.read		= seq_read,
+	.write		= parent_write,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
 static int clk_debugfs_register_one(struct clk *c)
 {
 	struct dentry *d, *child, *child_tmp;
@@ -750,6 +800,10 @@ static int clk_debugfs_register_one(struct clk *c)
 		goto err_out;
 
 	d = debugfs_create_x32("flags", S_IRUGO, c->dent, (u32 *)&c->flags);
+	if (!d)
+		goto err_out;
+
+	d = debugfs_create_file("parent", S_IRUGO | S_IWUGO, c->dent, c, &parent_fops);
 	if (!d)
 		goto err_out;
 
