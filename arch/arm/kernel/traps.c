@@ -164,7 +164,7 @@ static void dump_instr(const char *lvl, struct pt_regs *regs)
 #ifdef CONFIG_ARM_UNWIND
 static inline void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 {
-	printk("Backtrace: ");
+	printk("Backtrace:\n");
 	unwind_backtrace(regs, tsk);
 }
 #else
@@ -173,7 +173,7 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 	unsigned int fp, mode;
 	int ok = 1;
 
-	printk("Backtrace: ");
+	printk("Backtrace:\n");
 
 	if (!tsk)
 		tsk = current;
