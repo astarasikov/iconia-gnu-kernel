@@ -19,6 +19,7 @@
  *
  */
 
+#include <linux/of_device.h>
 #include <linux/pm_runtime.h>
 
 #include <mach/nvhost.h>
@@ -201,6 +202,39 @@ void nvhost_device_unregister(struct nvhost_device *dev)
 }
 EXPORT_SYMBOL_GPL(nvhost_device_unregister);
 
+/* modalias support enables more hands-off userspace setup:
+ * (a) environment variable lets new-style hotplug events work once system is
+ *     fully running:  "modprobe $MODALIAS"
+ * (b) sysfs attribute lets new-style coldplug recover from hotplug events
+ *     mishandled before system is fully running:  "modprobe $(cat modalias)"
+ */
+static ssize_t modalias_show(struct device *dev, struct device_attribute *a,
+			     char *buf)
+{
+	struct nvhost_device  *pdev = to_nvhost_device(dev);
+	int len = snprintf(buf, PAGE_SIZE, "nvhost:%s\n", pdev->name);
+
+	return (len >= PAGE_SIZE) ? (PAGE_SIZE - 1) : len;
+}
+
+static struct device_attribute nvhost_dev_attrs[] = {
+	__ATTR_RO(modalias),
+	__ATTR_NULL,
+};
+
+static int nvhost_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+	struct nvhost_device *pdev = to_nvhost_device(dev);
+	int rc;
+
+	/* Some devices have extra OF data and an OF-style MODALIAS */
+	rc = of_device_uevent(dev, env);
+	if (rc != -ENODEV)
+		return rc;
+
+	add_uevent_var(env, "MODALIAS=%s%s", "nvhost:", pdev->name);
+	return 0;
+}
 
 static int nvhost_bus_match(struct device *_dev, struct device_driver *drv)
 {
@@ -539,7 +573,9 @@ static const struct dev_pm_ops nvhost_dev_pm_ops = {
 
 struct bus_type nvhost_bus_type = {
 	.name		= "nvhost",
+	.dev_attrs	= nvhost_dev_attrs,
 	.match		= nvhost_bus_match,
+	.uevent		= nvhost_uevent,
 	.pm		= &nvhost_dev_pm_ops,
 };
 EXPORT_SYMBOL(nvhost_bus_type);
