@@ -1104,4 +1104,4 @@ module_exit(tegra_camera_exit);
 MODULE_DESCRIPTION("TEGRA SoC Camera Host driver");
 MODULE_AUTHOR("Andrew Chew <achew@nvidia.com>");
 MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("platform:" TEGRA_CAM_DRV_NAME);
+MODULE_ALIAS("nvhost:" TEGRA_CAM_DRV_NAME);
