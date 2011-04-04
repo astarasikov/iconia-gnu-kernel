@@ -541,24 +541,6 @@ static struct resource i2s_resource2[] = {
 	}
 };
 
-static struct resource spdif_resource[] = {
-	[0] = {
-		.start	= INT_SPDIF,
-		.end	= INT_SPDIF,
-		.flags	= IORESOURCE_IRQ
-	},
-	[1] = {
-		.start	= TEGRA_DMA_REQ_SEL_SPD_I,
-		.end	= TEGRA_DMA_REQ_SEL_SPD_I,
-		.flags	= IORESOURCE_DMA
-	},
-	[2] = {
-		.start	= TEGRA_SPDIF_BASE,
-		.end	= TEGRA_SPDIF_BASE + TEGRA_SPDIF_SIZE - 1,
-		.flags	= IORESOURCE_MEM
-	}
-};
-
 struct platform_device tegra_i2s_device1 = {
 	.name		= "tegra-i2s",
 	.id		= 0,
@@ -588,6 +570,31 @@ struct platform_device tegra_das_device = {
 	.resource	= tegra_das_resources,
 };
 
+static struct resource spdif_resource[] = {
+	[0] = {
+		.start	= INT_SPDIF,
+		.end	= INT_SPDIF,
+		.flags	= IORESOURCE_IRQ
+	},
+	[1] = {
+		.start	= TEGRA_DMA_REQ_SEL_SPD_I,
+		.end	= TEGRA_DMA_REQ_SEL_SPD_I,
+		.flags	= IORESOURCE_DMA
+	},
+	[2] = {
+		.start	= TEGRA_SPDIF_BASE,
+		.end	= TEGRA_SPDIF_BASE + TEGRA_SPDIF_SIZE - 1,
+		.flags	= IORESOURCE_MEM
+	}
+};
+
+struct platform_device tegra_spdif_device = {
+	.name		= "tegra-spdif",
+	.id		= -1,
+	.resource	= spdif_resource,
+	.num_resources	= ARRAY_SIZE(spdif_resource),
+};
+
 struct platform_device tegra_pcm_device = {
 	.name = "tegra-pcm-audio",
 	.id = -1,
@@ -611,13 +618,6 @@ struct platform_device tegra_w1_device = {
 	.id            = -1,
 	.resource      = w1_resources,
 	.num_resources = ARRAY_SIZE(w1_resources),
-};
-
-struct platform_device tegra_spdif_device = {
-	.name		= "tegra-spdif",
-	.id		= -1,
-	.resource	= spdif_resource,
-	.num_resources	= ARRAY_SIZE(spdif_resource),
 };
 
 static struct resource tegra_gart_resources[] = {

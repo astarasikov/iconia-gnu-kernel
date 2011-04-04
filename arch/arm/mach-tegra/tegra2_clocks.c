@@ -27,6 +27,7 @@
 #include <linux/clk.h>
 
 #include <mach/iomap.h>
+#include <mach/pinmux.h>
 #include <mach/suspend.h>
 
 #include "clock.h"
@@ -1309,14 +1310,30 @@ static struct clk_ops tegra_audio_sync_clk_ops = {
 
 static void tegra2_cdev_clk_init(struct clk *c)
 {
-	/* We could un-tristate the cdev1 or cdev2 pingroup here; this is
-	 * currently done in the pinmux code. */
+	int ret;
+	enum tegra_mux_func func;
+	const struct clk_mux_sel *sel;
+
 	c->state = ON;
 
 	BUG_ON(!c->u.periph.clk_num);
 
 	if (!(clk_readl(CLK_OUT_ENB + PERIPH_CLK_TO_ENB_REG(c)) &
 			PERIPH_CLK_TO_ENB_BIT(c)))
+		c->state = OFF;
+
+	ret = tegra_pinmux_get_func(c->reg, &func);
+	if (ret)
+		func = -1;
+
+	for (sel = c->inputs; sel->input != NULL; sel++) {
+		if (sel->value == func) {
+			c->parent = sel->input;
+			break;
+		}
+	}
+
+	if (!c->parent)
 		c->state = OFF;
 }
 
@@ -1337,10 +1354,39 @@ static void tegra2_cdev_clk_disable(struct clk *c)
 		CLK_OUT_ENB_CLR + PERIPH_CLK_TO_ENB_SET_REG(c));
 }
 
+static int tegra2_cdev_clk_set_parent(struct clk *c, struct clk *p)
+{
+	enum tegra_pingroup pg;
+	const struct clk_mux_sel *sel;
+
+	if (c->u.periph.clk_num == 94)
+		pg = TEGRA_PINGROUP_CDEV1;
+	else
+		pg = TEGRA_PINGROUP_CDEV2;
+
+	for (sel = c->inputs; sel->input != NULL; sel++) {
+		if (sel->input == p) {
+			if (c->refcnt)
+				clk_enable(p);
+
+			tegra_pinmux_set_func(pg, sel->value);
+
+			if (c->refcnt && c->parent)
+				clk_disable(c->parent);
+
+			clk_reparent(c, p);
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
 static struct clk_ops tegra_cdev_clk_ops = {
 	.init			= &tegra2_cdev_clk_init,
 	.enable			= &tegra2_cdev_clk_enable,
 	.disable		= &tegra2_cdev_clk_disable,
+	.set_parent		= &tegra2_cdev_clk_set_parent,
 };
 
 /* shared bus ops */
@@ -1862,28 +1908,6 @@ static struct clk tegra_clk_d = {
 	},
 };
 
-/* dap_mclk1, belongs to the cdev1 pingroup. */
-static struct clk tegra_clk_cdev1 = {
-	.name      = "cdev1",
-	.ops       = &tegra_cdev_clk_ops,
-	.rate      = 26000000,
-	.max_rate  = 26000000,
-	.u.periph  = {
-		.clk_num = 94,
-	},
-};
-
-/* dap_mclk2, belongs to the cdev2 pingroup. */
-static struct clk tegra_clk_cdev2 = {
-	.name      = "cdev2",
-	.ops       = &tegra_cdev_clk_ops,
-	.rate      = 26000000,
-	.max_rate  = 26000000,
-	.u.periph  = {
-		.clk_num   = 93,
-	},
-};
-
 /* initialized before peripheral clocks */
 static struct clk_mux_sel mux_audio_sync_clk[8+1];
 static const struct audio_sources {
@@ -1922,6 +1946,46 @@ static struct clk tegra_clk_audio_2x = {
 	.u.periph = {
 		.clk_num = 89,
 	},
+};
+
+static struct clk_mux_sel mux_cdev1[] = {
+	{ .input = &tegra_clk_m, .value = TEGRA_MUX_OSC},
+	{ .input = &tegra_pll_a_out0, .value = TEGRA_MUX_PLLA_OUT},
+	{ .input = &tegra_pll_m_out1, .value = TEGRA_MUX_PLLM_OUT1},
+	{ .input = &tegra_clk_audio, .value = TEGRA_MUX_AUDIO_SYNC},
+	{ 0, 0},
+};
+
+/* dap_mclk1, belongs to the cdev1 pingroup. */
+static struct clk tegra_clk_cdev1 = {
+	.name      = "cdev1",
+	.inputs    = mux_cdev1,
+	.ops       = &tegra_cdev_clk_ops,
+	.u.periph  = {
+		.clk_num = 94,
+	},
+	.max_rate  = 73728000,
+};
+
+static struct clk_mux_sel mux_cdev2[] = {
+	{ .input = &tegra_clk_m, .value = TEGRA_MUX_OSC},
+#if 0 /* FIXME: not implemented */
+	{ .input = &tegra_clk_, .value = TEGRA_MUX_AHB_CLK},
+	{ .input = &tegra_clk_, .value = TEGRA_MUX_APB_CLK},
+#endif
+	{ .input = &tegra_pll_p_out4, .value = TEGRA_MUX_PLLP_OUT4},
+	{ 0, 0},
+};
+
+/* dap_mclk2, belongs to the cdev2 pingroup. */
+static struct clk tegra_clk_cdev2 = {
+	.name      = "cdev2",
+	.inputs    = mux_cdev2,
+	.ops       = &tegra_cdev_clk_ops,
+	.u.periph  = {
+		.clk_num = 93,
+	},
+	.max_rate  = 73728000,
 };
 
 struct clk_lookup tegra_audio_clk_lookups[] = {

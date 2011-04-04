@@ -218,6 +218,15 @@ struct tegra_pingroup_desc {
 extern const struct tegra_pingroup_desc tegra_soc_pingroups[];
 extern const struct tegra_drive_pingroup_desc tegra_soc_drive_pingroups[];
 
+int tegra_pinmux_get_func(enum tegra_pingroup pg,
+	enum tegra_mux_func *func);
+int tegra_pinmux_get_tristate(enum tegra_pingroup pg,
+	enum tegra_tristate *tristate);
+int tegra_pinmux_get_pullupdown(enum tegra_pingroup pg,
+	enum tegra_pullupdown *pupd);
+
+int tegra_pinmux_set_func(enum tegra_pingroup pg,
+	enum tegra_mux_func func);
 int tegra_pinmux_set_tristate(enum tegra_pingroup pg,
 	enum tegra_tristate tristate);
 int tegra_pinmux_set_pullupdown(enum tegra_pingroup pg,
