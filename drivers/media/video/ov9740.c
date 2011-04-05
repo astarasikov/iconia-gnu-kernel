@@ -182,7 +182,11 @@
 
 /* supported resolutions */
 enum {
+	OV9740_QSIF,
+	OV9740_QCIF,
 	OV9740_QVGA,
+	OV9740_SIF,
+	OV9740_CIF,
 	OV9740_VGA,
 	OV9740_720P,
 };
@@ -193,9 +197,25 @@ struct ov9740_resolution {
 };
 
 static struct ov9740_resolution ov9740_resolutions[] = {
+	[OV9740_QSIF] = {
+		.width	= 176,
+		.height	= 120,
+	},
+	[OV9740_QCIF] = {
+		.width	= 176,
+		.height	= 144,
+	},
 	[OV9740_QVGA] = {
 		.width	= 320,
 		.height	= 240,
+	},
+	[OV9740_SIF] = {
+		.width	= 352,
+		.height	= 240,
+	},
+	[OV9740_CIF] = {
+		.width	= 352,
+		.height	= 288,
 	},
 	[OV9740_VGA] = {
 		.width	= 640,
@@ -227,6 +247,9 @@ struct ov9740_priv {
 };
 
 static const struct ov9740_reg ov9740_defaults[] = {
+	/* Software Reset */
+	{ OV9740_SOFTWARE_RESET,	0x01 },
+
 	/* Banding Filter */
 	{ OV9740_AEC_B50_STEP_HI,	0x00 },
 	{ OV9740_AEC_B50_STEP_LO,	0xe8 },
@@ -400,15 +423,63 @@ static const struct ov9740_reg ov9740_defaults[] = {
 	{ OV9740_SC_CMMM_MIPI_CTR,	0x01 },
 };
 
-static const struct ov9740_reg ov9740_regs_qvga[] = {
+static const struct ov9740_reg ov9740_regs_qsif[] = {
 	{ OV9740_X_ADDR_START_HI,	0x00 },
-	{ OV9740_X_ADDR_START_LO,	0xa0 },
+	{ OV9740_X_ADDR_START_LO,	0x78 },
 	{ OV9740_Y_ADDR_START_HI,	0x00 },
 	{ OV9740_Y_ADDR_START_LO,	0x00 },
 	{ OV9740_X_ADDR_END_HI,		0x04 },
-	{ OV9740_X_ADDR_END_LO,		0x63 },
+	{ OV9740_X_ADDR_END_LO,		0x98 },
 	{ OV9740_Y_ADDR_END_HI,		0x02 },
-	{ OV9740_Y_ADDR_END_LO,		0xd3 },
+	{ OV9740_Y_ADDR_END_LO,		0xcf },
+	{ OV9740_X_OUTPUT_SIZE_HI,	0x00 },
+	{ OV9740_X_OUTPUT_SIZE_LO,	0xb0 },
+	{ OV9740_Y_OUTPUT_SIZE_HI,	0x00 },
+	{ OV9740_Y_OUTPUT_SIZE_LO,	0x78 },
+	{ OV9740_ISP_CTRL1E,		0x04 },
+	{ OV9740_ISP_CTRL1F,		0x20 },
+	{ OV9740_ISP_CTRL20,		0x02 },
+	{ OV9740_ISP_CTRL21,		0xd0 },
+	{ OV9740_VFIFO_READ_START_HI,	0x03 },
+	{ OV9740_VFIFO_READ_START_LO,	0x70 },
+	{ OV9740_ISP_CTRL00,		0xff },
+	{ OV9740_ISP_CTRL01,		0xff },
+	{ OV9740_ISP_CTRL03,		0xff },
+};
+
+static const struct ov9740_reg ov9740_regs_qcif[] = {
+	{ OV9740_X_ADDR_START_HI,	0x00 },
+	{ OV9740_X_ADDR_START_LO,	0xd0 },
+	{ OV9740_Y_ADDR_START_HI,	0x00 },
+	{ OV9740_Y_ADDR_START_LO,	0x00 },
+	{ OV9740_X_ADDR_END_HI,		0x04 },
+	{ OV9740_X_ADDR_END_LO,		0x67 },
+	{ OV9740_Y_ADDR_END_HI,		0x02 },
+	{ OV9740_Y_ADDR_END_LO,		0xcf },
+	{ OV9740_X_OUTPUT_SIZE_HI,	0x00 },
+	{ OV9740_X_OUTPUT_SIZE_LO,	0xb0 },
+	{ OV9740_Y_OUTPUT_SIZE_HI,	0x00 },
+	{ OV9740_Y_OUTPUT_SIZE_LO,	0x90 },
+	{ OV9740_ISP_CTRL1E,		0x03 },
+	{ OV9740_ISP_CTRL1F,		0x70 },
+	{ OV9740_ISP_CTRL20,		0x02 },
+	{ OV9740_ISP_CTRL21,		0xd0 },
+	{ OV9740_VFIFO_READ_START_HI,	0x02 },
+	{ OV9740_VFIFO_READ_START_LO,	0xc0 },
+	{ OV9740_ISP_CTRL00,		0xff },
+	{ OV9740_ISP_CTRL01,		0xff },
+	{ OV9740_ISP_CTRL03,		0xff },
+};
+
+static const struct ov9740_reg ov9740_regs_qvga[] = {
+	{ OV9740_X_ADDR_START_HI,	0x00 },
+	{ OV9740_X_ADDR_START_LO,	0xa8 },
+	{ OV9740_Y_ADDR_START_HI,	0x00 },
+	{ OV9740_Y_ADDR_START_LO,	0x00 },
+	{ OV9740_X_ADDR_END_HI,		0x04 },
+	{ OV9740_X_ADDR_END_LO,		0x67 },
+	{ OV9740_Y_ADDR_END_HI,		0x02 },
+	{ OV9740_Y_ADDR_END_LO,		0xcf },
 	{ OV9740_X_OUTPUT_SIZE_HI,	0x01 },
 	{ OV9740_X_OUTPUT_SIZE_LO,	0x40 },
 	{ OV9740_Y_OUTPUT_SIZE_HI,	0x00 },
@@ -424,15 +495,63 @@ static const struct ov9740_reg ov9740_regs_qvga[] = {
 	{ OV9740_ISP_CTRL03,		0xff },
 };
 
-static const struct ov9740_reg ov9740_regs_vga[] = {
+static const struct ov9740_reg ov9740_regs_sif[] = {
 	{ OV9740_X_ADDR_START_HI,	0x00 },
-	{ OV9740_X_ADDR_START_LO,	0xa0 },
+	{ OV9740_X_ADDR_START_LO,	0x78 },
 	{ OV9740_Y_ADDR_START_HI,	0x00 },
 	{ OV9740_Y_ADDR_START_LO,	0x00 },
 	{ OV9740_X_ADDR_END_HI,		0x04 },
-	{ OV9740_X_ADDR_END_LO,		0x63 },
+	{ OV9740_X_ADDR_END_LO,		0x98 },
 	{ OV9740_Y_ADDR_END_HI,		0x02 },
-	{ OV9740_Y_ADDR_END_LO,		0xd3 },
+	{ OV9740_Y_ADDR_END_LO,		0xcf },
+	{ OV9740_X_OUTPUT_SIZE_HI,	0x01 },
+	{ OV9740_X_OUTPUT_SIZE_LO,	0x60 },
+	{ OV9740_Y_OUTPUT_SIZE_HI,	0x00 },
+	{ OV9740_Y_OUTPUT_SIZE_LO,	0xf0 },
+	{ OV9740_ISP_CTRL1E,		0x04 },
+	{ OV9740_ISP_CTRL1F,		0x20 },
+	{ OV9740_ISP_CTRL20,		0x02 },
+	{ OV9740_ISP_CTRL21,		0xd0 },
+	{ OV9740_VFIFO_READ_START_HI,	0x02 },
+	{ OV9740_VFIFO_READ_START_LO,	0xc0 },
+	{ OV9740_ISP_CTRL00,		0xff },
+	{ OV9740_ISP_CTRL01,		0xff },
+	{ OV9740_ISP_CTRL03,		0xff },
+};
+
+static const struct ov9740_reg ov9740_regs_cif[] = {
+	{ OV9740_X_ADDR_START_HI,	0x00 },
+	{ OV9740_X_ADDR_START_LO,	0xd0 },
+	{ OV9740_Y_ADDR_START_HI,	0x00 },
+	{ OV9740_Y_ADDR_START_LO,	0x00 },
+	{ OV9740_X_ADDR_END_HI,		0x04 },
+	{ OV9740_X_ADDR_END_LO,		0x67 },
+	{ OV9740_Y_ADDR_END_HI,		0x02 },
+	{ OV9740_Y_ADDR_END_LO,		0xcf },
+	{ OV9740_X_OUTPUT_SIZE_HI,	0x01 },
+	{ OV9740_X_OUTPUT_SIZE_LO,	0x60 },
+	{ OV9740_Y_OUTPUT_SIZE_HI,	0x01 },
+	{ OV9740_Y_OUTPUT_SIZE_LO,	0x20 },
+	{ OV9740_ISP_CTRL1E,		0x03 },
+	{ OV9740_ISP_CTRL1F,		0x70 },
+	{ OV9740_ISP_CTRL20,		0x02 },
+	{ OV9740_ISP_CTRL21,		0xd0 },
+	{ OV9740_VFIFO_READ_START_HI,	0x02 },
+	{ OV9740_VFIFO_READ_START_LO,	0x10 },
+	{ OV9740_ISP_CTRL00,		0xff },
+	{ OV9740_ISP_CTRL01,		0xff },
+	{ OV9740_ISP_CTRL03,		0xff },
+};
+
+static const struct ov9740_reg ov9740_regs_vga[] = {
+	{ OV9740_X_ADDR_START_HI,	0x00 },
+	{ OV9740_X_ADDR_START_LO,	0xa8 },
+	{ OV9740_Y_ADDR_START_HI,	0x00 },
+	{ OV9740_Y_ADDR_START_LO,	0x00 },
+	{ OV9740_X_ADDR_END_HI,		0x04 },
+	{ OV9740_X_ADDR_END_LO,		0x67 },
+	{ OV9740_Y_ADDR_END_HI,		0x02 },
+	{ OV9740_Y_ADDR_END_LO,		0xcf },
 	{ OV9740_X_OUTPUT_SIZE_HI,	0x02 },
 	{ OV9740_X_OUTPUT_SIZE_LO,	0x80 },
 	{ OV9740_Y_OUTPUT_SIZE_HI,	0x01 },
@@ -453,10 +572,10 @@ static const struct ov9740_reg ov9740_regs_720p[] = {
 	{ OV9740_X_ADDR_START_LO,	0x00 },
 	{ OV9740_Y_ADDR_START_HI,	0x00 },
 	{ OV9740_Y_ADDR_START_LO,	0x00 },
-	{ OV9740_X_ADDR_END_HI,		0x05 },
-	{ OV9740_X_ADDR_END_LO,		0x03 },
+	{ OV9740_X_ADDR_END_HI,		0x04 },
+	{ OV9740_X_ADDR_END_LO,		0xff },
 	{ OV9740_Y_ADDR_END_HI,		0x02 },
-	{ OV9740_Y_ADDR_END_LO,		0xd3 },
+	{ OV9740_Y_ADDR_END_LO,		0xcf },
 	{ OV9740_X_OUTPUT_SIZE_HI,	0x05 },
 	{ OV9740_X_OUTPUT_SIZE_LO,	0x00 },
 	{ OV9740_Y_OUTPUT_SIZE_HI,	0x02 },
@@ -466,7 +585,7 @@ static const struct ov9740_reg ov9740_regs_720p[] = {
 	{ OV9740_ISP_CTRL20,		0x02 },
 	{ OV9740_ISP_CTRL21,		0xd0 },
 	{ OV9740_VFIFO_READ_START_HI,	0x02 },
-	{ OV9740_VFIFO_READ_START_LO,	0x30 },
+	{ OV9740_VFIFO_READ_START_LO,	0x70 },
 	{ OV9740_ISP_CTRL00,		0xff },
 	{ OV9740_ISP_CTRL01,		0xef },
 	{ OV9740_ISP_CTRL03,		0xff },
@@ -566,7 +685,8 @@ static int ov9740_reg_rmw(struct i2c_client *client, u16 reg, u8 set, u8 unset)
 	ret = ov9740_reg_read(client, reg, &val);
 	if (ret < 0) {
 		dev_err(&client->dev,
-			"[Read]-Modify-Write of register %02x failed!\n", reg);
+			"[Read]-Modify-Write of register 0x%04x failed!\n",
+			reg);
 		return ret;
 	}
 
@@ -576,7 +696,8 @@ static int ov9740_reg_rmw(struct i2c_client *client, u16 reg, u8 set, u8 unset)
 	ret = ov9740_reg_write(client, reg, val);
 	if (ret < 0) {
 		dev_err(&client->dev,
-			"Read-Modify-[Write] of register %02x failed!\n", reg);
+			"Read-Modify-[Write] of register 0x%04x failed!\n",
+			reg);
 		return ret;
 	}
 
@@ -761,25 +882,49 @@ static void ov9740_res_roundup(u32 *width, u32 *height)
 }
 
 /* Setup registers according to resolution and color encoding */
-static int ov9740_set_res(struct i2c_client *client, u32 width)
+static int ov9740_set_res(struct i2c_client *client, u32 width, u32 height)
 {
 	int ret;
 
 	/* select register configuration for given resolution */
-	if (width == ov9740_resolutions[OV9740_QVGA].width) {
+	if ((width == ov9740_resolutions[OV9740_QSIF].width) &&
+	    (height == ov9740_resolutions[OV9740_QSIF].height)) {
+		dev_dbg(&client->dev, "Setting image size to 176x120\n");
+		ret = ov9740_reg_write_array(client, ov9740_regs_qsif,
+					     ARRAY_SIZE(ov9740_regs_qsif));
+	} else if ((width == ov9740_resolutions[OV9740_QCIF].width) &&
+		   (height == ov9740_resolutions[OV9740_QCIF].height)) {
+		dev_dbg(&client->dev, "Setting image size to 176x144\n");
+		ret = ov9740_reg_write_array(client, ov9740_regs_qcif,
+					     ARRAY_SIZE(ov9740_regs_qcif));
+	} else if ((width == ov9740_resolutions[OV9740_QVGA].width) &&
+		   (height == ov9740_resolutions[OV9740_QVGA].height)) {
 		dev_dbg(&client->dev, "Setting image size to 320x240\n");
 		ret = ov9740_reg_write_array(client, ov9740_regs_qvga,
 					     ARRAY_SIZE(ov9740_regs_qvga));
-	} else if (width == ov9740_resolutions[OV9740_VGA].width) {
+	} else if ((width == ov9740_resolutions[OV9740_SIF].width) &&
+		   (height == ov9740_resolutions[OV9740_SIF].height)) {
+		dev_dbg(&client->dev, "Setting image size to 352x240\n");
+		ret = ov9740_reg_write_array(client, ov9740_regs_sif,
+					     ARRAY_SIZE(ov9740_regs_sif));
+	} else if ((width == ov9740_resolutions[OV9740_CIF].width) &&
+		   (height == ov9740_resolutions[OV9740_CIF].height)) {
+		dev_dbg(&client->dev, "Setting image size to 352x288\n");
+		ret = ov9740_reg_write_array(client, ov9740_regs_cif,
+					     ARRAY_SIZE(ov9740_regs_cif));
+	} else if ((width == ov9740_resolutions[OV9740_VGA].width) &&
+		   (height == ov9740_resolutions[OV9740_VGA].height)) {
 		dev_dbg(&client->dev, "Setting image size to 640x480\n");
 		ret = ov9740_reg_write_array(client, ov9740_regs_vga,
 					     ARRAY_SIZE(ov9740_regs_vga));
-	} else if (width == ov9740_resolutions[OV9740_720P].width) {
+	} else if ((width == ov9740_resolutions[OV9740_720P].width) &&
+		   (height == ov9740_resolutions[OV9740_720P].height)) {
 		dev_dbg(&client->dev, "Setting image size to 1280x720\n");
 		ret = ov9740_reg_write_array(client, ov9740_regs_720p,
 					     ARRAY_SIZE(ov9740_regs_720p));
 	} else {
 		dev_err(&client->dev, "Failed to select resolution!\n");
+		WARN_ON(1);
 		return -EINVAL;
 	}
 
@@ -810,7 +955,7 @@ static int ov9740_s_fmt(struct v4l2_subdev *sd,
 	if (ret < 0)
 		return ret;
 
-	ret = ov9740_set_res(client, mf->width);
+	ret = ov9740_set_res(client, mf->width, mf->height);
 	if (ret < 0)
 		return ret;
 
@@ -942,7 +1087,6 @@ static struct v4l2_subdev_core_ops ov9740_core_ops = {
 	.g_register		= ov9740_get_register,
 	.s_register		= ov9740_set_register,
 #endif
-
 };
 
 static struct v4l2_subdev_video_ops ov9740_video_ops = {
