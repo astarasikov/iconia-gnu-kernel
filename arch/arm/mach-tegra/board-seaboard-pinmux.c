@@ -34,10 +34,22 @@
 		.slew_falling = TEGRA_SLEW_SLOWEST,		\
 	}
 
+#define VI_CSI_DRIVE(_name)					\
+	{							\
+		.pingroup = TEGRA_DRIVE_PINGROUP_##_name,	\
+		.hsm = TEGRA_HSM_ENABLE,			\
+		.schmitt = TEGRA_SCHMITT_ENABLE,		\
+		.drive = TEGRA_DRIVE_DIV_1,			\
+		.pull_down = TEGRA_PULL_31,			\
+		.pull_up = TEGRA_PULL_31,			\
+		.slew_rising = TEGRA_SLEW_SLOWEST,		\
+		.slew_falling = TEGRA_SLEW_SLOWEST,		\
+	}
+
 static __initdata struct tegra_drive_pingroup_config seaboard_drive_pinmux[] = {
 	DEFAULT_DRIVE(SDIO1),
-	DEFAULT_DRIVE(VI1),
-	DEFAULT_DRIVE(VI2),
+	VI_CSI_DRIVE(VI1),
+	VI_CSI_DRIVE(VI2),
 };
 
 static __initdata struct tegra_pingroup_config seaboard_pinmux[] = {
