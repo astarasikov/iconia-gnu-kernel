@@ -27,8 +27,8 @@
 #define TEGRA_CAM_DRV_NAME "tegra-camera"
 #define TEGRA_CAM_VERSION_CODE KERNEL_VERSION(0, 0, 5)
 
-#define TEGRA_SYNCPT_VI_WAIT_TIMEOUT                    1000
-#define TEGRA_SYNCPT_CSI_WAIT_TIMEOUT                   1000
+#define TEGRA_SYNCPT_VI_WAIT_TIMEOUT                    200
+#define TEGRA_SYNCPT_CSI_WAIT_TIMEOUT                   200
 
 /* SYNCPTs 12-17 are reserved for VI. */
 #define TEGRA_VI_SYNCPT_VI                              NVSYNCPT_VI_ISP_2
@@ -339,21 +339,26 @@ static void tegra_camera_capture_setup(struct tegra_camera_dev *pcdev)
 	TC_VI_REG_WT(pcdev, TEGRA_CSI_PIXEL_STREAM_A_EXPECTED_FRAME,
 		     0x00000000);
 
-	TC_VI_REG_WT(pcdev, TEGRA_CSI_CLKEN_OVERRIDE, 0x00000000);
-	TC_VI_REG_WT(pcdev, TEGRA_CSI_CSI_PIXEL_PARSER_INTERRUPT_MASK,
-		     0x00000000);
-
-	TC_VI_REG_WT(pcdev, TEGRA_CSI_CSI_CIL_INTERRUPT_MASK, 0x00000000);
-
 	/* pad1s enabled, virtual channel ID 00 */
-	TC_VI_REG_WT(pcdev, TEGRA_CSI_PIXEL_STREAM_A_CONTROL0, 0x20011ef0);
-	TC_VI_REG_WT(pcdev, TEGRA_CSI_PIXEL_STREAM_A_CONTROL1, 0x00000001);
+	TC_VI_REG_WT(pcdev, TEGRA_CSI_PIXEL_STREAM_A_CONTROL0,
+		(0x1 << 16) | /* Output 1 pixel per clock */
+		(0x1e << 8) | /*  If header shows wrong format, use YUV422 */
+		(0x1 << 7) | /* Check header CRC */
+		(0x1 << 6) | /* Use word count field in the header */
+		(0x1 << 5) | /* Look at data identifier byte in header */
+		(0x1 << 4)); /* Expect packet header */
+
+	TC_VI_REG_WT(pcdev, TEGRA_CSI_PIXEL_STREAM_A_CONTROL1,
+		0x1); /* Frame number for top field detection for interlaced */
+
 	TC_VI_REG_WT(pcdev, TEGRA_CSI_PIXEL_STREAM_A_WORD_COUNT,
 		pcdev->bytes_per_line);
 	TC_VI_REG_WT(pcdev, TEGRA_CSI_PIXEL_STREAM_A_GAP, 0x00140000);
 
 	TC_VI_REG_WT(pcdev, TEGRA_CSI_PIXEL_STREAM_A_EXPECTED_FRAME,
-		(pcdev->lines << 16));
+		(pcdev->lines << 16) |
+		(0x100 << 4) | /* Wait 0x100 vi clock cycles for timeout */
+		0x1); /* Enable line timeout */
 
 	/* 1 data lane */
 	TC_VI_REG_WT(pcdev, TEGRA_CSI_INPUT_STREAM_A_CONTROL, 0x007f0000);
@@ -398,6 +403,25 @@ static int tegra_camera_capture_start(struct tegra_camera_dev *pcdev,
 					 pcdev->syncpt_csi,
 					 TEGRA_SYNCPT_CSI_WAIT_TIMEOUT);
 
+	if (err) {
+		u32 ppstatus;
+		u32 cilstatus;
+
+		dev_err(&pcdev->ndev->dev, "Timeout on CSI syncpt\n");
+		dev_err(&pcdev->ndev->dev, "buffer_addr = 0x%08x\n",
+			buffer_addr);
+
+		ppstatus = TC_VI_REG_RD(pcdev,
+					TEGRA_CSI_CSI_PIXEL_PARSER_STATUS);
+		cilstatus = TC_VI_REG_RD(pcdev,
+					 TEGRA_CSI_CSI_CIL_STATUS);
+		dev_err(&pcdev->ndev->dev,
+			"PPSTATUS = 0x%08x, CILSTATUS = 0x%08x\n",
+			ppstatus, cilstatus);
+
+		BUG_ON(1);
+	}
+
 	return err;
 }
 
@@ -411,6 +435,28 @@ static int tegra_camera_capture_stop(struct tegra_camera_dev *pcdev)
 					 TEGRA_VI_SYNCPT_VI,
 					 pcdev->syncpt_vi,
 					 TEGRA_SYNCPT_VI_WAIT_TIMEOUT);
+
+	if (err) {
+		u32 buffer_addr;
+		u32 ppstatus;
+		u32 cilstatus;
+
+		dev_err(&pcdev->ndev->dev, "Timeout on VI syncpt\n");
+		buffer_addr = TC_VI_REG_RD(pcdev,
+					   TEGRA_VI_VB0_BASE_ADDRESS_FIRST);
+		dev_err(&pcdev->ndev->dev, "buffer_addr = 0x%08x\n",
+			buffer_addr);
+
+		ppstatus = TC_VI_REG_RD(pcdev,
+					TEGRA_CSI_CSI_PIXEL_PARSER_STATUS);
+		cilstatus = TC_VI_REG_RD(pcdev,
+					 TEGRA_CSI_CSI_CIL_STATUS);
+		dev_err(&pcdev->ndev->dev,
+			"PPSTATUS = 0x%08x, CILSTATUS = 0x%08x\n",
+			ppstatus, cilstatus);
+
+		BUG_ON(1);
+	}
 
 	return err;
 }
@@ -546,7 +592,13 @@ static int tegra_videobuf_prepare(struct videobuf_queue *vq,
 	dev_dbg(icd->dev.parent, "%s (vb=0x%p) 0x%08lx %zd\n", __func__,
 		vb, vb->baddr, vb->bsize);
 
+#ifdef PREFILL_BUFFER
+	/*
+	 * This can be useful if you want to see if we actually fill
+	 * the buffer with something
+	 */
 	memset((void *)vb->baddr, 0xaa, vb->bsize);
+#endif
 
 	BUG_ON(NULL == icd->current_fmt);
 
