@@ -71,6 +71,7 @@ struct tegra_dc_ext_flip_windowattr {
 	__u32	out_w;
 	__u32	out_h;
 	__u32	z;
+	__u32	swap_interval;
 	__u32	pre_syncpt_id;
 	__u32	pre_syncpt_val;
 };
