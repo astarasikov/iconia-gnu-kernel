@@ -90,6 +90,17 @@ struct tegra_dc_out {
 struct tegra_dc;
 struct nvmap_handle_ref;
 
+struct tegra_dc_csc {
+	unsigned short yof;
+	unsigned short kyrgb;
+	unsigned short kur;
+	unsigned short kvr;
+	unsigned short kug;
+	unsigned short kvg;
+	unsigned short kub;
+	unsigned short kvb;
+};
+
 struct tegra_dc_win {
 	u8			idx;
 	u8			fmt;
@@ -110,6 +121,8 @@ struct tegra_dc_win {
 	unsigned		out_w;
 	unsigned		out_h;
 	unsigned		z;
+
+	struct tegra_dc_csc	csc;
 
 	int			dirty;
 	int			underflows;
@@ -199,5 +212,7 @@ unsigned tegra_dc_get_out_width(struct tegra_dc *dc);
  * since there is a single audio source routed to themn all.
  */
 int tegra_dc_hdmi_set_audio_sample_rate(unsigned audio_freq);
+
+int tegra_dc_update_csc(struct tegra_dc *dc, int win_index);
 
 #endif
