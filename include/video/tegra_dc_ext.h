@@ -76,6 +76,8 @@ struct tegra_dc_ext_flip_windowattr {
 
 struct tegra_dc_ext_flip {
 	struct tegra_dc_ext_flip_windowattr win[TEGRA_DC_EXT_FLIP_N_WINDOWS];
+	__u32	post_syncpt_id;
+	__u32	post_syncpt_val;
 };
 
 #define TEGRA_DC_EXT_SET_NVMAP_FD \

@@ -1344,6 +1344,7 @@ static int tegra_dc_suspend(struct nvhost_device *ndev, pm_message_t state)
 
 	if (dc->enabled) {
 		tegra_fb_suspend(dc->fb);
+		tegra_dc_ext_suspend(dc->ext);
 		_tegra_dc_disable(dc);
 	}
 	mutex_unlock(&dc->lock);
