@@ -507,6 +507,21 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 		unsigned h_dda;
 		unsigned v_dda;
 		bool yuvp = tegra_dc_is_yuv_planar(win->fmt);
+		static const struct {
+			bool h;
+			bool v;
+		} can_filter[] = {
+			/* Window A has no filtering */
+			{ false, false },
+			/* Window B has both H and V filtering */
+			{ true,  true  },
+			/* Window C has only H filtering */
+			{ false, true  },
+		};
+		const bool filter_h = can_filter[win->idx].h &&
+			(win->w != win->out_w);
+		const bool filter_v = can_filter[win->idx].v &&
+			(win->h != win->out_h);
 
 		if (win->z != dc->blend.z[win->idx]) {
 			dc->blend.z[win->idx] = win->z;
@@ -583,9 +598,9 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 		else if (tegra_dc_fmt_bpp(win->fmt) < 24)
 			val |= COLOR_EXPAND;
 
-		if (win->w != win->out_w)
+		if (filter_h)
 			val |= H_FILTER_ENABLE;
-		if (win->h != win->out_h)
+		if (filter_v)
 			val |= V_FILTER_ENABLE;
 
 		tegra_dc_writel(dc, val, DC_WIN_WIN_OPTIONS);
