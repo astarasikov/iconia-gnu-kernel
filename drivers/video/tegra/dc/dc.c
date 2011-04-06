@@ -615,30 +615,32 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 }
 EXPORT_SYMBOL(tegra_dc_update_windows);
 
-u32 tegra_dc_get_syncpt_id(const struct tegra_dc *dc)
+u32 tegra_dc_get_syncpt_id(const struct tegra_dc *dc, int i)
 {
-	return dc->syncpt_id;
+	return dc->syncpt[i].id;
 }
 EXPORT_SYMBOL(tegra_dc_get_syncpt_id);
 
-u32 tegra_dc_incr_syncpt_max(struct tegra_dc *dc)
+u32 tegra_dc_incr_syncpt_max(struct tegra_dc *dc, int i)
 {
 	u32 max;
 
 	mutex_lock(&dc->lock);
-	max = nvhost_syncpt_incr_max(&dc->ndev->host->syncpt, dc->syncpt_id, 1);
-	dc->syncpt_max = max;
+	max = nvhost_syncpt_incr_max(&dc->ndev->host->syncpt,
+		dc->syncpt[i].id, 1);
+	dc->syncpt[i].max = max;
 	mutex_unlock(&dc->lock);
 
 	return max;
 }
 
-void tegra_dc_incr_syncpt_min(struct tegra_dc *dc, u32 val)
+void tegra_dc_incr_syncpt_min(struct tegra_dc *dc, int i, u32 val)
 {
 	mutex_lock(&dc->lock);
-	while (dc->syncpt_min < val) {
-		dc->syncpt_min++;
-		nvhost_syncpt_cpu_incr(&dc->ndev->host->syncpt, dc->syncpt_id);
+	while (dc->syncpt[i].min < val) {
+		dc->syncpt[i].min++;
+		nvhost_syncpt_cpu_incr(&dc->ndev->host->syncpt,
+			dc->syncpt[i].id);
 	}
 	mutex_unlock(&dc->lock);
 }
@@ -964,15 +966,58 @@ static void tegra_dc_set_color_control(struct tegra_dc *dc)
 	tegra_dc_writel(dc, color_control, DC_DISP_DISP_COLOR_CONTROL);
 }
 
+static u32 get_syncpt(struct tegra_dc *dc, int idx)
+{
+	u32 syncpt_id;
+
+	switch (dc->ndev->id) {
+	case 0:
+		switch (idx) {
+		case 0:
+			syncpt_id = NVSYNCPT_DISP0_A;
+			break;
+		case 1:
+			syncpt_id = NVSYNCPT_DISP0_B;
+			break;
+		case 2:
+			syncpt_id = NVSYNCPT_DISP0_C;
+			break;
+		default:
+			BUG();
+			break;
+		}
+		break;
+	case 1:
+		switch (idx) {
+		case 0:
+			syncpt_id = NVSYNCPT_DISP1_A;
+			break;
+		case 1:
+			syncpt_id = NVSYNCPT_DISP1_B;
+			break;
+		case 2:
+			syncpt_id = NVSYNCPT_DISP1_C;
+			break;
+		default:
+			BUG();
+			break;
+		}
+		break;
+	default:
+		BUG();
+		break;
+	}
+
+	return syncpt_id;
+}
+
 static void tegra_dc_init(struct tegra_dc *dc)
 {
-	u32 disp_syncpt = 0;
 	u32 vblank_syncpt = 0;
 	int i;
 
 	tegra_dc_writel(dc, 0x00000100, DC_CMD_GENERAL_INCR_SYNCPT_CNTRL);
 	if (dc->ndev->id == 0) {
-		disp_syncpt = NVSYNCPT_DISP0;
 		vblank_syncpt = NVSYNCPT_VBLANK0;
 
 		tegra_mc_set_priority(TEGRA_MC_CLIENT_DISPLAY0A,
@@ -986,7 +1031,6 @@ static void tegra_dc_init(struct tegra_dc *dc)
 		tegra_mc_set_priority(TEGRA_MC_CLIENT_DISPLAYHC,
 				      TEGRA_MC_PRIO_HIGH);
 	} else if (dc->ndev->id == 1) {
-		disp_syncpt = NVSYNCPT_DISP1;
 		vblank_syncpt = NVSYNCPT_VBLANK1;
 
 		tegra_mc_set_priority(TEGRA_MC_CLIENT_DISPLAY0AB,
@@ -1026,10 +1070,14 @@ static void tegra_dc_init(struct tegra_dc *dc)
 	}
 
 
-	dc->syncpt_id = disp_syncpt;
+	for (i = 0; i < dc->n_windows; i++) {
+		u32 syncpt = get_syncpt(dc, i);
 
-	dc->syncpt_min = dc->syncpt_max =
-		nvhost_syncpt_read(&dc->ndev->host->syncpt, disp_syncpt);
+		dc->syncpt[i].id = syncpt;
+
+		dc->syncpt[i].min = dc->syncpt[i].max =
+			nvhost_syncpt_read(&dc->ndev->host->syncpt, syncpt);
+	}
 
 	if (dc->mode.pclk)
 		tegra_dc_program_mode(dc, &dc->mode);
@@ -1077,6 +1125,8 @@ void tegra_dc_enable(struct tegra_dc *dc)
 
 static void _tegra_dc_disable(struct tegra_dc *dc)
 {
+	int i;
+
 	disable_irq(dc->irq);
 
 	if (dc->out_ops && dc->out_ops->disable)
@@ -1090,9 +1140,12 @@ static void _tegra_dc_disable(struct tegra_dc *dc)
 		dc->out->disable();
 
 	/* flush any pending syncpt waits */
-	while (dc->syncpt_min < dc->syncpt_max) {
-		dc->syncpt_min++;
-		nvhost_syncpt_cpu_incr(&dc->ndev->host->syncpt, dc->syncpt_id);
+	for (i = 0; i < dc->n_windows; i++) {
+		while (dc->syncpt[i].min < dc->syncpt[i].max) {
+			dc->syncpt[i].min++;
+			nvhost_syncpt_cpu_incr(&dc->ndev->host->syncpt,
+				dc->syncpt[i].id);
+		}
 	}
 
 	tegra_dc_io_end(dc);
