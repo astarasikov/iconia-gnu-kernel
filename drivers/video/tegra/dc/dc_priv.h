@@ -24,6 +24,8 @@
 #include <linux/wait.h>
 #include "../host/dev.h"
 
+#include <mach/tegra_dc_ext.h>
+
 struct tegra_dc;
 
 struct tegra_dc_blend {
@@ -87,6 +89,8 @@ struct tegra_dc {
 
 	unsigned long			underflow_mask;
 	struct work_struct		reset_work;
+
+	struct tegra_dc_ext		*ext;
 };
 
 static inline void tegra_dc_io_start(struct tegra_dc *dc)

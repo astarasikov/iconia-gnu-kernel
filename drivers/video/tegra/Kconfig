@@ -27,6 +27,13 @@ config FB_TEGRA
 	help
 	  Framebuffer device support for the Tegra display controller.
 
+config TEGRA_DC_EXTENSIONS
+	bool "Tegra Display Controller Extensions"
+	depends on TEGRA_DC
+	help
+	  This exposes support for extended capabilities of the Tegra display
+	  controller to userspace drivers.
+
 config TEGRA_NVMAP
 	bool "Tegra GPU memory management driver (nvmap)"
 	default y
