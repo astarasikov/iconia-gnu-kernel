@@ -30,6 +30,7 @@
 #include <linux/ktime.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
+#include <drm/drm_fixed.h>
 
 #include <mach/clk.h>
 #include <mach/dc.h>
@@ -479,6 +480,60 @@ static void tegra_dc_set_scaling_filter(struct tegra_dc *dc)
 	}
 }
 
+static inline u32 compute_dda_inc(fixed20_12 in, unsigned out_int,
+				  bool filter, bool v, unsigned Bpp)
+{
+	/*
+	 * - Filter on:  min(round((prescaled_size_in_pixels - 1) * 0x1000 /
+	 *			   (post_scaled_size_in_pixels - 1)), MAX)
+	 * - Filter off: min(round(prescaled_size_in_pixels * 0x1000 /
+	 *			   (post_scaled_size_in_pixels - 1) - 0.5), MAX)
+	 * Where the value of MAX is as follows:
+	 * For V_DDA_INCREMENT: 15.0 (0xF000)
+	 * For H_DDA_INCREMENT:  4.0 (0x4000) for 4 Bytes/pix formats.
+	 *			 8.0 (0x8000) for 2 Bytes/pix formats.
+	 */
+
+	fixed20_12 tmp, out = dfixed_init(out_int);
+	u32 dda_inc;
+	int max;
+
+	if (v) {
+		max = 15;
+	} else {
+		switch (Bpp) {
+		default:
+			WARN_ON_ONCE(1);
+			/* fallthrough */
+		case 4:
+			max = 4;
+			break;
+		case 2:
+			max = 8;
+			break;
+		}
+	}
+
+	out.full = max_t(u32, out.full - dfixed_const(1), dfixed_const(1));
+	if (filter)
+		in.full -= dfixed_const(1);
+	else {
+		tmp.full = dfixed_const_half(0);
+		in.full -= dfixed_div(tmp, out);
+	}
+
+	dda_inc = dfixed_div(in, out);
+
+	dda_inc = min_t(u32, dda_inc, dfixed_const(max));
+
+	return dda_inc;
+}
+
+static inline u32 compute_initial_dda(fixed20_12 in)
+{
+	return dfixed_frac(in);
+}
+
 /* does not support updating windows on multiple dcs in one call */
 int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 {
@@ -507,6 +562,7 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 		unsigned h_dda;
 		unsigned v_dda;
 		bool yuvp = tegra_dc_is_yuv_planar(win->fmt);
+		unsigned Bpp = tegra_dc_fmt_bpp(win->fmt) / 8;
 		static const struct {
 			bool h;
 			bool v;
@@ -519,9 +575,9 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 			{ false, true  },
 		};
 		const bool filter_h = can_filter[win->idx].h &&
-			(win->w != win->out_w);
+			(win->w.full != dfixed_const(win->out_w));
 		const bool filter_v = can_filter[win->idx].v &&
-			(win->h != win->out_h);
+			(win->h.full != dfixed_const(win->out_h));
 
 		if (win->z != dc->blend.z[win->idx]) {
 			dc->blend.z[win->idx] = win->z;
@@ -555,16 +611,20 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 				V_SIZE(win->out_h) | H_SIZE(win->out_w),
 				DC_WIN_SIZE);
 		tegra_dc_writel(dc,
-				V_PRESCALED_SIZE(win->h) |
-				H_PRESCALED_SIZE(win->w * tegra_dc_fmt_bpp(win->fmt) / 8),
+				V_PRESCALED_SIZE(dfixed_trunc(win->h)) |
+				H_PRESCALED_SIZE(dfixed_trunc(win->w) * Bpp),
 				DC_WIN_PRESCALED_SIZE);
 
-		h_dda = ((win->w - 1) * 0x1000) / max_t(int, win->out_w - 1, 1);
-		v_dda = ((win->h - 1) * 0x1000) / max_t(int, win->out_h - 1, 1);
+		h_dda = compute_dda_inc(win->w, win->out_w,
+					filter_h, false, Bpp);
+		v_dda = compute_dda_inc(win->h, win->out_h,
+					filter_v, true, Bpp);
 		tegra_dc_writel(dc, V_DDA_INC(v_dda) | H_DDA_INC(h_dda),
 				DC_WIN_DDA_INCREMENT);
-		tegra_dc_writel(dc, 0, DC_WIN_H_INITIAL_DDA);
-		tegra_dc_writel(dc, 0, DC_WIN_V_INITIAL_DDA);
+		h_dda = compute_initial_dda(win->x);
+		v_dda = compute_initial_dda(win->y);
+		tegra_dc_writel(dc, h_dda, DC_WIN_H_INITIAL_DDA);
+		tegra_dc_writel(dc, v_dda, DC_WIN_V_INITIAL_DDA);
 
 		tegra_dc_writel(dc, 0, DC_WIN_BUF_STRIDE);
 		tegra_dc_writel(dc, 0, DC_WIN_UV_BUF_STRIDE);
@@ -588,9 +648,10 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 					DC_WIN_LINE_STRIDE);
 		}
 
-		tegra_dc_writel(dc, win->x * tegra_dc_fmt_bpp(win->fmt) / 8,
+		tegra_dc_writel(dc, dfixed_trunc(win->x) * Bpp,
 				DC_WINBUF_ADDR_H_OFFSET);
-		tegra_dc_writel(dc, win->y, DC_WINBUF_ADDR_V_OFFSET);
+		tegra_dc_writel(dc, dfixed_trunc(win->y),
+				DC_WINBUF_ADDR_V_OFFSET);
 
 		val = WIN_ENABLE;
 		if (yuvp)
