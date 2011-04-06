@@ -64,6 +64,7 @@ struct tegra_dc {
 	struct clk			*clk;
 	struct clk			*emc_clk;
 
+	bool				connected;
 	bool				enabled;
 
 	struct tegra_dc_out		*out;
