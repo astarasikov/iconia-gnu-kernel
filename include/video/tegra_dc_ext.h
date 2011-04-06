@@ -21,7 +21,10 @@
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
-#if !defined(__KERNEL__)
+#if defined(__KERNEL__)
+# include <linux/time.h>
+#else
+# include <time.h>
 # include <unistd.h>
 #endif
 
@@ -72,6 +75,7 @@ struct tegra_dc_ext_flip_windowattr {
 	__u32	out_h;
 	__u32	z;
 	__u32	swap_interval;
+	struct timespec timestamp;
 	__u32	pre_syncpt_id;
 	__u32	pre_syncpt_val;
 };
