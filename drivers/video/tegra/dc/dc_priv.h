@@ -83,9 +83,11 @@ struct tegra_dc {
 	struct resource			*fb_mem;
 	struct tegra_fb_info		*fb;
 
-	u32				syncpt_id;
-	u32				syncpt_min;
-	u32				syncpt_max;
+	struct {
+		u32			id;
+		u32			min;
+		u32			max;
+	} syncpt[DC_N_WINDOWS];
 
 	unsigned long			underflow_mask;
 	struct work_struct		reset_work;
