@@ -26,8 +26,9 @@
 #include <mach/iomap.h>
 #include <mach/nvhost.h>
 
-#include "gpio-names.h"
+#include "board-seaboard.h"
 #include "devices.h"
+#include "gpio-names.h"
 
 /* I2C adapter ID for the camera board. */
 #define TEGRA_CAMERA_I2C_ADAPTER_ID	3
@@ -68,6 +69,13 @@ static int tegra_camera_enable(struct nvhost_device *ndev)
 	if (err != 0)
 		goto exit_regulator_put;
 
+        err = gpio_request(TEGRA_CAMERA_GPIO_PMU, "cam_pmu_gpio2");
+        if (err != 0)
+                goto exit_regulator_put;
+        err = gpio_direction_output(TEGRA_CAMERA_GPIO_PMU, 1);
+        if (err != 0)
+                goto exit_free_gpio_pmu;
+
 	/* Set up GPIOs. */
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_PWR_EN, 1);
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_RST, 1);
@@ -81,6 +89,8 @@ static int tegra_camera_enable(struct nvhost_device *ndev)
 
 	return 0;
 
+exit_free_gpio_pmu:
+        gpio_free(TEGRA_CAMERA_GPIO_PMU);
 exit_regulator_put:
 	regulator_put(regulator);
 exit:
@@ -92,6 +102,8 @@ static void tegra_camera_disable(struct nvhost_device *ndev)
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_PWDN, 1);
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_RST, 0);
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_PWR_EN, 0);
+
+        gpio_free(TEGRA_CAMERA_GPIO_PMU);
 
 	BUG_ON(!regulator);
 	regulator_disable(regulator);
