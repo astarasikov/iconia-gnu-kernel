@@ -929,11 +929,11 @@ static void client_stringify(struct nvmap_client *client, struct seq_file *s)
 {
 	char task_comm[TASK_COMM_LEN];
 	if (!client->task) {
-		seq_printf(s, "%8s %16s %8u", client->name, "kernel", 0);
+		seq_printf(s, "%-18s %18s %8u", client->name, "kernel", 0);
 		return;
 	}
 	get_task_comm(task_comm, client->task);
-	seq_printf(s, "%8s %16s %8u", client->name, task_comm,
+	seq_printf(s, "%-18s %18s %8u", client->name, task_comm,
 		   client->task->pid);
 }
 
@@ -941,37 +941,61 @@ static void allocations_stringify(struct nvmap_client *client,
 				  struct seq_file *s)
 {
 	struct rb_node *n = rb_first(&client->handle_refs);
-	unsigned long long total = 0;
+	const unsigned long base = 0;
 
 	for (; n != NULL; n = rb_next(n)) {
 		struct nvmap_handle_ref *ref =
 			rb_entry(n, struct nvmap_handle_ref, node);
 		struct nvmap_handle *handle = ref->handle;
-		if (handle->alloc && !handle->heap_pgalloc) {
-			seq_printf(s, " %8u@%8lx ", handle->size,
-				   handle->carveout->base);
-			total += handle->size;
-		}
+		if (!handle->alloc)
+			continue;
+
+		if (!handle->heap_pgalloc)
+			seq_printf(s, "%-18s %-18s %8lx %10u\n", "", "",
+					(unsigned long)(handle->carveout->base),
+					handle->size);
+		else
+			seq_printf(s, "%-18s %-18s %8lx %10u\n", "", "",
+					base, handle->size);
 	}
-	seq_printf(s, " total: %llu\n", total);
 }
 
-static int nvmap_debug_allocations_show(struct seq_file *s, void *unused)
+#define NVMAP_DEBUGFS_MODE_ALLOCATIONS	0
+#define NVMAP_DEBUGFS_MODE_CLIENTS	1
+static int nvmap_debug_show(struct seq_file *s, int mode)
 {
 	struct nvmap_carveout_node *node = s->private;
 	struct nvmap_carveout_commit *commit;
 	unsigned long flags;
+	unsigned int total = 0;
 
 	spin_lock_irqsave(&node->clients_lock, flags);
+	seq_printf(s, "%-18s %18s %8s %10s\n", "CLIENT", "PROCESS", "PID",
+			"SIZE");
+	if (mode == NVMAP_DEBUGFS_MODE_ALLOCATIONS)
+		seq_printf(s, "%-18s %18s %8s %10s\n", "", "",
+						"BASE", "SIZE");
+
 	list_for_each_entry(commit, &node->clients, list) {
 		struct nvmap_client *client =
 			get_client_from_carveout_commit(node, commit);
 		client_stringify(client, s);
-		allocations_stringify(client, s);
+		seq_printf(s, " %10u\n", commit->commit);
+		if (mode == NVMAP_DEBUGFS_MODE_ALLOCATIONS) {
+			allocations_stringify(client, s);
+			seq_printf(s, "\n");
+		}
+		total += commit->commit;
 	}
+	seq_printf(s, "%-18s %-18s %8u %10u\n", "total", "", 0, total);
 	spin_unlock_irqrestore(&node->clients_lock, flags);
 
 	return 0;
+}
+
+static int nvmap_debug_allocations_show(struct seq_file *s, void *unused)
+{
+	return nvmap_debug_show(s, NVMAP_DEBUGFS_MODE_ALLOCATIONS);
 }
 
 static int nvmap_debug_allocations_open(struct inode *inode, struct file *file)
@@ -989,20 +1013,7 @@ static struct file_operations debug_allocations_fops = {
 
 static int nvmap_debug_clients_show(struct seq_file *s, void *unused)
 {
-	struct nvmap_carveout_node *node = s->private;
-	struct nvmap_carveout_commit *commit;
-	unsigned long flags;
-
-	spin_lock_irqsave(&node->clients_lock, flags);
-	list_for_each_entry(commit, &node->clients, list) {
-		struct nvmap_client *client =
-			get_client_from_carveout_commit(node, commit);
-		client_stringify(client, s);
-		seq_printf(s, " %8u\n", commit->commit);
-	}
-	spin_unlock_irqrestore(&node->clients_lock, flags);
-
-	return 0;
+	return nvmap_debug_show(s, NVMAP_DEBUGFS_MODE_CLIENTS);
 }
 
 static int nvmap_debug_clients_open(struct inode *inode, struct file *file)
@@ -1161,9 +1172,9 @@ static int nvmap_probe(struct platform_device *pdev)
 			struct dentry *heap_root =
 				debugfs_create_dir(co->name, nvmap_debug_root);
 			if (!IS_ERR_OR_NULL(heap_root)) {
-				debugfs_create_file("clients", 0664, heap_root,
+				debugfs_create_file("clients", 0444, heap_root,
 				    node, &debug_clients_fops);
-				debugfs_create_file("allocations", 0664,
+				debugfs_create_file("allocations", 0444,
 				    heap_root, node, &debug_allocations_fops);
 			}
 		}
