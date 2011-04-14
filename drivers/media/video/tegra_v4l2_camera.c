@@ -276,6 +276,7 @@ static void tegra_camera_capture_setup(struct tegra_camera_dev *pcdev)
 	TC_VI_REG_WT(pcdev, TEGRA_VI_VI_FIRST_OUTPUT_CONTROL,
 		(pcdev->pdata->flip_v ? (0x1 << 20) : 0) |
 		(pcdev->pdata->flip_h ? (0x1 << 19) : 0) |
+		(0x2 << 17) |
 		0x3); /* YUV422 non-planar after down-scaling */
 
 	/* Set up frame size.  Bits 31:16 are the number of lines, and
