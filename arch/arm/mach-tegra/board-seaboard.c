@@ -75,14 +75,12 @@ static struct platform_device debug_uart = {
 static __initdata struct tegra_clk_init_table seaboard_clk_init_table[] = {
 	/* name		parent		rate		enabled */
 	{ "clk_m",      NULL,           12000000,       true},
-	{ "pll_m",      "clk_m",        666000000,      true},
 	{ "3d",         "pll_m",        300000000,      false},
 	{ "2d",         "pll_m",        300000000,      false},
 	{ "vi",         "pll_m",        150000000,       true},
 	{ "vi_sensor",  "pll_m",        18200000,       false},
 	{ "epp",        "pll_m",        300000000,      false},
 	{ "mpe",        "pll_m",        100000000,      false},
-	{ "emc",        "pll_m",        666000000,      true},
 	{ "pll_c",      "clk_m",        600000000,      true},
 	{ "pll_c_out1", "pll_c",        108000000,      true},
 	{ "vde",        "pll_c",        240000000,      false},
