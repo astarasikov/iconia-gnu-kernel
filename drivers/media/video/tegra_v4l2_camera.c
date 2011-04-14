@@ -1120,24 +1120,67 @@ static int __devexit tegra_camera_remove(struct nvhost_device *ndev)
 	return 0;
 }
 
-static int tegra_camera_runtime_nop(struct device *dev)
+#ifdef CONFIG_PM
+static int tegra_camera_suspend(struct nvhost_device *ndev, pm_message_t state)
 {
+	struct soc_camera_host *soc_host = to_soc_camera_host(&ndev->dev);
+	struct tegra_camera_dev *pcdev = container_of(soc_host,
+					struct tegra_camera_dev, soc_host);
+
+	mutex_lock(&pcdev->work_mutex);
+
+	/* We only need to do something if a camera sensor is attached. */
+	if (pcdev->icd) {
+		/* Suspend the camera sensor. */
+		WARN_ON(!pcdev->icd->ops->suspend);
+		pcdev->icd->ops->suspend(pcdev->icd, state);
+
+		/* Suspend the camera host. */
+
+		/* Power off the camera subsystem. */
+		pcdev->pdata->disable_camera(pcdev->ndev);
+	}
+
 	return 0;
 }
 
-static const struct dev_pm_ops tegra_camera_dev_pm_ops = {
-	.runtime_suspend = tegra_camera_runtime_nop,
-	.runtime_resume = tegra_camera_runtime_nop,
-};
+static int tegra_camera_resume(struct nvhost_device *ndev)
+{
+	struct soc_camera_host *soc_host = to_soc_camera_host(&ndev->dev);
+	struct tegra_camera_dev *pcdev = container_of(soc_host,
+					struct tegra_camera_dev, soc_host);
+
+	/* We only need to do something if a camera sensor is attached. */
+	if (pcdev->icd) {
+		/* Power on the camera subsystem. */
+		pcdev->pdata->enable_camera(pcdev->ndev);
+
+		/* Resume the camera host. */
+		tegra_camera_activate(pcdev);
+		tegra_camera_capture_setup(pcdev);
+
+		/* Resume the camera sensor. */
+		WARN_ON(!pcdev->icd->ops->resume);
+		pcdev->icd->ops->resume(pcdev->icd);
+	}
+
+	mutex_unlock(&pcdev->work_mutex);
+
+	return 0;
+}
+#endif
 
 static struct nvhost_driver tegra_camera_driver = {
 	.driver	= {
 		.name	= TEGRA_CAM_DRV_NAME,
 		.owner	= THIS_MODULE,
-		.pm	= &tegra_camera_dev_pm_ops,
 	},
 	.probe		= tegra_camera_probe,
 	.remove		= __devexit_p(tegra_camera_remove),
+#ifdef CONFIG_PM
+	.suspend	= tegra_camera_suspend,
+	.resume		= tegra_camera_resume,
+#endif
 };
 
 
