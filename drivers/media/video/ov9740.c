@@ -421,6 +421,9 @@ static const struct ov9740_reg ov9740_defaults[] = {
 	{ OV9740_VFIFO_RD_CTRL,		0x16 },
 	{ OV9740_MIPI_CTRL_3012,	0x70 },
 	{ OV9740_SC_CMMM_MIPI_CTR,	0x01 },
+
+	/* YUYV order */
+	{ OV9740_ISP_CTRL19,		0x02 },
 };
 
 static const struct ov9740_reg ov9740_regs_qsif[] = {
