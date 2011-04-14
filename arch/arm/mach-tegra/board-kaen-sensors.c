@@ -170,7 +170,7 @@ int __init kaen_sensors_init(void)
 	err = gpio_request(TEGRA_CAMERA_GPIO_CAM_PWDN, "cam_pwdn");
 	if (err != 0)
 		goto exit_free_gpio_cam_rst;
-	err = gpio_direction_output(TEGRA_CAMERA_GPIO_CAM_PWDN, 0);
+	err = gpio_direction_output(TEGRA_CAMERA_GPIO_CAM_PWDN, 1);
 	if (err != 0)
 		goto exit_free_gpio_cam_pwdn;
 
