@@ -244,6 +244,10 @@ struct ov9740_priv {
 
 	bool				flag_vflip;
 	bool				flag_hflip;
+
+	/* For suspend/resume. */
+	struct v4l2_mbus_framefmt	current_mf;
+	int				current_enable;
 };
 
 static const struct ov9740_reg ov9740_defaults[] = {
@@ -761,6 +765,8 @@ static int ov9740_s_stream(struct v4l2_subdev *sd, int enable)
 					       0x00);
 	}
 
+	priv->current_enable = enable;
+
 	return ret;
 }
 
@@ -939,6 +945,7 @@ static int ov9740_s_fmt(struct v4l2_subdev *sd,
 			struct v4l2_mbus_framefmt *mf)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	struct ov9740_priv *priv = to_ov9740(sd);
 	enum v4l2_colorspace cspace;
 	enum v4l2_mbus_pixelcode code = mf->code;
 	int ret;
@@ -964,6 +971,8 @@ static int ov9740_s_fmt(struct v4l2_subdev *sd,
 
 	mf->code	= code;
 	mf->colorspace	= cspace;
+
+	memcpy(&priv->current_mf, mf, sizeof(struct v4l2_mbus_framefmt));
 
 	return ret;
 }
@@ -1075,7 +1084,37 @@ err:
 	return ret;
 }
 
+static int ov9740_suspend(struct soc_camera_device *icd, pm_message_t state)
+{
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+	struct ov9740_priv *priv = to_ov9740(sd);
+
+	if (priv->current_enable) {
+		int current_enable = priv->current_enable;
+
+		ov9740_s_stream(sd, 0);
+		priv->current_enable = current_enable;
+	}
+
+	return 0;
+}
+
+static int ov9740_resume(struct soc_camera_device *icd)
+{
+	struct v4l2_subdev *sd = soc_camera_to_subdev(icd);
+	struct ov9740_priv *priv = to_ov9740(sd);
+
+	if (priv->current_enable) {
+		ov9740_s_fmt(sd, &priv->current_mf);
+		ov9740_s_stream(sd, priv->current_enable);
+	}
+
+	return 0;
+}
+
 static struct soc_camera_ops ov9740_ops = {
+	.suspend		= ov9740_suspend,
+	.resume			= ov9740_resume,
 	.set_bus_param		= ov9740_set_bus_param,
 	.query_bus_param	= ov9740_query_bus_param,
 	.controls		= ov9740_controls,
