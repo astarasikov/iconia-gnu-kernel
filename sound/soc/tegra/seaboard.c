@@ -472,6 +472,7 @@ static struct platform_driver tegra_snd_seaboard_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.owner = THIS_MODULE,
+		.pm = &snd_soc_pm_ops,
 	},
 	.probe = tegra_snd_seaboard_probe,
 	.remove = __devexit_p(tegra_snd_seaboard_remove),
