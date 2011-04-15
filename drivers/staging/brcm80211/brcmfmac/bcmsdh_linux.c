@@ -114,7 +114,7 @@ bool bcmsdh_chipmatch(u16 vendor, u16 device)
 #ifdef BCMSDIOH_SPI
 	/* This is the PciSpiHost. */
 	if (device == SPIH_FPGA_ID && vendor == VENDOR_BROADCOM) {
-		printf("Found PCI SPI Host Controller\n");
+		WL_NONE("Found PCI SPI Host Controller\n");
 		return true;
 	}
 #endif				/* BCMSDIOH_SPI */
@@ -327,8 +327,6 @@ static irqreturn_t wlan_oob_irq(int irq, void *dev_id)
 		SDLX_MSG(("Out of band GPIO interrupt fired way too early\n"));
 		return IRQ_HANDLED;
 	}
-
-	WAKE_LOCK_TIMEOUT(dhdp, WAKE_LOCK_TMOUT, 25);
 
 	dhdsdio_isr((void *)dhdp->bus);
 

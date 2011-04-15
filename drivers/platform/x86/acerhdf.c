@@ -555,6 +555,11 @@ static int acerhdf_check_hardware(void)
 		return -EINVAL;
 	}
 
+	if (!vendor || !version || !product) {
+		pr_err("error getting hardware information");
+		return -EINVAL;
+	}
+
 	pr_info("Acer Aspire One Fan driver, v.%s\n", DRV_VER);
 
 	if (force_bios[0]) {

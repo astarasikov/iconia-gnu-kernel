@@ -25,6 +25,7 @@
 #include <linux/gpio.h>
 
 #include <mach/iomap.h>
+#include <mach/suspend.h>
 
 #define GPIO_BANK(x)		((x) >> 5)
 #define GPIO_PORT(x)		(((x) >> 3) & 0x3)
@@ -211,6 +212,9 @@ static int tegra_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	else if (type & (IRQ_TYPE_EDGE_FALLING | IRQ_TYPE_EDGE_RISING))
 		__set_irq_handler_unlocked(d->irq, handle_edge_irq);
 
+	if (tegra_get_suspend_mode() == TEGRA_SUSPEND_LP0)
+		tegra_set_lp0_wake_type(d->irq, type);
+
 	return 0;
 }
 
@@ -318,8 +322,17 @@ void tegra_gpio_suspend(void)
 
 static int tegra_gpio_wake_enable(struct irq_data *d, unsigned int enable)
 {
+	int ret;
 	struct tegra_gpio_bank *bank = irq_data_get_irq_chip_data(d);
-	return set_irq_wake(bank->irq, enable);
+
+	ret = tegra_set_lp1_wake(bank->irq, enable);
+	if (ret)
+		return ret;
+
+	if (tegra_get_suspend_mode() == TEGRA_SUSPEND_LP0)
+		return tegra_set_lp0_wake(d->irq, enable);
+
+	return 0;
 }
 #endif
 
@@ -379,6 +392,20 @@ static int __init tegra_gpio_init(void)
 }
 
 postcore_initcall(tegra_gpio_init);
+
+void __init tegra_gpio_config(struct tegra_gpio_table *table, int num)
+{
+	int i;
+
+	for (i = 0; i < num; i++) {
+		int gpio = table[i].gpio;
+
+		if (table[i].enable)
+			tegra_gpio_enable(gpio);
+		else
+			tegra_gpio_disable(gpio);
+	}
+}
 
 #ifdef	CONFIG_DEBUG_FS
 

@@ -49,6 +49,13 @@ config USB_ULPI
 	  Enable this to support ULPI connected USB OTG transceivers which
 	  are likely found on embedded boards.
 
+config USB_ULPI_VIEWPORT
+	bool
+	depends on USB_ULPI
+	help
+	  Provides read/write operations to the ULPI phy register set for
+	  controllers with a viewport register (e.g. Chipidea/ARC controllers).
+
 config TWL4030_USB
 	tristate "TWL4030 USB Transceiver Driver"
 	depends on TWL4030_CORE && REGULATOR_TWL4030
@@ -114,5 +121,13 @@ config AB8500_USB
           Enable this to support the USB OTG transceiver in AB8500 chip.
           This transceiver supports high and full speed devices plus,
           in host mode, low speed.
+
+config USB_TEGRA_OTG
+	boolean "Tegra OTG Driver"
+	depends on USB && ARCH_TEGRA
+	select USB_OTG_UTILS
+	help
+	  Enable this driver on boards which use the internal VBUS and ID
+	  sensing of the Tegra USB PHY.
 
 endif # USB || OTG

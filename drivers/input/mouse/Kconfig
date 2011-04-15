@@ -322,4 +322,15 @@ config MOUSE_SYNAPTICS_I2C
 	  To compile this driver as a module, choose M here: the
 	  module will be called synaptics_i2c.
 
+config MOUSE_CYPRESS_I2C
+	tristate "Cypress I2C Touchpad support"
+	depends on I2C
+	help
+	  This driver supports Cypress I2C touchpad on Chrome OS platform.
+
+	  Say y here if you have Chrome OS that support Cypress I2C Touchpad.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cypress_i2c.
+
 endif

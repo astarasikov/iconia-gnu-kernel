@@ -10,6 +10,10 @@ config ARCH_TEGRA_2x_SOC
 	select CPU_V7
 	select ARM_GIC
 	select ARCH_REQUIRE_GPIOLIB
+	select ARM_ERRATA_742230
+	select USB_ARCH_HAS_EHCI if USB_SUPPORT
+	select USB_ULPI if USB_SUPPORT
+	select USB_ULPI_VIEWPORT if USB_SUPPORT
 	help
 	  Support for NVIDIA Tegra AP20 and T20 processors, based on the
 	  ARM CortexA9MP CPU and the ARM PL310 L2 cache controller
@@ -25,7 +29,42 @@ comment "Tegra board type"
 config MACH_HARMONY
        bool "Harmony board"
        help
-         Support for nVidia Harmony development platform
+         Support for NVIDIA Harmony development platform
+
+config MACH_VENTANA
+       bool "Ventana board"
+       help
+         Support for NVIDIA Ventana development platform
+
+config MACH_KAEN
+       bool "Kaen board"
+       select MACH_SEABOARD
+       help
+         Support for the Kaen version of Seaboard
+
+config MACH_PAZ00
+       bool "Paz00 board"
+       help
+         Support for the Toshiba AC100/Dynabook AZ netbook
+
+config MACH_SEABOARD
+       bool "Seaboard board"
+       help
+         Support for nVidia Seaboard development platform. It will
+	 also be included for some of the derivative boards that
+	 have large similarities with the seaboard design.
+
+config MACH_TRIMSLICE
+       bool "TrimSlice board"
+       select TEGRA_PCI
+       help
+         Support for CompuLab TrimSlice platform
+
+config MACH_WARIO
+       bool "Wario board"
+       select MACH_SEABOARD
+       help
+         Support for the Wario version of Seaboard
 
 choice
         prompt "Low-level debug console UART"
@@ -58,4 +97,45 @@ config TEGRA_SYSTEM_DMA
 	  Adds system DMA functionality for NVIDIA Tegra SoCs, used by
 	  several Tegra device drivers
 
+config TEGRA_EMC_SCALING_ENABLE
+	bool "Enable scaling the memory frequency"
+
+config TEGRA_PWM
+	tristate "Enable PWM driver"
+	select HAVE_PWM
+	help
+	  Enable support for the Tegra PWM controller(s).
+
 endif
+
+config TEGRA_CPU_DVFS
+	bool "Enable voltage scaling on Tegra CPU"
+	default y
+
+config TEGRA_CORE_DVFS
+	bool "Enable voltage scaling on Tegra core"
+	depends on TEGRA_CPU_DVFS
+	default y
+
+config TEGRA_IOVMM_GART
+	bool "Enable I/O virtual memory manager for GART"
+	depends on ARCH_TEGRA_2x_SOC
+	default y
+	select TEGRA_IOVMM
+	help
+	  Enables support for remapping discontiguous physical memory
+	  shared with the operating system into contiguous I/O virtual
+	  space through the GART hardware included on Tegra SoCs
+
+config TEGRA_IOVMM
+	bool
+
+config TEGRA_ARB_SEMAPHORE
+	bool
+
+config TEGRA_THERMAL_THROTTLE
+       bool "Enable throttling of CPU speed on overtemp"
+       depends on CPU_FREQ
+       default y
+       help
+         Also requires enabling a temperature sensor such as NCT1008.

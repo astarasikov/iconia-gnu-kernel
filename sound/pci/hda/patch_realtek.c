@@ -197,6 +197,7 @@ enum {
 	ALC272_DELL,
 	ALC272_DELL_ZM1,
 	ALC272_SAMSUNG_NC10,
+	ALC272_MARIO,
 	ALC662_AUTO,
 	ALC662_MODEL_LAST,
 };
@@ -1128,6 +1129,7 @@ static void alc_automute_speaker(struct hda_codec *codec, int pinctl)
 	unsigned int mute;
 	hda_nid_t nid;
 	int i;
+	unsigned int hdmi_present = 0;
 
 	spec->jack_present = 0;
 	for (i = 0; i < ARRAY_SIZE(spec->autocfg.hp_pins); i++) {
@@ -1140,6 +1142,19 @@ static void alc_automute_speaker(struct hda_codec *codec, int pinctl)
 
 	mute = spec->jack_present ? HDA_AMP_MUTE : 0;
 	/* Toggle internal speakers muting */
+
+	if (!nid)
+		return;
+	spec->jack_present = snd_hda_jack_detect(codec, nid);
+	if (codec->subsystem_id == 0x1025047c) {
+		hdmi_present = snd_hda_codec_read(codec, 0x1e, 0,
+						  AC_VERB_GET_PIN_SENSE, 0);
+		hdmi_present = (hdmi_present & AC_PINSENSE_PRESENCE) ? 1 : 0;
+		snd_hda_codec_write(codec, spec->multiout.dig_out_nid, 0,
+				    AC_VERB_SET_DIGI_CONVERT_1,
+				    spec->jack_present ? 0 : 1);
+	}
+
 	for (i = 0; i < ARRAY_SIZE(spec->autocfg.speaker_pins); i++) {
 		nid = spec->autocfg.speaker_pins[i];
 		if (!nid)
@@ -1147,7 +1162,8 @@ static void alc_automute_speaker(struct hda_codec *codec, int pinctl)
 		if (pinctl) {
 			snd_hda_codec_write(codec, nid, 0,
 				    AC_VERB_SET_PIN_WIDGET_CONTROL,
-				    spec->jack_present ? 0 : PIN_OUT);
+				    (spec->jack_present | hdmi_present) ? 
+				    0 : PIN_OUT);
 		} else {
 			snd_hda_codec_amp_stereo(codec, nid, HDA_OUTPUT, 0,
 					 HDA_AMP_MUTE, mute);
@@ -1255,6 +1271,7 @@ static void alc_sku_unsol_event(struct hda_codec *codec, unsigned int res)
 		res >>= 26;
 	switch (res) {
 	case ALC880_HP_EVENT:
+	case ALC880_FRONT_EVENT:
 		alc_automute_pin(codec);
 		break;
 	case ALC880_MIC_EVENT:
@@ -14510,6 +14527,8 @@ static struct hda_verb alc271_acer_dmic_verbs[] = {
 	{0x21, AC_VERB_SET_CONNECT_SEL, 0x00},
 	{0x21, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN | ALC880_HP_EVENT},
 	{0x18, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN | ALC880_MIC_EVENT},
+	{0x1e, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN
+	 | ALC880_FRONT_EVENT},
 	{0x22, AC_VERB_SET_CONNECT_SEL, 6},
 	{ }
 };
@@ -18220,6 +18239,18 @@ static struct hda_verb alc663_mode8_init_verbs[] = {
 	{}
 };
 
+static struct hda_verb alc272_mario_init_verbs[] = {
+	{0x12, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_IN},
+	{0x21, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_HP},
+	{0x21, AC_VERB_SET_AMP_GAIN_MUTE, AMP_OUT_UNMUTE},
+	{0x21, AC_VERB_SET_CONNECT_SEL, 0x01},	/* Headphone */
+	{0x22, AC_VERB_SET_AMP_GAIN_MUTE, AMP_IN_MUTE(0)},
+	{0x22, AC_VERB_SET_AMP_GAIN_MUTE, AMP_IN_UNMUTE(9)},
+	{0x18, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN | ALC880_MIC_EVENT},
+	{0x21, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN | ALC880_HP_EVENT},
+	{}
+};
+
 static struct snd_kcontrol_new alc662_auto_capture_mixer[] = {
 	HDA_CODEC_VOLUME("Capture Volume", 0x09, 0x0, HDA_INPUT),
 	HDA_CODEC_MUTE("Capture Switch", 0x09, 0x0, HDA_INPUT),
@@ -18703,6 +18734,20 @@ static void alc663_g50v_unsol_event(struct hda_codec *codec,
 	}
 }
 
+static void alc272_mario_inithook(struct hda_codec *codec)
+{
+	alc663_21jd_two_speaker_automute(codec);
+	alc_mic_automute(codec);
+	if (snd_hda_override_amp_caps(codec, 0x2, HDA_OUTPUT,
+				      (0x3b << AC_AMPCAP_OFFSET_SHIFT) |
+				      (0x3b << AC_AMPCAP_NUM_STEPS_SHIFT) |
+				      (0x03 << AC_AMPCAP_STEP_SIZE_SHIFT) |
+				      (0 << AC_AMPCAP_MUTE_SHIFT))) {
+		printk(KERN_WARNING
+		       "hda_codec: failed to override amp caps for NID 0x2\n");
+	}
+}
+
 #define alc663_g50v_setup	alc663_m51va_setup
 
 static void alc663_g50v_inithook(struct hda_codec *codec)
@@ -18739,6 +18784,18 @@ static struct snd_kcontrol_new alc272_nc10_mixer[] = {
 	HDA_CODEC_VOLUME("Internal Mic Playback Volume", 0x0b, 0x1, HDA_INPUT),
 	HDA_CODEC_MUTE("Internal Mic Playback Switch", 0x0b, 0x1, HDA_INPUT),
 	HDA_CODEC_VOLUME("Internal Mic Boost Volume", 0x19, 0, HDA_INPUT),
+	{ } /* end */
+};
+
+static struct snd_kcontrol_new alc272_mario_mixer[] = {
+	HDA_CODEC_VOLUME("Speaker Playback Volume", 0x2, 0x0, HDA_OUTPUT),
+	HDA_CODEC_MUTE("Speaker Playback Switch", 0xc, 0x0, HDA_OUTPUT),
+	HDA_CODEC_VOLUME("Headphone Playback Volume", 0x3, 0x0, HDA_OUTPUT),
+	HDA_CODEC_MUTE("Headphone Playback Switch", 0xd, 0x0, HDA_OUTPUT),
+
+	HDA_CODEC_VOLUME("Mic Playback Volume", 0x0b, 0x0, HDA_INPUT),
+	HDA_CODEC_MUTE("Mic Playback Switch", 0x0b, 0x0, HDA_INPUT),
+	HDA_CODEC_VOLUME("Mic Boost", 0x18, 0, HDA_INPUT),
 	{ } /* end */
 };
 
@@ -18780,6 +18837,7 @@ static const char * const alc662_models[ALC662_MODEL_LAST] = {
 	[ALC272_DELL]		= "dell",
 	[ALC272_DELL_ZM1]	= "dell-zm1",
 	[ALC272_SAMSUNG_NC10]	= "samsung-nc10",
+	[ALC272_MARIO]	        = "mario",
 	[ALC662_AUTO]		= "auto",
 };
 
@@ -19167,6 +19225,18 @@ static struct alc_config_preset alc662_presets[] = {
 		.unsol_event = alc663_mode4_unsol_event,
 		.setup = alc663_mode4_setup,
 		.init_hook = alc663_mode4_inithook,
+	},
+	[ALC272_MARIO] = {
+		.mixers = { alc272_mario_mixer },
+		.init_verbs = { alc662_init_verbs,
+				alc272_mario_init_verbs},
+		.num_dacs = ARRAY_SIZE(alc272_dac_nids),
+		.dac_nids = alc272_dac_nids,
+		.num_channel_mode = ARRAY_SIZE(alc662_3ST_2ch_modes),
+		.channel_mode = alc662_3ST_2ch_modes,
+		.unsol_event = alc663_mode4_unsol_event,
+		.setup = alc663_mode4_setup,
+		.init_hook = alc272_mario_inithook,
 	},
 };
 

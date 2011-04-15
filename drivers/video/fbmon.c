@@ -1008,6 +1008,15 @@ void fb_edid_add_monspecs(unsigned char *edid, struct fb_monspecs *specs)
 				pr_debug("N%sative mode #%d\n",
 					 edid[pos + i] & 0x80 ? "" : "on-n", idx);
 			}
+		else if (type == 0x3) {
+			if (len >= 3) {
+				u32 ieee_reg = edid[pos] | (edid[pos+1] << 8) |
+					(edid[pos+2] << 16);
+				if (ieee_reg == 0x000c03)
+					specs->misc |= FB_MISC_HDMI;
+			}
+		}
+
 		pos += len + 1;
 	}
 

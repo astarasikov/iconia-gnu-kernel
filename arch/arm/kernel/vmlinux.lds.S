@@ -80,6 +80,18 @@ SECTIONS
 
 	PERCPU(PAGE_SIZE)
 
+	/*
+	* .exit.text is discarded at runtime, not link time, to deal with
+	*  references from bug_table
+	*/
+	.exit.text : AT(ADDR(.exit.text)) {
+		EXIT_TEXT
+	}
+
+	.exit.data : AT(ADDR(.exit.data)) {
+		EXIT_DATA
+	}
+
 #ifndef CONFIG_XIP_KERNEL
 	. = ALIGN(PAGE_SIZE);
 	__init_end = .;

@@ -21,6 +21,7 @@
 #include <linux/kdebug.h>
 #include <linux/module.h>
 #include <linux/kexec.h>
+#include <linux/bug.h>
 #include <linux/delay.h>
 #include <linux/init.h>
 
@@ -163,6 +164,7 @@ static void dump_instr(const char *lvl, struct pt_regs *regs)
 #ifdef CONFIG_ARM_UNWIND
 static inline void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 {
+	printk("Backtrace:\n");
 	unwind_backtrace(regs, tsk);
 }
 #else
@@ -171,7 +173,7 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 	unsigned int fp, mode;
 	int ok = 1;
 
-	printk("Backtrace: ");
+	printk("Backtrace:\n");
 
 	if (!tsk)
 		tsk = current;
@@ -271,6 +273,8 @@ void die(const char *str, struct pt_regs *regs, int err)
 	spin_lock_irq(&die_lock);
 	console_verbose();
 	bust_spinlocks(1);
+	if (!user_mode(regs))
+		report_bug(regs->ARM_pc, regs);
 	ret = __die(str, err, thread, regs);
 
 	if (regs && kexec_should_crash(thread->task))
@@ -301,6 +305,26 @@ void arm_notify_die(const char *str, struct pt_regs *regs,
 		die(str, regs, err);
 	}
 }
+
+#ifdef CONFIG_GENERIC_BUG
+
+int is_valid_bugaddr(unsigned long pc)
+{
+#ifdef CONFIG_THUMB2_KERNEL
+	unsigned short bkpt;
+#else
+	unsigned long bkpt;
+#endif
+
+	if (pc < PAGE_OFFSET)
+		return 0;
+	if (probe_kernel_address((unsigned *)pc, bkpt))
+		return 0;
+
+	return bkpt == BUG_INSTR_VALUE;
+}
+
+#endif
 
 static LIST_HEAD(undef_hook);
 static DEFINE_SPINLOCK(undef_lock);

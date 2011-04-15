@@ -188,6 +188,7 @@ extern void __pgd_error(const char *file, int line, pgd_t);
 #define L_PTE_MT_DEV_NONSHARED	(_AT(pteval_t, 0x0c) << 2)	/* 1100 */
 #define L_PTE_MT_DEV_WC		(_AT(pteval_t, 0x09) << 2)	/* 1001 */
 #define L_PTE_MT_DEV_CACHED	(_AT(pteval_t, 0x0b) << 2)	/* 1011 */
+#define L_PTE_MT_INNER_WB	(_AT(pteval_t, 0x05) << 2)	/* 0101 (armv6, armv7) */
 #define L_PTE_MT_MASK		(_AT(pteval_t, 0x0f) << 2)
 
 #ifndef __ASSEMBLY__
@@ -342,6 +343,8 @@ static inline pte_t *pmd_page_vaddr(pmd_t pmd)
 #define __pte_map(pmd)		(pte_t *)kmap_atomic(pmd_page(*(pmd)))
 #define __pte_unmap(pte)	kunmap_atomic(pte)
 #endif
+#define pgprot_inner_writeback(prot) \
+	__pgprot_modify(prot, L_PTE_MT_MASK, L_PTE_MT_INNER_WB)
 
 #define pte_index(addr)		(((addr) >> PAGE_SHIFT) & (PTRS_PER_PTE - 1))
 

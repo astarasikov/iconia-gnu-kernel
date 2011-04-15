@@ -173,10 +173,6 @@ extern void si_sdio_init(si_t *sih);
 #define si_eci_init(sih) (0)
 #define si_eci_notify_bt(sih, type, val)  (0)
 #define si_seci(sih) 0
-static inline void *si_seci_init(si_t *sih, u8 use_seci)
-{
-	return NULL;
-}
 
 /* OTP status */
 extern bool si_is_otp_disabled(si_t *sih);
@@ -192,7 +188,7 @@ extern void si_sprom_init(si_t *sih);
 #define	SI_ERROR(args)
 
 #ifdef BCMDBG
-#define	SI_MSG(args)	printf args
+#define	SI_MSG(args)	printk args
 #else
 #define	SI_MSG(args)
 #endif				/* BCMDBG */
@@ -275,7 +271,7 @@ typedef struct si_info {
 
 /*
  * Macros to disable/restore function core(D11, ENET, ILINE20, etc) interrupts
- * before after core switching to avoid invalid register accesss inside ISR.
+ * before after core switching to avoid invalid register access inside ISR.
  */
 #define INTR_OFF(si, intr_val) \
 	if ((si)->intrsoff_fn && (si)->coreid[(si)->curidx] == (si)->dev_coreid) {	\

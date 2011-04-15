@@ -595,7 +595,7 @@ duration:
 }
 EXPORT_SYMBOL_GPL(tpm_get_timeouts);
 
-void tpm_continue_selftest(struct tpm_chip *chip)
+int tpm_continue_selftest(struct tpm_chip *chip)
 {
 	u8 data[] = {
 		0, 193,			/* TPM_TAG_RQU_COMMAND */
@@ -603,7 +603,7 @@ void tpm_continue_selftest(struct tpm_chip *chip)
 		0, 0, 0, 83,		/* TPM_ORD_GetCapability */
 	};
 
-	tpm_transmit(chip, data, sizeof(data));
+	return tpm_transmit(chip, data, sizeof(data)) == sizeof(data);
 }
 EXPORT_SYMBOL_GPL(tpm_continue_selftest);
 
@@ -949,6 +949,29 @@ ssize_t tpm_store_cancel(struct device *dev, struct device_attribute *attr,
 }
 EXPORT_SYMBOL_GPL(tpm_store_cancel);
 
+static int tpm_s3power = 0;
+
+/*
+ * Tell the kernel whether or not to save the TPM state at suspend, depending
+ * on whether the TPM stays powered on or is powered off.
+ */
+ssize_t tpm_s3power_set(struct device *dev, struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	return sscanf(buf, "%d", &tpm_s3power) == 1 ? count : -EINVAL;
+}
+EXPORT_SYMBOL_GPL(tpm_s3power_set);
+
+/*
+ * Read the value of tpm_s3power.  See tpm_s3power_set.
+ */
+ssize_t tpm_s3power_get(struct device *dev, struct device_attribute *attr,
+			char *buf)
+{
+	return sprintf(buf, "%d", tpm_s3power);
+}
+EXPORT_SYMBOL_GPL(tpm_s3power_get);
+
 /*
  * Device file system interface to the TPM
  *
@@ -1118,6 +1141,9 @@ int tpm_pm_suspend(struct device *dev, pm_message_t pm_state)
 	if (chip == NULL)
 		return -ENODEV;
 
+	if (tpm_s3power)
+		return 0;
+
 	/* for buggy tpm, flush pcrs with extend to selected dummy */
 	if (tpm_suspend_pcr) {
 		cmd.header.in = pcrextend_header;
@@ -1143,9 +1169,25 @@ EXPORT_SYMBOL_GPL(tpm_pm_suspend);
 int tpm_pm_resume(struct device *dev)
 {
 	struct tpm_chip *chip = dev_get_drvdata(dev);
+	u8 startrestorestate[] = {
+		0, 0xc1,	/* TPM_TAG_RQU_COMMAND */
+		0, 0, 0, 0xc,	/* blob length (in bytes) */
+		0, 0, 0, 0x99,	/* TPM_ORD_Startup */
+		0, 0x2		/* ST_STATE */
+	};
+	struct tpm_cmd_t* start_cmd = (struct tpm_cmd_t*) startrestorestate;
 
 	if (chip == NULL)
 		return -ENODEV;
+
+	/* For the Chrome OS dogfood devices: attempt to restore state, but
+	 * ignore errors if the BIOS has already done it.  Then make sure
+	 * the self test is completed.
+	 */
+	tpm_transmit(chip, startrestorestate, sizeof(startrestorestate));
+	printk(KERN_WARNING "TPM resume returned 0x%x (may be byte swapped).",
+		start_cmd->header.out.return_code);
+	tpm_continue_selftest(chip);
 
 	return 0;
 }

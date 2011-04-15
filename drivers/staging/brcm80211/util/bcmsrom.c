@@ -25,7 +25,6 @@
 #include <hndsoc.h>
 #include <sbchipc.h>
 #include <bcmdevs.h>
-#include <bcmendian.h>
 #include <pcicfg.h>
 #include <siutils.h>
 #include <bcmsrom.h>
@@ -44,7 +43,7 @@
 #include <sbsdpcmdev.h>
 #endif
 
-#include <proto/ethernet.h>	/* for sprom content groking */
+#include <linux/if_ether.h>
 
 #define	BS_ERROR(args)
 
@@ -1336,8 +1335,8 @@ int srom_parsecis(struct osl_info *osh, u8 *pcis[], uint ciscnt, char **vars,
 						u8 srev = cis[i + 1 + 70];
 						ASSERT(srev == 3);
 						/* make tuple value 16-bit aligned and parse it */
-						bcopy(&cis[i + 1], srom,
-						      sizeof(srom));
+						memcpy(srom, &cis[i + 1],
+						       sizeof(srom));
 						_initvars_srom_pci(srev, srom,
 								   SROM3_SWRGN_OFF,
 								   &b);
@@ -1438,6 +1437,18 @@ srom_cc_cmd(si_t *sih, struct osl_info *osh, void *ccregs, u32 cmd,
 		return 0xffff;
 }
 
+static inline void ltoh16_buf(u16 *buf, unsigned int size)
+{
+	for (size /= 2; size; size--)
+		*(buf + size) = le16_to_cpu(*(buf + size));
+}
+
+static inline void htol16_buf(u16 *buf, unsigned int size)
+{
+	for (size /= 2; size; size--)
+		*(buf + size) = cpu_to_le16(*(buf + size));
+}
+
 /*
  * Read in and validate sprom.
  * Return 0 on success, nonzero on error.
@@ -1518,7 +1529,7 @@ static int otp_read_pci(struct osl_info *osh, si_t *sih, u16 *buf, uint bufsz)
 
 	err = otp_read_region(sih, OTP_HW_RGN, (u16 *) otp, &sz);
 
-	bcopy(otp, buf, bufsz);
+	memcpy(buf, otp, bufsz);
 
 	if (otp)
 		kfree(otp);
@@ -1562,7 +1573,7 @@ static int initvars_table(struct osl_info *osh, char *start, char *end,
 		ASSERT(vp != NULL);
 		if (!vp)
 			return BCME_NOMEM;
-		bcopy(start, vp, c);
+		memcpy(vp, start, c);
 		*vars = vp;
 		*count = c;
 	} else {
@@ -1725,16 +1736,16 @@ static void _initvars_srom_pci(u8 sromrev, u16 *srom, uint off, varbuf_t *b)
 			continue;
 
 		if (flags & SRFL_ETHADDR) {
-			struct ether_addr ea;
+			u8 ea[ETH_ALEN];
 
-			ea.octet[0] = (srom[srv->off - off] >> 8) & 0xff;
-			ea.octet[1] = srom[srv->off - off] & 0xff;
-			ea.octet[2] = (srom[srv->off + 1 - off] >> 8) & 0xff;
-			ea.octet[3] = srom[srv->off + 1 - off] & 0xff;
-			ea.octet[4] = (srom[srv->off + 2 - off] >> 8) & 0xff;
-			ea.octet[5] = srom[srv->off + 2 - off] & 0xff;
+			ea[0] = (srom[srv->off - off] >> 8) & 0xff;
+			ea[1] = srom[srv->off - off] & 0xff;
+			ea[2] = (srom[srv->off + 1 - off] >> 8) & 0xff;
+			ea[3] = srom[srv->off + 1 - off] & 0xff;
+			ea[4] = (srom[srv->off + 2 - off] >> 8) & 0xff;
+			ea[5] = srom[srv->off + 2 - off] & 0xff;
 
-			varbuf_append(b, "%s=%pM", name, ea.octet);
+			varbuf_append(b, "%s=%pM", name, ea);
 		} else {
 			ASSERT(mask_valid(srv->mask));
 			ASSERT(mask_width(srv->mask));

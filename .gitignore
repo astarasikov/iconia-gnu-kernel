@@ -58,6 +58,9 @@ include/config
 include/linux/version.h
 include/generated
 
+# kernelconfig build directory
+/build/
+
 # stgit generated dirs
 patches-*
 

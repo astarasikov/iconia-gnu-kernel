@@ -1,0 +1,44 @@
+Kernel Crash Memory - Preserved over reboot
+===========================================
+
+Config option: CONFIG_PRESERVED_RAM
+Source file: kernel/preserved.c
+
+
+
+This file implements a kernel crash buffer, stored in a single area of
+fixed size contiguous physical memory either hard-coded in the kernel or
+set up and passed in by the boot loader.
+
+The buffer is written during a kernel panic. After the kernel restarts
+(normally with a machine reboot) the panic information can be read from the
+crash buffer and processed.
+
+The buffer contains a text buffer buffer with some pointers to the current
+positions and size.
+
+There is a single 'upto' pointer into the buffer - new text is written at
+this point and the pointer is updated.
+
+The buffer is logically separated into two segments: utrace and kcrash, with
+utrace at the start. The position of the start of the buffer changes due to
+its circular nature.
+
+utrace is only used for testing, as follows:
+
+/sys/kernel/debug/preserved/ucrash
+
+   - read - returns contents of buffer up to usize bytes
+   - write - appends to the buffer, if no kcrash data yet
+
+kcrash is used to obtain kernel crash data, and reset the log:
+
+/sys/kernel/debug/preserved/kcrash
+
+   -read  - returns contents of buffer up to ksize bytes
+   -write - clears the log so that it is empty
+
+For testing, it is possible to clear the crash data, then write data into
+the buffer using utrace, then cause a few kernel crashes, then read
+everything out to check correctness.
+

@@ -29,6 +29,7 @@ static void __iomem *l2x0_base;
 static DEFINE_SPINLOCK(l2x0_lock);
 static uint32_t l2x0_way_mask;	/* Bitmask of active ways */
 static uint32_t l2x0_size;
+bool l2x0_disabled;
 
 static inline void cache_wait_way(void __iomem *reg, unsigned long mask)
 {
@@ -263,11 +264,44 @@ static void l2x0_disable(void)
 	unsigned long flags;
 
 	spin_lock_irqsave(&l2x0_lock, flags);
-	writel(0, l2x0_base + L2X0_CTRL);
+	writel_relaxed(0, l2x0_base + L2X0_CTRL);
 	spin_unlock_irqrestore(&l2x0_lock, flags);
 }
 
-void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
+void l2x0_shutdown(void)
+{
+	unsigned long flags;
+
+	if (l2x0_disabled)
+		return;
+
+	BUG_ON(num_online_cpus() > 1);
+
+	local_irq_save(flags);
+
+	if (readl(l2x0_base + L2X0_CTRL) & 1) {
+		int m;
+		/* lockdown all ways, all masters to prevent new line
+		 * allocation during maintenance */
+		for (m=0; m<8; m++) {
+			writel(l2x0_way_mask,
+			       l2x0_base + L2X0_LOCKDOWN_WAY_D + (m*8));
+			writel(l2x0_way_mask,
+			       l2x0_base + L2X0_LOCKDOWN_WAY_I + (m*8));
+		}
+		l2x0_flush_all();
+		writel(0, l2x0_base + L2X0_CTRL);
+		/* unlock cache ways */
+		for (m=0; m<8; m++) {
+			writel(0, l2x0_base + L2X0_LOCKDOWN_WAY_D + (m*8));
+			writel(0, l2x0_base + L2X0_LOCKDOWN_WAY_I + (m*8));
+		}
+	}
+
+	local_irq_restore(flags);
+}
+
+static void l2x0_enable(__u32 aux_val, __u32 aux_mask)
 {
 	__u32 aux;
 	__u32 cache_id;
@@ -275,7 +309,8 @@ void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
 	int ways;
 	const char *type;
 
-	l2x0_base = base;
+	if (l2x0_disabled)
+		return;
 
 	cache_id = readl_relaxed(l2x0_base + L2X0_CACHE_ID);
 	aux = readl_relaxed(l2x0_base + L2X0_AUX_CTRL);
@@ -328,6 +363,27 @@ void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
 		writel_relaxed(1, l2x0_base + L2X0_CTRL);
 	}
 
+	/*printk(KERN_INFO "%s cache controller enabled\n", type);
+	printk(KERN_INFO "l2x0: %d ways, CACHE_ID 0x%08x, AUX_CTRL 0x%08x\n",
+			 ways, cache_id, aux);*/
+}
+
+void l2x0_restart(void)
+{
+	l2x0_enable(0, ~0ul);
+}
+
+void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
+{
+	if (l2x0_disabled) {
+		pr_info("L2x0 cache controller disabled\n");
+		return;
+	}
+
+	l2x0_base = base;
+
+	l2x0_enable(aux_val, aux_mask);
+
 	outer_cache.inv_range = l2x0_inv_range;
 	outer_cache.clean_range = l2x0_clean_range;
 	outer_cache.flush_range = l2x0_flush_range;
@@ -335,8 +391,11 @@ void __init l2x0_init(void __iomem *base, __u32 aux_val, __u32 aux_mask)
 	outer_cache.flush_all = l2x0_flush_all;
 	outer_cache.inv_all = l2x0_inv_all;
 	outer_cache.disable = l2x0_disable;
-
-	printk(KERN_INFO "%s cache controller enabled\n", type);
-	printk(KERN_INFO "l2x0: %d ways, CACHE_ID 0x%08x, AUX_CTRL 0x%08x, Cache size: %d B\n",
-			ways, cache_id, aux, l2x0_size);
 }
+
+static int __init l2x0_set_disable(char *unused)
+{
+	l2x0_disabled = 1;
+	return 0;
+}
+early_param("nol2x0", l2x0_set_disable);

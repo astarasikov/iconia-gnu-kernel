@@ -144,6 +144,7 @@ struct sdhci_host {
 	unsigned int            ocr_avail_sdio;	/* OCR bit masks */
 	unsigned int            ocr_avail_sd;
 	unsigned int            ocr_avail_mmc;
+	unsigned int		save_intmask;    /* Store original intmask */
 
 	unsigned long private[0] ____cacheline_aligned;
 };

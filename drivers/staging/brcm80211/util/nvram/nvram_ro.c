@@ -20,7 +20,6 @@
 #include <osl.h>
 #include <bcmutils.h>
 #include <siutils.h>
-#include <bcmendian.h>
 #include <bcmnvram.h>
 #include <sbchipc.h>
 #include <bcmsrom.h>
@@ -70,7 +69,7 @@ static void get_flash_nvram(si_t *sih, struct nvram_header *nvh)
 	new->next = vars;
 	vars = new;
 
-	bcopy((char *)(&nvh[1]), new->vars, nvs);
+	memcpy(new->vars, &nvh[1], nvs);
 
 	NVR_MSG(("%s: flash nvram @ %p, copied %d bytes to %p\n", __func__,
 		 nvh, nvs, new->vars));
@@ -195,7 +194,7 @@ int nvram_getall(char *buf, int count)
 			len = strlen(from) + 1;
 			if (resid < (acc + len))
 				return BCME_BUFTOOSHORT;
-			bcopy(from, to, len);
+			memcpy(to, from, len);
 			acc += len;
 			from += len;
 			to += len;

@@ -19,7 +19,6 @@
 #include <linux/netdevice.h>
 #include <bcmdefs.h>
 #include <bcmdevs.h>
-#include <bcmendian.h>
 #include <osl.h>
 #include <bcmutils.h>
 #include <hndsoc.h>
@@ -324,7 +323,7 @@ int bcmsdh_cis_read(void *sdh, uint func, u8 * cis, uint length)
 			BCMSDH_ERROR(("%s: out of memory\n", __func__));
 			return BCME_NOMEM;
 		}
-		bcopy(cis, tmp_buf, length);
+		memcpy(tmp_buf, cis, length);
 		for (tmp_ptr = tmp_buf, ptr = cis; ptr < (cis + length - 4);
 		     tmp_ptr++) {
 			ptr += sprintf((char *)ptr, "%.2x ", *tmp_ptr & 0xff);
