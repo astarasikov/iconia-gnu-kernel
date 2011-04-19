@@ -1077,6 +1077,30 @@ static void tegra_dc_set_color_control(struct tegra_dc *dc)
 		break;
 	}
 
+	/*
+	 * The line buffer for error-diffusion dither is limited to 640 pixels
+	 * per line, so we can't use it if the active region is larger than 640
+	 * pixels.  Be nice and fall back to ordered dithering, but warn so the
+	 * platform data can be corrected.
+	 */
+	if (WARN_ON(dc->out->dither == TEGRA_DC_ERRDIFF_DITHER &&
+		    dc->mode.h_active > 640)) {
+		dc->out->dither = TEGRA_DC_ORDERED_DITHER;
+	}
+
+	switch (dc->out->dither) {
+	default:
+	case TEGRA_DC_DISABLE_DITHER:
+		color_control |= DITHER_CONTROL_DISABLE;
+		break;
+	case TEGRA_DC_ORDERED_DITHER:
+		color_control |= DITHER_CONTROL_ORDERED;
+		break;
+	case TEGRA_DC_ERRDIFF_DITHER:
+		color_control |= DITHER_CONTROL_ERRDIFF;
+		break;
+	}
+
 	tegra_dc_writel(dc, color_control, DC_DISP_DISP_COLOR_CONTROL);
 }
 
