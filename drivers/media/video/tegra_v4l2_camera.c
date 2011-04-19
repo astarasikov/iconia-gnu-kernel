@@ -30,6 +30,8 @@
 #define TEGRA_SYNCPT_VI_WAIT_TIMEOUT                    200
 #define TEGRA_SYNCPT_CSI_WAIT_TIMEOUT                   200
 
+#define TEGRA_SYNCPT_RETRY_COUNT			10
+
 /* SYNCPTs 12-17 are reserved for VI. */
 #define TEGRA_VI_SYNCPT_VI                              NVSYNCPT_VI_ISP_2
 #define TEGRA_VI_SYNCPT_CSI                             NVSYNCPT_VI_ISP_3
@@ -259,6 +261,22 @@ struct tegra_camera_dev {
 	int num_frames;
 };
 
+static void tegra_camera_save_syncpts(struct tegra_camera_dev *pcdev)
+{
+	pcdev->syncpt_csi = nvhost_syncpt_read(&pcdev->ndev->host->syncpt,
+					       TEGRA_VI_SYNCPT_CSI);
+	pcdev->syncpt_vi = nvhost_syncpt_read(&pcdev->ndev->host->syncpt,
+					      TEGRA_VI_SYNCPT_VI);
+}
+
+static void tegra_camera_incr_syncpts(struct tegra_camera_dev *pcdev)
+{
+	nvhost_syncpt_cpu_incr(&pcdev->ndev->host->syncpt,
+			       TEGRA_VI_SYNCPT_CSI);
+	nvhost_syncpt_cpu_incr(&pcdev->ndev->host->syncpt,
+			       TEGRA_VI_SYNCPT_VI);
+}
+
 static void tegra_camera_capture_setup(struct tegra_camera_dev *pcdev)
 {
 	/* Set up low pass filter.  Use 0x240 for chromaticity and 0x240
@@ -419,8 +437,6 @@ static int tegra_camera_capture_start(struct tegra_camera_dev *pcdev,
 		dev_err(&pcdev->ndev->dev,
 			"PPSTATUS = 0x%08x, CILSTATUS = 0x%08x\n",
 			ppstatus, cilstatus);
-
-		BUG_ON(1);
 	}
 
 	return err;
@@ -455,8 +471,6 @@ static int tegra_camera_capture_stop(struct tegra_camera_dev *pcdev)
 		dev_err(&pcdev->ndev->dev,
 			"PPSTATUS = 0x%08x, CILSTATUS = 0x%08x\n",
 			ppstatus, cilstatus);
-
-		BUG_ON(1);
 	}
 
 	return err;
@@ -467,6 +481,7 @@ static int tegra_camera_capture_frame(struct tegra_camera_dev *pcdev)
 	struct videobuf_buffer *vb;
 	dma_addr_t buffer_addr;
 	unsigned long flags;
+	int retry = TEGRA_SYNCPT_RETRY_COUNT;
 	int err;
 
 	if (!pcdev->active)
@@ -476,12 +491,34 @@ static int tegra_camera_capture_frame(struct tegra_camera_dev *pcdev)
 
 	buffer_addr = videobuf_to_dma_nvmap(vb);
 
-	err = tegra_camera_capture_start(pcdev, buffer_addr);
-	if (IS_ERR_VALUE(err))
-		return err;
+	while (retry) {
+		err = tegra_camera_capture_start(pcdev, buffer_addr);
+		if (!err)
+			err = tegra_camera_capture_stop(pcdev);
 
-	err = tegra_camera_capture_stop(pcdev);
-	if (IS_ERR_VALUE(err))
+		if (err != 0) {
+			retry--;
+
+			/* Stop streaming. */
+			TC_VI_REG_WT(pcdev, TEGRA_CSI_PIXEL_STREAM_PPA_COMMAND,
+				     0x0000f002);
+
+			/* Clear status registers. */
+			TC_VI_REG_WT(pcdev, TEGRA_CSI_CSI_PIXEL_PARSER_STATUS,
+				     0xffffffff);
+			TC_VI_REG_WT(pcdev, TEGRA_CSI_CSI_CIL_STATUS,
+				     0xffffffff);
+
+			tegra_camera_incr_syncpts(pcdev);
+			tegra_camera_save_syncpts(pcdev);
+
+			continue;
+		}
+
+		break;
+	}
+
+	if (err)
 		return err;
 
 	spin_lock_irqsave(&pcdev->videobuf_queue_lock, flags);
@@ -722,11 +759,10 @@ static void tegra_camera_init_videobuf(struct videobuf_queue *vq,
 
 static void tegra_camera_activate(struct tegra_camera_dev *pcdev)
 {
+	nvhost_module_busy(&pcdev->ndev->host->mod);
+
 	/* Save current syncpt values. */
-	pcdev->syncpt_csi = nvhost_syncpt_read(&pcdev->ndev->host->syncpt,
-					       TEGRA_VI_SYNCPT_CSI);
-	pcdev->syncpt_vi = nvhost_syncpt_read(&pcdev->ndev->host->syncpt,
-					      TEGRA_VI_SYNCPT_VI);
+	tegra_camera_save_syncpts(pcdev);
 }
 
 static void tegra_camera_deactivate(struct tegra_camera_dev *pcdev)
@@ -742,6 +778,8 @@ static void tegra_camera_deactivate(struct tegra_camera_dev *pcdev)
 	}
 
 	mutex_unlock(&pcdev->work_mutex);
+
+	nvhost_module_idle(&pcdev->ndev->host->mod);
 }
 
 /*
@@ -1139,6 +1177,8 @@ static int tegra_camera_suspend(struct nvhost_device *ndev, pm_message_t state)
 
 		/* Power off the camera subsystem. */
 		pcdev->pdata->disable_camera(pcdev->ndev);
+
+		nvhost_module_idle(&ndev->host->mod);
 	}
 
 	return 0;
@@ -1152,11 +1192,13 @@ static int tegra_camera_resume(struct nvhost_device *ndev)
 
 	/* We only need to do something if a camera sensor is attached. */
 	if (pcdev->icd) {
+		nvhost_module_busy(&ndev->host->mod);
+
 		/* Power on the camera subsystem. */
 		pcdev->pdata->enable_camera(pcdev->ndev);
 
 		/* Resume the camera host. */
-		tegra_camera_activate(pcdev);
+		tegra_camera_save_syncpts(pcdev);
 		tegra_camera_capture_setup(pcdev);
 
 		/* Resume the camera sensor. */
