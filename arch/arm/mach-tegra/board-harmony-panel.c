@@ -150,6 +150,8 @@ static struct tegra_dc_out harmony_disp1_out = {
 
 	.align		= TEGRA_DC_ALIGN_MSB,
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
+	.depth		= 18,
+	.dither		= TEGRA_DC_ORDERED_DITHER,
 
 	.modes		= harmony_panel_modes,
 	.n_modes	= ARRAY_SIZE(harmony_panel_modes),
