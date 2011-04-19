@@ -146,6 +146,7 @@ void nvhost_syncpt_cpu_incr(struct nvhost_syncpt *sp, u32 id)
 	writel(BIT(id), dev->sync_aperture + HOST1X_SYNC_SYNCPT_CPU_INCR);
 	wmb();
 }
+EXPORT_SYMBOL_GPL(nvhost_syncpt_cpu_incr);
 
 /**
  * Increment syncpoint value from cpu, updating cache
