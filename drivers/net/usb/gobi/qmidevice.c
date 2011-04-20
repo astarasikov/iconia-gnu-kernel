@@ -19,6 +19,8 @@
 #include "qmidevice.h"
 #include "qcusbnet.h"
 
+#include <linux/compat.h>
+
 struct readreq {
 	struct list_head node;
 	void *data;
@@ -71,7 +73,8 @@ static struct urb *client_delurb(struct qcusbnet *dev, u16 cid);
 static int resubmit_int_urb(struct urb *urb);
 
 static int devqmi_open(struct inode *inode, struct file *file);
-static int devqmi_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg);
+static int devqmi_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+static int devqmi_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 static int devqmi_release(struct inode *inode, struct file *file);
 static ssize_t devqmi_read(struct file *file, char __user *buf, size_t size,
 			   loff_t *pos);
@@ -94,7 +97,8 @@ static const struct file_operations devqmi_fops = {
 	.owner   = THIS_MODULE,
 	.read    = devqmi_read,
 	.write   = devqmi_write,
-	.ioctl   = devqmi_ioctl,
+	.unlocked_ioctl   = devqmi_ioctl,
+	.compat_ioctl = devqmi_compat_ioctl,
 	.open    = devqmi_open,
 	.release = devqmi_release,
 };
@@ -239,7 +243,6 @@ static void read_callback(struct urb *urb)
 static void int_callback(struct urb *urb)
 {
 	int status;
-	int interval;
 	struct qcusbnet *dev = (struct qcusbnet *)urb->context;
 
 	if (!device_valid(dev)) {
@@ -987,7 +990,7 @@ static int devqmi_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int devqmi_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
+static int devqmi_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int result;
 	u32 vidpid;
@@ -995,11 +998,6 @@ static int devqmi_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 	struct qmihandle *handle = (struct qmihandle *)file->private_data;
 
 	DBG("%p %04x %08x", handle, handle->cid, cmd);
-
-	if (!handle) {
-		DBG("Bad file data\n");
-		return -EBADF;
-	}
 
 	if (handle->dev->dying) {
 		DBG("Dying device");
@@ -1100,6 +1098,11 @@ static int devqmi_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 	default:
 		return -EBADRQC;
 	}
+}
+
+static int devqmi_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	return devqmi_ioctl(file, cmd, compat_ptr(arg));
 }
 
 static int devqmi_release(struct inode *inode, struct file *file)
