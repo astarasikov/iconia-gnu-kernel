@@ -108,7 +108,7 @@ static struct fixed_voltage_config wwan_pwr = {
 			.min_uV = (_minmv)*1000,			\
 			.max_uV = (_maxmv)*1000,			\
 			.valid_modes_mask = (REGULATOR_MODE_NORMAL |	\
-					     REGULATOR_MODE_STANDBY),	\
+					     REGULATOR_MODE_FAST),	\
 			.valid_ops_mask = (REGULATOR_CHANGE_MODE |	\
 					   REGULATOR_CHANGE_STATUS |	\
 					   REGULATOR_CHANGE_VOLTAGE),	\
@@ -191,6 +191,9 @@ int __init seaboard_regulator_init(void)
 	writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
 
 	regulator_has_full_constraints();
+
+	/* set initial_mode to MODE_FAST for SM1 */
+	sm1_data.constraints.initial_mode = REGULATOR_MODE_FAST;
 
 	i2c_register_board_info(4, seaboard_regulators, 1);
 	return 0;
