@@ -338,6 +338,9 @@ static const struct mt9m114_reg mt9m114_defaults[] = {
 	{ 0xAC16, 0x18, REG_U8 },
 	{ MT9M114_CAM_AET_AEMODE, 0x0E, REG_U8 },
 
+	/* For continuous clock mode, use 0x783e (the default) */
+	{ 0x3c40, 0x783a },
+
 	/* Enable LED */
 	{ MT9M114_PAD_CONTROL,				0x0fd9 },
 	{ MT9M114_FLASH,				0x0708 },
