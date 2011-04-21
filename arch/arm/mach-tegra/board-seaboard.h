@@ -69,8 +69,10 @@ void seaboard_emc_init(void);
 
 #ifdef CONFIG_MACH_KAEN
 int kaen_sensors_init(void);
+void kaen_emc_init(void);
 #else
 static inline int kaen_sensors_init(void) { return 0; }
+static inline void kaen_emc_init(void) { return; };
 #endif
 
 #ifdef CONFIG_MACH_AEBL
