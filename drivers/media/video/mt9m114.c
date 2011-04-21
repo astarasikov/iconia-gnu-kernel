@@ -180,66 +180,7 @@
 			goto err; \
 	} while (0)
 
-/* Supported resolutions */
-enum {
-	MT9M114_QSIF,
-	MT9M114_QCIF,
-	MT9M114_QVGA,
-	MT9M114_SIF,
-	MT9M114_CIF,
-	MT9M114_VGA,
-	MT9M114_720P,
-};
-
-struct mt9m114_resolution {
-	unsigned int width;
-	unsigned int height;
-};
-
-static struct mt9m114_resolution mt9m114_resolutions[] = {
-	[MT9M114_QSIF] = {
-		.width	= 176,
-		.height	= 120,
-	},
-	[MT9M114_QCIF] = {
-		.width	= 176,
-		.height	= 144,
-	},
-	[MT9M114_QVGA] = {
-		.width	= 320,
-		.height	= 240,
-	},
-	[MT9M114_SIF] = {
-		.width	= 352,
-		.height	= 240,
-	},
-	[MT9M114_CIF] = {
-		.width	= 352,
-		.height	= 288,
-	},
-	[MT9M114_VGA] = {
-		.width	= 640,
-		.height	= 480,
-	},
-	[MT9M114_720P] = {
-		.width	= 1280,
-		.height	= 720,
-	},
-};
-
 /* Misc. structures */
-enum reg_width {
-	REG_U16 = 0,
-	REG_U8,
-	REG_U32,
-};
-
-struct mt9m114_reg {
-	u16				reg;
-	u32				val;
-	enum reg_width			width;
-};
-
 struct mt9m114_priv {
 	struct v4l2_subdev		subdev;
 
@@ -253,6 +194,18 @@ struct mt9m114_priv {
 	/* For suspend/resume. */
 	struct v4l2_mbus_framefmt	current_mf;
 	int				current_enable;
+};
+
+enum reg_width {
+	REG_U16 = 0,
+	REG_U8,
+	REG_U32,
+};
+
+struct mt9m114_reg {
+	u16				reg;
+	u32				val;
+	enum reg_width			width;
 };
 
 static const struct mt9m114_reg mt9m114_defaults[] = {
@@ -694,6 +647,69 @@ static const struct mt9m114_reg mt9m114_firmware_patch[] = {
 	{ 0xD11A, 0xFFFF }, { 0xD11C, 0xD02C }, { 0xD11E, 0xD81E },
 	{ 0xD120, 0x0A5A }, { 0xD122, 0x04E0 }, { 0xD124, 0xDA00 },
 	{ 0xD126, 0xD800 }, { 0xD128, 0xC0D1 }, { 0xD12A, 0x7EE0 },
+};
+
+/* Supported resolutions */
+enum {
+	MT9M114_QSIF = 0,
+	MT9M114_QCIF,
+	MT9M114_QVGA,
+	MT9M114_SIF,
+	MT9M114_CIF,
+	MT9M114_VGA,
+	MT9M114_720P,
+};
+
+struct mt9m114_resolution {
+	unsigned int		width;
+	unsigned int		height;
+	const struct mt9m114_reg *reg_array;
+	unsigned int		reg_array_size;
+};
+
+static struct mt9m114_resolution mt9m114_resolutions[] = {
+	[MT9M114_QSIF] = {
+		.width		= 176,
+		.height		= 120,
+		.reg_array	= mt9m114_regs_qsif,
+		.reg_array_size	= ARRAY_SIZE(mt9m114_regs_qsif),
+	},
+	[MT9M114_QCIF] = {
+		.width		= 176,
+		.height		= 144,
+		.reg_array	= mt9m114_regs_qcif,
+		.reg_array_size	= ARRAY_SIZE(mt9m114_regs_qcif),
+	},
+	[MT9M114_QVGA] = {
+		.width		= 320,
+		.height		= 240,
+		.reg_array	= mt9m114_regs_qvga,
+		.reg_array_size	= ARRAY_SIZE(mt9m114_regs_qvga),
+	},
+	[MT9M114_SIF] = {
+		.width		= 352,
+		.height		= 240,
+		.reg_array	= mt9m114_regs_sif,
+		.reg_array_size	= ARRAY_SIZE(mt9m114_regs_sif),
+	},
+	[MT9M114_CIF] = {
+		.width		= 352,
+		.height		= 288,
+		.reg_array	= mt9m114_regs_cif,
+		.reg_array_size	= ARRAY_SIZE(mt9m114_regs_cif),
+	},
+	[MT9M114_VGA] = {
+		.width		= 640,
+		.height		= 480,
+		.reg_array	= mt9m114_regs_vga,
+		.reg_array_size	= ARRAY_SIZE(mt9m114_regs_vga),
+	},
+	[MT9M114_720P] = {
+		.width		= 1280,
+		.height		= 720,
+		.reg_array	= mt9m114_regs_720p,
+		.reg_array_size	= ARRAY_SIZE(mt9m114_regs_720p),
+	},
 };
 
 static enum v4l2_mbus_pixelcode mt9m114_codes[] = {
@@ -1234,52 +1250,34 @@ static void mt9m114_res_roundup(u32 *width, u32 *height)
 			return;
 		}
 
-	*width = mt9m114_resolutions[MT9M114_720P].width;
-	*height = mt9m114_resolutions[MT9M114_720P].height;
+	/* If nearest higher resolution isn't found, default to the largest. */
+	*width = mt9m114_resolutions[ARRAY_SIZE(mt9m114_resolutions)-1].width;
+	*height = mt9m114_resolutions[ARRAY_SIZE(mt9m114_resolutions)-1].height;
 }
 
 /* Setup registers according to resolution */
 static int mt9m114_set_res(struct i2c_client *client, u32 width, u32 height)
 {
-	int err;
+	int k;
 
 	/* select register configuration for given resolution */
-	if ((width == mt9m114_resolutions[MT9M114_QSIF].width) &&
-	    (height == mt9m114_resolutions[MT9M114_QSIF].height)) {
-		dev_dbg(&client->dev, "Setting image size to 176x120\n");
-		WRITEARRAY(mt9m114_regs_qsif);
-	} else if ((width == mt9m114_resolutions[MT9M114_QCIF].width) &&
-		   (height == mt9m114_resolutions[MT9M114_QCIF].height)) {
-		dev_dbg(&client->dev, "Setting image size to 176x144\n");
-		WRITEARRAY(mt9m114_regs_qcif);
-	} else if ((width == mt9m114_resolutions[MT9M114_QVGA].width) &&
-		   (height == mt9m114_resolutions[MT9M114_QVGA].height)) {
-		dev_dbg(&client->dev, "Setting image size to 320x240\n");
-		WRITEARRAY(mt9m114_regs_qvga);
-	} else if ((width == mt9m114_resolutions[MT9M114_SIF].width) &&
-		   (height == mt9m114_resolutions[MT9M114_SIF].height)) {
-		dev_dbg(&client->dev, "Setting image size to 352x240\n");
-		WRITEARRAY(mt9m114_regs_sif);
-	} else if ((width == mt9m114_resolutions[MT9M114_CIF].width) &&
-		   (height == mt9m114_resolutions[MT9M114_CIF].height)) {
-		dev_dbg(&client->dev, "Setting image size to 352x288\n");
-		WRITEARRAY(mt9m114_regs_cif);
-	} else if ((width == mt9m114_resolutions[MT9M114_VGA].width) &&
-		   (height == mt9m114_resolutions[MT9M114_VGA].height)) {
-		dev_dbg(&client->dev, "Setting image size to 640x480\n");
-		WRITEARRAY(mt9m114_regs_vga);
-	} else if ((width == mt9m114_resolutions[MT9M114_720P].width) &&
-		   (height == mt9m114_resolutions[MT9M114_720P].height)) {
-		dev_dbg(&client->dev, "Setting image size to 1280x720\n");
-		WRITEARRAY(mt9m114_regs_720p);
-	} else {
-		dev_err(&client->dev, "Failed to select resolution!\n");
-		WARN_ON(1);
-		err = -EINVAL;
+	for (k = 0; k < ARRAY_SIZE(mt9m114_resolutions); k++) {
+		struct mt9m114_resolution *res = &mt9m114_resolutions[k];
+
+		if ((width == res->width) && (height == res->height)) {
+			dev_dbg(&client->dev, "Setting image size to %dx%d\n",
+				res->width, res->height);
+			return mt9m114_reg_write_array(client, res->reg_array,
+						       res->reg_array_size);
+		}
 	}
 
-err:
-	return err;
+	dev_err(&client->dev, "Failed to select resolution %dx%d!\n",
+		width, height);
+
+	WARN_ON(1);
+
+	return -EINVAL;
 }
 
 /* set the format we will capture in */
@@ -1355,8 +1353,10 @@ static int mt9m114_cropcap(struct v4l2_subdev *sd, struct v4l2_cropcap *a)
 {
 	a->bounds.left		= 0;
 	a->bounds.top		= 0;
-	a->bounds.width		= mt9m114_resolutions[MT9M114_720P].width;
-	a->bounds.height	= mt9m114_resolutions[MT9M114_720P].height;
+	a->bounds.width		=
+		mt9m114_resolutions[ARRAY_SIZE(mt9m114_resolutions)-1].width;
+	a->bounds.height	=
+		mt9m114_resolutions[ARRAY_SIZE(mt9m114_resolutions)-1].height;
 	a->defrect		= a->bounds;
 	a->type			= V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	a->pixelaspect.numerator	= 1;
@@ -1369,8 +1369,10 @@ static int mt9m114_g_crop(struct v4l2_subdev *sd, struct v4l2_crop *a)
 {
 	a->c.left		= 0;
 	a->c.top		= 0;
-	a->c.width		= mt9m114_resolutions[MT9M114_720P].width;
-	a->c.height		= mt9m114_resolutions[MT9M114_720P].height;
+	a->c.width		=
+		mt9m114_resolutions[ARRAY_SIZE(mt9m114_resolutions)-1].width;
+	a->c.height		=
+		mt9m114_resolutions[ARRAY_SIZE(mt9m114_resolutions)-1].height;
 	a->type			= V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 	return 0;
