@@ -447,6 +447,8 @@ static bool tegra_dc_hdmi_detect(struct tegra_dc *dc)
 	if (!tegra_dc_hdmi_hpd(dc))
 		goto fail;
 
+	BUG_ON(!dc->ddc_enabled);
+
 	err = tegra_edid_get_monspecs(hdmi->edid, &specs);
 	if (err < 0) {
 		dev_err(&dc->ndev->dev, "error reading edid\n");
@@ -475,6 +477,24 @@ fail:
 	return false;
 }
 
+static void tegra_dc_hdmi_enqueue_detect(struct tegra_dc *dc)
+{
+	struct tegra_dc_hdmi_data *hdmi = tegra_dc_get_outdata(dc);
+
+	cancel_delayed_work(&hdmi->work);
+	if (tegra_dc_hdmi_hpd(dc)) {
+		/*
+		 * We need DDC enabled to read the EDID; give the sink some
+		 * time to power up by enabling before the delay.
+		 */
+		tegra_dc_enable_ddc(dc);
+		queue_delayed_work(system_nrt_wq, &hdmi->work,
+				   msecs_to_jiffies(100));
+	} else {
+		queue_delayed_work(system_nrt_wq, &hdmi->work,
+				   msecs_to_jiffies(30));
+	}
+}
 
 static void tegra_dc_hdmi_detect_worker(struct work_struct *work)
 {
@@ -489,6 +509,9 @@ static void tegra_dc_hdmi_detect_worker(struct work_struct *work)
 		dc->connected = false;
 		tegra_dc_ext_process_hotplug(dc->ndev->id);
 	}
+
+	/* We don't need DDC enabled after reading the EDID. */
+	tegra_dc_disable_ddc(dc);
 }
 
 static irqreturn_t tegra_dc_hdmi_irq(int irq, void *ptr)
@@ -498,17 +521,11 @@ static irqreturn_t tegra_dc_hdmi_irq(int irq, void *ptr)
 	unsigned long flags;
 
 	spin_lock_irqsave(&hdmi->suspend_lock, flags);
-	if (hdmi->suspended) {
+	if (hdmi->suspended)
 		hdmi->hpd_pending = true;
-	} else {
-		cancel_delayed_work(&hdmi->work);
-		if (tegra_dc_hdmi_hpd(dc))
-			queue_delayed_work(system_nrt_wq, &hdmi->work,
-					   msecs_to_jiffies(100));
-		else
-			queue_delayed_work(system_nrt_wq, &hdmi->work,
-					   msecs_to_jiffies(30));
-	}
+	else
+		tegra_dc_hdmi_enqueue_detect(dc);
+
 	spin_unlock_irqrestore(&hdmi->suspend_lock, flags);
 
 	return IRQ_HANDLED;
@@ -533,12 +550,7 @@ static void tegra_dc_hdmi_resume(struct tegra_dc *dc)
 	spin_lock_irqsave(&hdmi->suspend_lock, flags);
 	hdmi->suspended = false;
 	if (hdmi->hpd_pending) {
-		if (tegra_dc_hdmi_hpd(dc))
-			queue_delayed_work(system_nrt_wq, &hdmi->work,
-					   msecs_to_jiffies(100));
-		else
-			queue_delayed_work(system_nrt_wq, &hdmi->work,
-					   msecs_to_jiffies(30));
+		tegra_dc_hdmi_enqueue_detect(dc);
 		hdmi->hpd_pending = false;
 	}
 	spin_unlock_irqrestore(&hdmi->suspend_lock, flags);
@@ -1179,7 +1191,7 @@ struct tegra_dc_out_ops tegra_dc_hdmi_ops = {
 	.destroy = tegra_dc_hdmi_destroy,
 	.enable = tegra_dc_hdmi_enable,
 	.disable = tegra_dc_hdmi_disable,
-	.detect = tegra_dc_hdmi_detect,
+	.detect = tegra_dc_hdmi_enqueue_detect,
 	.suspend = tegra_dc_hdmi_suspend,
 	.resume = tegra_dc_hdmi_resume,
 };
