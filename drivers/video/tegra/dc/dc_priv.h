@@ -38,8 +38,8 @@ struct tegra_dc_out_ops {
 	int (*init)(struct tegra_dc *dc);
 	/* destroy output.  dc clocks are not on at this point */
 	void (*destroy)(struct tegra_dc *dc);
-	/* detect connected display.  can sleep.*/
-	bool (*detect)(struct tegra_dc *dc);
+	/* detect connected display. */
+	void (*detect)(struct tegra_dc *dc);
 	/* enable output.  dc clocks are on at this point */
 	void (*enable)(struct tegra_dc *dc);
 	/* disable output.  dc clocks are on at this point */
@@ -66,6 +66,7 @@ struct tegra_dc {
 
 	bool				connected;
 	bool				enabled;
+	bool				ddc_enabled;
 
 	struct tegra_dc_out		*out;
 	struct tegra_dc_out_ops		*out_ops;
@@ -144,6 +145,9 @@ static inline void *tegra_dc_get_outdata(struct tegra_dc *dc)
 }
 
 void tegra_dc_setup_clk(struct tegra_dc *dc, struct clk *clk);
+
+void tegra_dc_enable_ddc(struct tegra_dc *dc);
+void tegra_dc_disable_ddc(struct tegra_dc *dc);
 
 extern struct tegra_dc_out_ops tegra_dc_rgb_ops;
 extern struct tegra_dc_out_ops tegra_dc_hdmi_ops;
