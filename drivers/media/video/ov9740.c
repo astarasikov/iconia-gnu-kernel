@@ -370,7 +370,7 @@ static const struct ov9740_reg ov9740_defaults[] = {
 	{ OV9740_LN_LENGTH_PCK_LO,	0x62 },
 
 	/* MIPI Control */
-	{ OV9740_MIPI_CTRL00,		0x44 },
+	{ OV9740_MIPI_CTRL00,		0x64 }, /* 0x44 for continuous clock */
 	{ OV9740_MIPI_3837,		0x01 },
 	{ OV9740_MIPI_CTRL01,		0x0f },
 	{ OV9740_MIPI_CTRL03,		0x05 },
