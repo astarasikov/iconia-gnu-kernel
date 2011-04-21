@@ -75,7 +75,7 @@ static const struct tegra_emc_table seaboard_emc_tables_hynix_333Mhz[] = {
 			0x0000000f,   /* TCLKSTABLE */
 			0x00000002,   /* TCLKSTOP */
 			0x00000000,   /* TREFBW */
-			0x00000004,   /* QUSE_EXTRA */
+			0x00000000,   /* QUSE_EXTRA */
 			0x00000002,   /* FBIO_CFG6 */
 			0x00000000,   /* ODT_WRITE */
 			0x00000000,   /* ODT_READ */
@@ -125,13 +125,13 @@ static const struct tegra_emc_table seaboard_emc_tables_hynix_333Mhz[] = {
 			0x0000000f,   /* TCLKSTABLE */
 			0x00000002,   /* TCLKSTOP */
 			0x00000000,   /* TREFBW */
-			0x00000004,   /* QUSE_EXTRA */
+			0x00000000,   /* QUSE_EXTRA */
 			0x00000002,   /* FBIO_CFG6 */
 			0x00000000,   /* ODT_WRITE */
 			0x00000000,   /* ODT_READ */
 			0x00000083,   /* FBIO_CFG5 */
 			0xe034048b,   /* CFG_DIG_DLL */
-			0x007fc010,   /* DLL_XFORM_DQS */
+			0x007e8010,   /* DLL_XFORM_DQS */
 			0x00000000,   /* DLL_XFORM_QUSE */
 			0x00000000,   /* ZCAL_REF_CNT */
 			0x00000000,   /* ZCAL_WAIT_CNT */
@@ -179,13 +179,13 @@ static const struct tegra_emc_table seaboard_emc_tables_hynix_380Mhz[] = {
 			0x0000000f,   /* TCLKSTABLE */
 			0x00000002,   /* TCLKSTOP */
 			0x00000000,   /* TREFBW */
-			0x00000004,   /* QUSE_EXTRA */
+			0x00000000,   /* QUSE_EXTRA */
 			0x00000002,   /* FBIO_CFG6 */
 			0x00000000,   /* ODT_WRITE */
 			0x00000000,   /* ODT_READ */
 			0x00000083,   /* FBIO_CFG5 */
 			0xa06204ae,   /* CFG_DIG_DLL */
-			0x007fa010,   /* DLL_XFORM_DQS */
+			0x007dc010,   /* DLL_XFORM_DQS */
 			0x00000000,   /* DLL_XFORM_QUSE */
 			0x00000000,   /* ZCAL_REF_CNT */
 			0x00000000,   /* ZCAL_WAIT_CNT */
@@ -229,13 +229,13 @@ static const struct tegra_emc_table seaboard_emc_tables_hynix_380Mhz[] = {
 			0x0000000f,   /* TCLKSTABLE */
 			0x00000002,   /* TCLKSTOP */
 			0x00000000,   /* TREFBW */
-			0x00000004,   /* QUSE_EXTRA */
+			0x00000000,   /* QUSE_EXTRA */
 			0x00000002,   /* FBIO_CFG6 */
 			0x00000000,   /* ODT_WRITE */
 			0x00000000,   /* ODT_READ */
 			0x00000083,   /* FBIO_CFG5 */
 			0xe044048b,   /* CFG_DIG_DLL */
-			0x007f9010,   /* DLL_XFORM_DQS */
+			0x007d8010,   /* DLL_XFORM_DQS */
 			0x00000000,   /* DLL_XFORM_QUSE */
 			0x00000000,   /* ZCAL_REF_CNT */
 			0x00000000,   /* ZCAL_WAIT_CNT */
