@@ -60,4 +60,10 @@ int seaboard_power_init(void);
 int seaboard_panel_init(void);
 void seaboard_emc_init(void);
 
+#ifdef CONFIG_MACH_KAEN
+void kaen_emc_init(void);
+#else
+static inline void kaen_emc_init(void) { return; }
+#endif
+ 
 #endif
