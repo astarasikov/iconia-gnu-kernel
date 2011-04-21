@@ -819,6 +819,7 @@ static void __init tegra_kaen_init(void)
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
 	seaboard_common_init();
+	kaen_emc_init();
 
 	kaen_i2c_register_devices();
 	seaboard_i2c_init();
