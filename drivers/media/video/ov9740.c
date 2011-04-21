@@ -180,59 +180,7 @@
 #define OV9740_MIPI_CTRL_3012		0x3012
 #define OV9740_SC_CMMM_MIPI_CTR		0x3014
 
-/* supported resolutions */
-enum {
-	OV9740_QSIF,
-	OV9740_QCIF,
-	OV9740_QVGA,
-	OV9740_SIF,
-	OV9740_CIF,
-	OV9740_VGA,
-	OV9740_720P,
-};
-
-struct ov9740_resolution {
-	unsigned int width;
-	unsigned int height;
-};
-
-static struct ov9740_resolution ov9740_resolutions[] = {
-	[OV9740_QSIF] = {
-		.width	= 176,
-		.height	= 120,
-	},
-	[OV9740_QCIF] = {
-		.width	= 176,
-		.height	= 144,
-	},
-	[OV9740_QVGA] = {
-		.width	= 320,
-		.height	= 240,
-	},
-	[OV9740_SIF] = {
-		.width	= 352,
-		.height	= 240,
-	},
-	[OV9740_CIF] = {
-		.width	= 352,
-		.height	= 288,
-	},
-	[OV9740_VGA] = {
-		.width	= 640,
-		.height	= 480,
-	},
-	[OV9740_720P] = {
-		.width	= 1280,
-		.height	= 720,
-	},
-};
-
 /* Misc. structures */
-struct ov9740_reg {
-	u16				reg;
-	u8				val;
-};
-
 struct ov9740_priv {
 	struct v4l2_subdev		subdev;
 
@@ -248,6 +196,11 @@ struct ov9740_priv {
 	/* For suspend/resume. */
 	struct v4l2_mbus_framefmt	current_mf;
 	int				current_enable;
+};
+
+struct ov9740_reg {
+	u16				reg;
+	u8				val;
 };
 
 static const struct ov9740_reg ov9740_defaults[] = {
@@ -598,6 +551,69 @@ static const struct ov9740_reg ov9740_regs_720p[] = {
 	{ OV9740_ISP_CTRL03,		0xff },
 };
 
+/* supported resolutions */
+enum {
+	OV9740_QSIF = 0,
+	OV9740_QCIF,
+	OV9740_QVGA,
+	OV9740_SIF,
+	OV9740_CIF,
+	OV9740_VGA,
+	OV9740_720P,
+};
+
+struct ov9740_resolution {
+	unsigned int		width;
+	unsigned int		height;
+	const struct ov9740_reg	*reg_array;
+	unsigned int		reg_array_size;
+};
+
+static struct ov9740_resolution ov9740_resolutions[] = {
+	[OV9740_QSIF] = {
+		.width		= 176,
+		.height		= 120,
+		.reg_array	= ov9740_regs_qsif,
+		.reg_array_size	= ARRAY_SIZE(ov9740_regs_qsif),
+	},
+	[OV9740_QCIF] = {
+		.width		= 176,
+		.height		= 144,
+		.reg_array	= ov9740_regs_qcif,
+		.reg_array_size	= ARRAY_SIZE(ov9740_regs_qcif),
+	},
+	[OV9740_QVGA] = {
+		.width		= 320,
+		.height		= 240,
+		.reg_array	= ov9740_regs_qvga,
+		.reg_array_size	= ARRAY_SIZE(ov9740_regs_qvga),
+	},
+	[OV9740_SIF] = {
+		.width		= 352,
+		.height		= 240,
+		.reg_array	= ov9740_regs_sif,
+		.reg_array_size	= ARRAY_SIZE(ov9740_regs_sif),
+	},
+	[OV9740_CIF] = {
+		.width		= 352,
+		.height		= 288,
+		.reg_array	= ov9740_regs_cif,
+		.reg_array_size	= ARRAY_SIZE(ov9740_regs_cif),
+	},
+	[OV9740_VGA] = {
+		.width		= 640,
+		.height		= 480,
+		.reg_array	= ov9740_regs_vga,
+		.reg_array_size	= ARRAY_SIZE(ov9740_regs_vga),
+	},
+	[OV9740_720P] = {
+		.width		= 1280,
+		.height		= 720,
+		.reg_array	= ov9740_regs_720p,
+		.reg_array_size	= ARRAY_SIZE(ov9740_regs_720p),
+	},
+};
+
 static enum v4l2_mbus_pixelcode ov9740_codes[] = {
 	V4L2_MBUS_FMT_YUYV8_2X8,
 };
@@ -886,58 +902,34 @@ static void ov9740_res_roundup(u32 *width, u32 *height)
 			return;
 		}
 
-	*width = ov9740_resolutions[OV9740_720P].width;
-	*height = ov9740_resolutions[OV9740_720P].height;
+	/* If nearest higher resolution isn't found, default to the largest. */
+	*width = ov9740_resolutions[ARRAY_SIZE(ov9740_resolutions)-1].width;
+	*height = ov9740_resolutions[ARRAY_SIZE(ov9740_resolutions)-1].height;
 }
 
 /* Setup registers according to resolution and color encoding */
 static int ov9740_set_res(struct i2c_client *client, u32 width, u32 height)
 {
-	int ret;
+	int k;
 
 	/* select register configuration for given resolution */
-	if ((width == ov9740_resolutions[OV9740_QSIF].width) &&
-	    (height == ov9740_resolutions[OV9740_QSIF].height)) {
-		dev_dbg(&client->dev, "Setting image size to 176x120\n");
-		ret = ov9740_reg_write_array(client, ov9740_regs_qsif,
-					     ARRAY_SIZE(ov9740_regs_qsif));
-	} else if ((width == ov9740_resolutions[OV9740_QCIF].width) &&
-		   (height == ov9740_resolutions[OV9740_QCIF].height)) {
-		dev_dbg(&client->dev, "Setting image size to 176x144\n");
-		ret = ov9740_reg_write_array(client, ov9740_regs_qcif,
-					     ARRAY_SIZE(ov9740_regs_qcif));
-	} else if ((width == ov9740_resolutions[OV9740_QVGA].width) &&
-		   (height == ov9740_resolutions[OV9740_QVGA].height)) {
-		dev_dbg(&client->dev, "Setting image size to 320x240\n");
-		ret = ov9740_reg_write_array(client, ov9740_regs_qvga,
-					     ARRAY_SIZE(ov9740_regs_qvga));
-	} else if ((width == ov9740_resolutions[OV9740_SIF].width) &&
-		   (height == ov9740_resolutions[OV9740_SIF].height)) {
-		dev_dbg(&client->dev, "Setting image size to 352x240\n");
-		ret = ov9740_reg_write_array(client, ov9740_regs_sif,
-					     ARRAY_SIZE(ov9740_regs_sif));
-	} else if ((width == ov9740_resolutions[OV9740_CIF].width) &&
-		   (height == ov9740_resolutions[OV9740_CIF].height)) {
-		dev_dbg(&client->dev, "Setting image size to 352x288\n");
-		ret = ov9740_reg_write_array(client, ov9740_regs_cif,
-					     ARRAY_SIZE(ov9740_regs_cif));
-	} else if ((width == ov9740_resolutions[OV9740_VGA].width) &&
-		   (height == ov9740_resolutions[OV9740_VGA].height)) {
-		dev_dbg(&client->dev, "Setting image size to 640x480\n");
-		ret = ov9740_reg_write_array(client, ov9740_regs_vga,
-					     ARRAY_SIZE(ov9740_regs_vga));
-	} else if ((width == ov9740_resolutions[OV9740_720P].width) &&
-		   (height == ov9740_resolutions[OV9740_720P].height)) {
-		dev_dbg(&client->dev, "Setting image size to 1280x720\n");
-		ret = ov9740_reg_write_array(client, ov9740_regs_720p,
-					     ARRAY_SIZE(ov9740_regs_720p));
-	} else {
-		dev_err(&client->dev, "Failed to select resolution!\n");
-		WARN_ON(1);
-		return -EINVAL;
+	for (k = 0; k < ARRAY_SIZE(ov9740_resolutions); k++) {
+		struct ov9740_resolution *res = &ov9740_resolutions[k];
+
+		if ((width == res->width) && (height == res->height)) {
+			dev_dbg(&client->dev, "Setting image size to %dx%d\n",
+				res->width, res->height);
+			return ov9740_reg_write_array(client, res->reg_array,
+						      res->reg_array_size);
+		}
 	}
 
-	return ret;
+	dev_err(&client->dev, "Failed to select resolution %dx%d!\n",
+		width, height);
+
+	WARN_ON(1);
+
+	return -EINVAL;
 }
 
 /* set the format we will capture in */
@@ -1004,8 +996,10 @@ static int ov9740_cropcap(struct v4l2_subdev *sd, struct v4l2_cropcap *a)
 {
 	a->bounds.left		= 0;
 	a->bounds.top		= 0;
-	a->bounds.width		= ov9740_resolutions[OV9740_720P].width;
-	a->bounds.height	= ov9740_resolutions[OV9740_720P].height;
+	a->bounds.width		=
+		ov9740_resolutions[ARRAY_SIZE(ov9740_resolutions)-1].width;
+	a->bounds.height	=
+		ov9740_resolutions[ARRAY_SIZE(ov9740_resolutions)-1].height;
 	a->defrect		= a->bounds;
 	a->type			= V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	a->pixelaspect.numerator	= 1;
@@ -1018,8 +1012,10 @@ static int ov9740_g_crop(struct v4l2_subdev *sd, struct v4l2_crop *a)
 {
 	a->c.left		= 0;
 	a->c.top		= 0;
-	a->c.width		= ov9740_resolutions[OV9740_720P].width;
-	a->c.height		= ov9740_resolutions[OV9740_720P].height;
+	a->c.width		=
+		ov9740_resolutions[ARRAY_SIZE(ov9740_resolutions)-1].width;
+	a->c.height		=
+		ov9740_resolutions[ARRAY_SIZE(ov9740_resolutions)-1].height;
 	a->type			= V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 	return 0;
