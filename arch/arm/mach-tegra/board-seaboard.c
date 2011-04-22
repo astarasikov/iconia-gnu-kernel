@@ -839,6 +839,7 @@ static void __init tegra_aebl_init(void)
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
 	seaboard_common_init();
+	aebl_emc_init();
 
 	aebl_i2c_register_devices();
 	seaboard_i2c_init();
