@@ -66,4 +66,10 @@ void kaen_emc_init(void);
 static inline void kaen_emc_init(void) { return; }
 #endif
  
+#ifdef CONFIG_MACH_AEBL
+void aebl_emc_init(void);
+#else
+static inline void aebl_emc_init(void) { return; }
+#endif
+ 
 #endif
