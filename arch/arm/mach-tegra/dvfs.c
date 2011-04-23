@@ -196,6 +196,7 @@ static int dvfs_rail_update(struct dvfs_rail *rail)
 static int dvfs_rail_connect_to_regulator(struct dvfs_rail *rail)
 {
 	struct regulator *reg;
+	int ret;
 
 	if (rail->reg)
 		return 0;
@@ -205,6 +206,11 @@ static int dvfs_rail_connect_to_regulator(struct dvfs_rail *rail)
 		return -EINVAL;
 
 	rail->reg = reg;
+
+	ret = regulator_set_voltage(reg, rail->nominal_millivolts * 1000,
+				    rail->max_millivolts * 1000);
+	if (!ret)
+		rail->millivolts = rail->nominal_millivolts;
 
 	return 0;
 }
