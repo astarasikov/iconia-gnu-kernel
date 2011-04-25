@@ -481,7 +481,7 @@ int __init tegra_dvfs_late_init(void)
 
 	return 0;
 }
-late_initcall(tegra_dvfs_late_init);
+subsys_initcall_sync(tegra_dvfs_late_init);
 
 #ifdef CONFIG_DEBUG_FS
 static int dvfs_tree_sort_cmp(void *p, struct list_head *a, struct list_head *b)
