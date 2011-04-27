@@ -391,6 +391,7 @@ static struct tegra_kbc_wake_key seaboard_wake_cfg[] = {
 static struct tegra_kbc_platform_data seaboard_kbc_platform_data = {
        .debounce_cnt = 2,
        .repeat_cnt = 5 * 32,
+       .use_ghost_filter = true,
        .wake_cnt = ARRAY_SIZE(seaboard_wake_cfg),
        .wake_cfg = seaboard_wake_cfg,
 };
