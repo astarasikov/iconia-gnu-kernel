@@ -848,6 +848,9 @@ static void __init tegra_wario_init(void)
 
 	seaboard_common_init();
 
+	/* wario has same memory config as seaboard */
+	seaboard_emc_init();
+
 	/* Temporary hack to keep eMMC controller at 24MHz */
 	c = tegra_get_clock_by_name("sdmmc4");
 	p = tegra_get_clock_by_name("pll_p");
