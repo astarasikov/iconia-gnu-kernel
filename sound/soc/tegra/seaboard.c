@@ -32,6 +32,7 @@
 
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/gpio.h>
 
@@ -59,6 +60,8 @@ struct tegra_seaboard {
 	struct tegra_asoc_utils_data util_data;
 	struct seaboard_audio_platform_data *pdata;
 	int gpio_requested;
+	struct regulator *vdd_dmic;
+	bool vdd_dmic_enabled;
 };
 
 static int seaboard_asoc_hw_params(struct snd_pcm_substream *substream,
@@ -229,11 +232,39 @@ static int seaboard_event_hp(struct snd_soc_dapm_widget *w,
 
 	return 0;
 }
+
+static int seaboard_event_dmic(struct snd_soc_dapm_widget *w,
+				struct snd_kcontrol *k, int event)
+{
+	struct snd_soc_codec *codec = w->codec;
+	struct snd_soc_card *card = codec->card;
+	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
+	bool new_enabled;
+	int ret;
+
+	if (IS_ERR(seaboard->vdd_dmic))
+		return 0;
+
+	new_enabled = !!SND_SOC_DAPM_EVENT_ON(event);
+	if (seaboard->vdd_dmic_enabled == new_enabled)
+		return 0;
+
+	if (new_enabled)
+		ret = regulator_enable(seaboard->vdd_dmic);
+	else
+		ret = regulator_disable(seaboard->vdd_dmic);
+
+	if (!ret)
+		seaboard->vdd_dmic_enabled = new_enabled;
+
+	return ret;
+}
+
 static const struct snd_soc_dapm_widget seaboard_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Int Spk", seaboard_event_int_spk),
 	SND_SOC_DAPM_HP("Headphone Jack", seaboard_event_hp),
 	SND_SOC_DAPM_MIC("Mic Jack", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic", NULL),
+	SND_SOC_DAPM_MIC("Digital Mic", seaboard_event_dmic),
 };
 
 static const struct snd_soc_dapm_route seaboard_audio_map[] = {
@@ -425,6 +456,14 @@ static __devinit int tegra_snd_seaboard_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_free_seaboard;
 
+	seaboard->vdd_dmic = regulator_get(&pdev->dev, "vdd_dmic");
+	if (IS_ERR(seaboard->vdd_dmic)) {
+		dev_info(&pdev->dev, "regulator_get() returned error %ld\n",
+			 PTR_ERR(seaboard->vdd_dmic));
+		ret = PTR_ERR(seaboard->vdd_dmic);
+		goto err_fini_utils;
+	}
+
 	card->dev = &pdev->dev;
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, seaboard);
@@ -442,6 +481,8 @@ err_clear_drvdata:
 	snd_soc_card_set_drvdata(card, NULL);
 	platform_set_drvdata(pdev, NULL);
 	card->dev = NULL;
+	regulator_put(seaboard->vdd_dmic);
+err_fini_utils:
 	tegra_asoc_utils_fini(&seaboard->util_data);
 err_free_seaboard:
 	kfree(seaboard);
@@ -459,6 +500,8 @@ static int __devexit tegra_snd_seaboard_remove(struct platform_device *pdev)
 	snd_soc_card_set_drvdata(card, NULL);
 	platform_set_drvdata(pdev, NULL);
 	card->dev = NULL;
+
+	regulator_put(seaboard->vdd_dmic);
 
 	tegra_asoc_utils_fini(&seaboard->util_data);
 
