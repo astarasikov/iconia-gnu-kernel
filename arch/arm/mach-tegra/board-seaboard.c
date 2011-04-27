@@ -802,6 +802,7 @@ static void __init tegra_seaboard_init(void)
 
 static void __init tegra_kaen_init(void)
 {
+	struct clk *c, *p;
 	tegra_init_suspend(&seaboard_suspend);
 
 	/* Kaen uses UARTB for the debug port. */
@@ -818,6 +819,17 @@ static void __init tegra_kaen_init(void)
 	bq20z75_pdata.battery_detect_present = 0;
 
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
+
+	/* Temporary hack to keep SDIO for wifi capped at 43.2MHz due to
+	 * stability issues with brcmfmac at 48MHz.
+	 */
+	c = tegra_get_clock_by_name("sdmmc1");
+	p = tegra_get_clock_by_name("pll_p");
+	if (c && p) {
+		clk_set_parent(c, p);
+		clk_set_rate(c, 43200000);
+		clk_enable(c);
+	}
 
 	seaboard_common_init();
 	kaen_emc_init();
