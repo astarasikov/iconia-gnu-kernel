@@ -270,10 +270,10 @@ static void reg_off(const char *reg)
 		return;
 	}
 
-	regulator_enable(regulator);
-	rc = regulator_disable(regulator);
+	rc = regulator_force_disable(regulator);
 	if (rc)
-		pr_err("%s: regulator_disable returned %d\n", __func__, rc);
+		pr_err("%s: regulator_force_disable returned %d\n", __func__,
+			rc);
 	regulator_put(regulator);
 }
 
