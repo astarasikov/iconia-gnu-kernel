@@ -221,7 +221,7 @@ extern struct meminfo meminfo;
 #define bank_phys_end(bank)	((bank)->start + (bank)->size)
 #define bank_phys_size(bank)	(bank)->size
 
-extern int arm_add_memory(phys_addr_t start, unsigned long size);
+extern int arm_add_memory(unsigned long start, unsigned long size);
 
 #endif  /*  __KERNEL__  */
 
