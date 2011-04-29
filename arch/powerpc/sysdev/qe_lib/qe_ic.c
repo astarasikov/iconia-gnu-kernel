@@ -246,7 +246,7 @@ static struct irq_chip qe_ic_irq_chip = {
 static int qe_ic_host_match(struct irq_host *h, struct device_node *node)
 {
 	/* Exact match, unless qe_ic node is NULL */
-	return h->of_node == NULL || h->of_node == node;
+	return h->domain.controller == NULL || h->domain.controller == node;
 }
 
 static int qe_ic_host_map(struct irq_host *h, unsigned int virq,

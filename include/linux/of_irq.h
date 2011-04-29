@@ -33,6 +33,39 @@ struct of_irq {
 	u32 specifier[OF_MAX_IRQ_SPEC]; /* Specifier copy */
 };
 
+/**
+ * struct of_irq_domain - Translation domain from device tree to linux irq
+ * @list: Linked list node entry
+ * @match: (optional) Called to determine if the passed device_node
+ *         interrupt-controller can be translated by this irq domain.
+ *         Returns 'true' if it can.
+ * @decode: Translation callback; returns virq, or NO_IRQ if this irq
+ *          domain cannot translate it.
+ * @controller: (optional) pointer to OF node.  By default, if
+ *              'match' is not set, then this of_irq_domain will only
+ *              be used if the device tree node passed in matches the
+ *              controller pointer.
+ * @priv: Private data pointer, not touched by core of_irq_domain code.
+ */
+struct of_irq_domain {
+	struct list_head list;
+	bool (*match)(struct of_irq_domain *d, struct device_node *np);
+	unsigned int (*map)(struct of_irq_domain *d, struct device_node *np,
+			    const u32 *intspec, u32 intsize);
+	struct device_node *controller;
+	void *priv;
+};
+
+/**
+ * of_irq_domain_add() - Add a device tree interrupt translation domain
+ * @domain: interrupt domain to add.
+ */
+extern void of_irq_domain_add(struct of_irq_domain *domain);
+extern void of_irq_set_default_domain(struct of_irq_domain *host);
+extern struct of_irq_domain *of_irq_domain_find(struct device_node *controller);
+extern void of_irq_domain_add_simple(struct device_node *controller,
+				     int irq_start, int irq_size);
+
 /*
  * Workarounds only applied to 32bit powermac machines
  */

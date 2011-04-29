@@ -165,7 +165,7 @@ static struct resource pic_edgectrl_iores = {
 
 static int i8259_host_match(struct irq_host *h, struct device_node *node)
 {
-	return h->of_node == NULL || h->of_node == node;
+	return h->domain.controller == NULL || h->domain.controller == node;
 }
 
 static int i8259_host_map(struct irq_host *h, unsigned int virq,

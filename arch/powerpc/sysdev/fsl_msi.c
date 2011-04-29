@@ -81,7 +81,7 @@ static int fsl_msi_init_allocator(struct fsl_msi *msi_data)
 	int rc;
 
 	rc = msi_bitmap_alloc(&msi_data->bitmap, NR_MSI_IRQS,
-			      msi_data->irqhost->of_node);
+			      msi_data->irqhost->domain.controller);
 	if (rc)
 		return rc;
 

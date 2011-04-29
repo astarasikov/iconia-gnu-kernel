@@ -541,11 +541,40 @@ irq_hw_number_t virq_to_hw(unsigned int virq)
 }
 EXPORT_SYMBOL_GPL(virq_to_hw);
 
-static int default_irq_host_match(struct irq_host *h, struct device_node *np)
+/**
+ * irq_host_domain_match() - irq_domain hook to call irq_host match ops.
+ *
+ * This functions gets set as the irq domain match function for irq_host
+ * instances *if* the ->ops->match() hook is populated.  If ->match() is
+ * not populated, then the default irq_domain matching behaviour is used
+ * instead.
+ */
+static bool irq_host_domain_match(struct of_irq_domain *domain,
+				  struct device_node *controller)
 {
-	return h->of_node != NULL && h->of_node == np;
+	struct irq_host *host = container_of(domain, struct irq_host, domain);
+	return host->ops->match(host, controller);
 }
 
+static unsigned int irq_host_domain_map(struct of_irq_domain *domain,
+					struct device_node *controller,
+					const u32 *intspec,
+					unsigned int intsize);
+
+/**
+ * irq_alloc_host() - Allocate and register an irq_host
+ * @of_node: Device node of the irq controller; this is used mainly as an
+ *           anonymouns context pointer.
+ * @revmap_type: One of IRQ_HOST_MAP_* defined in arch/powerpc/include/asm/irq.h
+ *               Defines the type of reverse map to be used by the irq_host.
+ * @revmap_arg: Currently only used by the IRQ_HOST_MAP_LINEAR which uses it
+ *              to define the size of the reverse map.
+ * @ops: irq_host ops structure for match/map/unmap/remap/xlate operations.
+ * @inval_irq: Value used by irq controller to indicate an invalid irq.
+ *
+ * irq_host implements mapping between hardware irq numbers and the linux
+ * virq number space.  This function allocates and registers an irq_host.
+ */
 struct irq_host *irq_alloc_host(struct device_node *of_node,
 				unsigned int revmap_type,
 				unsigned int revmap_arg,
@@ -569,10 +598,10 @@ struct irq_host *irq_alloc_host(struct device_node *of_node,
 	host->revmap_type = revmap_type;
 	host->inval_irq = inval_irq;
 	host->ops = ops;
-	host->of_node = of_node_get(of_node);
-
-	if (host->ops->match == NULL)
-		host->ops->match = default_irq_host_match;
+	host->domain.controller = of_node_get(of_node);
+	host->domain.map = irq_host_domain_map;
+	if (host->ops->match != NULL)
+		host->domain.match = irq_host_domain_match;
 
 	raw_spin_lock_irqsave(&irq_big_lock, flags);
 
@@ -588,7 +617,7 @@ struct irq_host *irq_alloc_host(struct device_node *of_node,
 			 * instead of the current cruft
 			 */
 			if (mem_init_done) {
-				of_node_put(host->of_node);
+				of_node_put(host->domain.controller);
 				kfree(host);
 			}
 			return NULL;
@@ -598,6 +627,8 @@ struct irq_host *irq_alloc_host(struct device_node *of_node,
 
 	list_add(&host->link, &irq_hosts);
 	raw_spin_unlock_irqrestore(&irq_big_lock, flags);
+
+	of_irq_domain_add(&host->domain);
 
 	/* Additional setups per revmap type */
 	switch(revmap_type) {
@@ -638,32 +669,12 @@ struct irq_host *irq_alloc_host(struct device_node *of_node,
 	return host;
 }
 
-struct irq_host *irq_find_host(struct device_node *node)
-{
-	struct irq_host *h, *found = NULL;
-	unsigned long flags;
-
-	/* We might want to match the legacy controller last since
-	 * it might potentially be set to match all interrupts in
-	 * the absence of a device node. This isn't a problem so far
-	 * yet though...
-	 */
-	raw_spin_lock_irqsave(&irq_big_lock, flags);
-	list_for_each_entry(h, &irq_hosts, link)
-		if (h->ops->match(h, node)) {
-			found = h;
-			break;
-		}
-	raw_spin_unlock_irqrestore(&irq_big_lock, flags);
-	return found;
-}
-EXPORT_SYMBOL_GPL(irq_find_host);
-
 void irq_set_default_host(struct irq_host *host)
 {
 	pr_debug("irq: Default host set to @0x%p\n", host);
 
 	irq_default_host = host;
+	of_irq_set_default_domain(&host->domain);
 }
 
 void irq_set_virq_count(unsigned int count)
@@ -780,29 +791,28 @@ unsigned int irq_create_mapping(struct irq_host *host,
 		return NO_IRQ;
 
 	printk(KERN_DEBUG "irq: irq %lu on host %s mapped to virtual irq %u\n",
-		hwirq, host->of_node ? host->of_node->full_name : "null", virq);
+		hwirq, host->domain.controller ? host->domain.controller->full_name : "null", virq);
 
 	return virq;
 }
 EXPORT_SYMBOL_GPL(irq_create_mapping);
 
-unsigned int irq_create_of_mapping(struct device_node *controller,
-				   const u32 *intspec, unsigned int intsize)
+/**
+ * irq_host_domain_map() - Map device tree irq to linux irq number
+ * This hook implements all of the powerpc 'irq_host' behaviour, which means
+ * - calling the ->ops->xlate hook to get the hardware irq number,
+ * - calling of_create_mapping to translate/allocate a linux virq number
+ * - calling irq_set_irq_type() if necessary
+ */
+static unsigned int irq_host_domain_map(struct of_irq_domain *domain,
+					struct device_node *controller,
+					const u32 *intspec,
+					unsigned int intsize)
 {
-	struct irq_host *host;
+	struct irq_host *host = container_of(domain, struct irq_host, domain);
 	irq_hw_number_t hwirq;
 	unsigned int type = IRQ_TYPE_NONE;
 	unsigned int virq;
-
-	if (controller == NULL)
-		host = irq_default_host;
-	else
-		host = irq_find_host(controller);
-	if (host == NULL) {
-		printk(KERN_WARNING "irq: no irq host found for %s !\n",
-		       controller->full_name);
-		return NO_IRQ;
-	}
 
 	/* If host has no translation, then we assume interrupt line */
 	if (host->ops->xlate == NULL)
@@ -824,7 +834,6 @@ unsigned int irq_create_of_mapping(struct device_node *controller,
 		set_irq_type(virq, type);
 	return virq;
 }
-EXPORT_SYMBOL_GPL(irq_create_of_mapping);
 
 void irq_dispose_mapping(unsigned int virq)
 {
@@ -1168,8 +1177,8 @@ static int virq_debug_show(struct seq_file *m, void *private)
 				p = none;
 			seq_printf(m, "%-15s  ", p);
 
-			if (irq_map[i].host && irq_map[i].host->of_node)
-				p = irq_map[i].host->of_node->full_name;
+			if (irq_map[i].host && irq_map[i].host->domain.controller)
+				p = irq_map[i].host->domain.controller->full_name;
 			else
 				p = none;
 			seq_printf(m, "%s\n", p);

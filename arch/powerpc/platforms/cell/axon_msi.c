@@ -150,7 +150,7 @@ static void axon_msi_cascade(unsigned int irq, struct irq_desc *desc)
 
 static struct axon_msic *find_msi_translator(struct pci_dev *dev)
 {
-	struct irq_host *irq_host;
+	struct of_irq_domain *irq_domain;
 	struct device_node *dn, *tmp;
 	const phandle *ph;
 	struct axon_msic *msic = NULL;
@@ -182,14 +182,14 @@ static struct axon_msic *find_msi_translator(struct pci_dev *dev)
 		goto out_error;
 	}
 
-	irq_host = irq_find_host(dn);
-	if (!irq_host) {
+	irq_domain = of_irq_domain_find(dn);
+	if (!irq_domain) {
 		dev_dbg(&dev->dev, "axon_msi: no irq_host found for node %s\n",
 			dn->full_name);
 		goto out_error;
 	}
 
-	msic = irq_host->host_data;
+	msic = irq_domain->priv;
 
 out_error:
 	of_node_put(dn);
@@ -334,7 +334,7 @@ static int axon_msi_shutdown(struct platform_device *device)
 	u32 tmp;
 
 	pr_devel("axon_msi: disabling %s\n",
-		  msic->irq_host->of_node->full_name);
+		  msic->irq_host->domain.controller->full_name);
 	tmp  = dcr_read(msic->dcr_host, MSIC_CTRL_REG);
 	tmp &= ~MSIC_CTRL_ENABLE & ~MSIC_CTRL_IRQ_ENABLE;
 	msic_dcr_write(msic, MSIC_CTRL_REG, tmp);
@@ -400,7 +400,7 @@ static int axon_msi_probe(struct platform_device *device,
 		goto out_free_fifo;
 	}
 
-	msic->irq_host->host_data = msic;
+	msic->irq_host->domain.priv = msic;
 
 	set_irq_data(virq, msic);
 	set_irq_chained_handler(virq, axon_msi_cascade);

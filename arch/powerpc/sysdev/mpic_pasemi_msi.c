@@ -152,8 +152,8 @@ int mpic_pasemi_msi_init(struct mpic *mpic)
 {
 	int rc;
 
-	if (!mpic->irqhost->of_node ||
-	    !of_device_is_compatible(mpic->irqhost->of_node,
+	if (!mpic->irqhost->domain.controller ||
+	    !of_device_is_compatible(mpic->irqhost->domain.controller,
 				     "pasemi,pwrficient-openpic"))
 		return -ENODEV;
 

@@ -19,15 +19,177 @@
  */
 
 #include <linux/errno.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/string.h>
+#include <linux/slab.h>
 
 /* For archs that don't support NO_IRQ (such as x86), provide a dummy value */
 #ifndef NO_IRQ
 #define NO_IRQ 0
 #endif
+
+/*
+ * Device Tree IRQ domains
+ *
+ * IRQ domains provide translation from device tree irq controller nodes to
+ * linux IRQ numbers.  IRQ controllers register an irq_domain with a .map()
+ * hook that performs everything needed to decode and configure a device
+ * tree specified interrupt.
+ */
+static LIST_HEAD(of_irq_domains);
+static DEFINE_RAW_SPINLOCK(of_irq_lock);
+static struct of_irq_domain *of_irq_default_domain;
+
+/**
+ * of_irq_domain_default_match() - Return true if the controller pointers match
+ *
+ * Default match behaviour for of_irq_domains.  If the device tree node pointer
+ * matches the value stored in the domain structure, then return true.
+ */
+static bool of_irq_domain_default_match(struct of_irq_domain *domain,
+					struct device_node *controller)
+{
+	return domain->controller == controller;
+}
+
+/**
+ * of_irq_domain_add() - Register a device tree irq domain
+ * @domain: pointer to domain structure to be registered.
+ *
+ * Adds an of_irq_domain to the global list of domains.
+ */
+void of_irq_domain_add(struct of_irq_domain *domain)
+{
+	unsigned long flags;
+
+	if (!domain->match)
+		domain->match = of_irq_domain_default_match;
+	if (!domain->map) {
+		WARN_ON(1);
+		return;
+	}
+
+	raw_spin_lock_irqsave(&of_irq_lock, flags);
+	list_add(&domain->list, &of_irq_domains);
+	raw_spin_unlock_irqrestore(&of_irq_lock, flags);
+}
+
+/**
+ * of_irq_domain_find() - Find the domain that handles a given device tree node
+ *
+ * Returns the pointer to an of_irq_domain capable of translating irq specifiers
+ * for the given irq controller device tree node.  Returns NULL if a suitable
+ * domain could not be found.
+ */
+struct of_irq_domain *of_irq_domain_find(struct device_node *controller)
+{
+	struct of_irq_domain *domain, *found = NULL;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&of_irq_lock, flags);
+	list_for_each_entry(domain, &of_irq_domains, list) {
+		if (domain->match(domain, controller)) {
+			found = domain;
+			break;
+		}
+	}
+	raw_spin_unlock_irqrestore(&of_irq_lock, flags);
+	return found;
+}
+
+/**
+ * of_irq_set_default_domain() - Set a "default" host
+ * @domain: default domain pointer
+ *
+ * For convenience, it's possible to set a "default" host that will be used
+ * whenever NULL is passed to irq_of_create_mapping(). It makes life easier
+ * for platforms that want to manipulate a few hard coded interrupt numbers
+ * that aren't properly represented in the device-tree.
+ */
+void of_irq_set_default_domain(struct of_irq_domain *domain)
+{
+	pr_debug("irq: Default host set to @0x%p\n", domain);
+	of_irq_default_domain = domain;
+}
+
+/**
+ * irq_create_of_mapping() - Map a linux irq # from a device tree specifier
+ * @controller - interrupt-controller node in the device tree
+ * @intspec - array of interrupt specifier data.  Points to an array of u32
+ *            values.  Data is *cpu-native* endian u32 values.
+ * @intsize - size of intspec array.
+ *
+ * Given an interrupt controller node pointer and an interrupt specifier, this
+ * function looks up the linux irq number.
+ */
+unsigned int irq_create_of_mapping(struct device_node *controller,
+				   const u32 *intspec, unsigned int intsize)
+{
+	struct of_irq_domain *domain;
+
+	domain = of_irq_domain_find(controller);
+	if (!domain)
+		domain = of_irq_default_domain;
+	if (!domain) {
+		pr_warn("error: no irq host found for %s !\n",
+			controller->full_name);
+#if defined(CONFIG_MIPS) || defined(CONFIG_MICROBLAZE)
+		/* FIXME: make Microblaze and MIPS register irq domains */
+		return intspec[0];
+#else /* defined(CONFIG_MIPS) || defined(CONFIG_MICROBLAZE) */
+		return NO_IRQ;
+#endif /* defined(CONFIG_MIPS) || defined(CONFIG_MICROBLAZE) */
+	}
+
+	return domain->map(domain, controller, intspec, intsize);
+}
+EXPORT_SYMBOL_GPL(irq_create_of_mapping);
+
+/*
+ * A simple irq domain implementation that 1:1 translates hwirqs to an offset
+ * from the irq_start value
+ */
+struct of_irq_domain_simple {
+	struct of_irq_domain domain;
+	int irq_start;
+	int irq_size;
+};
+
+static unsigned int of_irq_domain_simple_map(struct of_irq_domain *domain,
+					     struct device_node *controller,
+					     const u32 *intspec, u32 intsize)
+{
+	struct of_irq_domain_simple *ds;
+
+	ds = container_of(domain, struct of_irq_domain_simple, domain);
+	if (intspec[0] >= ds->irq_size)
+		return NO_IRQ;
+	return ds->irq_start + intspec[0];
+}
+
+/**
+ * of_irq_domain_create_simple() - Set up a 'simple' translation range
+ */
+void of_irq_domain_add_simple(struct device_node *controller,
+			      int irq_start, int irq_size)
+{
+	struct of_irq_domain_simple *sd;
+
+	sd = kzalloc(sizeof(*sd), GFP_KERNEL);
+	if (!sd) {
+		WARN_ON(1);
+		return;
+	}
+
+	sd->irq_start = irq_start;
+	sd->irq_size = irq_size;
+	sd->domain.controller = of_node_get(controller);
+	sd->domain.map = of_irq_domain_simple_map;
+	of_irq_domain_add(&sd->domain);
+}
 
 /**
  * irq_of_parse_and_map - Parse and map an interrupt into linux virq space

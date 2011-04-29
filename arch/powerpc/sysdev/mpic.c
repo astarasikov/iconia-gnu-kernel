@@ -936,7 +936,7 @@ static struct irq_chip mpic_irq_ht_chip = {
 static int mpic_host_match(struct irq_host *h, struct device_node *node)
 {
 	/* Exact match, unless mpic node is NULL */
-	return h->of_node == NULL || h->of_node == node;
+	return h->domain.controller == NULL || h->domain.controller == node;
 }
 
 static int mpic_host_map(struct irq_host *h, unsigned int virq,
@@ -1253,7 +1253,7 @@ void __init mpic_assign_isu(struct mpic *mpic, unsigned int isu_num,
 
 	BUG_ON(isu_num >= MPIC_MAX_ISU);
 
-	mpic_map(mpic, mpic->irqhost->of_node,
+	mpic_map(mpic, mpic->irqhost->domain.controller,
 		 paddr, &mpic->isus[isu_num], 0,
 		 MPIC_INFO(IRQ_STRIDE) * mpic->isu_size);
 

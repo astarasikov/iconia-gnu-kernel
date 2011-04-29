@@ -239,18 +239,20 @@ static unsigned int __init spider_find_cascade_and_node(struct spider_pic *pic)
 	 * tree in case the device-tree is ever fixed
 	 */
 	struct of_irq oirq;
-	if (of_irq_map_one(pic->host->of_node, 0, &oirq) == 0) {
+	if (of_irq_map_one(pic->host->domain.controller, 0, &oirq) == 0) {
 		virq = irq_create_of_mapping(oirq.controller, oirq.specifier,
 					     oirq.size);
 		return virq;
 	}
 
 	/* Now do the horrible hacks */
-	tmp = of_get_property(pic->host->of_node, "#interrupt-cells", NULL);
+	tmp = of_get_property(pic->host->domain.controller,
+				"#interrupt-cells", NULL);
 	if (tmp == NULL)
 		return NO_IRQ;
 	intsize = *tmp;
-	imap = of_get_property(pic->host->of_node, "interrupt-map", &imaplen);
+	imap = of_get_property(pic->host->domain.controller,
+				"interrupt-map", &imaplen);
 	if (imap == NULL || imaplen < (intsize + 1))
 		return NO_IRQ;
 	iic = of_find_node_by_phandle(imap[intsize]);
