@@ -1246,10 +1246,11 @@ static int __devexit tegra_uart_remove(struct platform_device *pdev)
 static int tegra_uart_probe(struct platform_device *pdev)
 {
 	struct tegra_uart_port *t;
-	struct plat_serial8250_port *pdata = pdev->dev.platform_data;
 	struct uart_port *u;
-	int ret;
+	struct resource *resource;
+	int ret = 0;
 	char name[64];
+
 	if (pdev->id < 0 || pdev->id > tegra_uart_driver.nr) {
 		pr_err("Invalid Uart instance (%d)\n", pdev->id);
 		return -ENODEV;
@@ -1260,6 +1261,7 @@ static int tegra_uart_probe(struct platform_device *pdev)
 		pr_err("%s: Failed to allocate memory\n", __func__);
 		return -ENOMEM;
 	}
+
 	u = &t->uport;
 	u->dev = &pdev->dev;
 	platform_set_drvdata(pdev, u);
@@ -1267,13 +1269,31 @@ static int tegra_uart_probe(struct platform_device *pdev)
 	u->ops = &tegra_uart_ops;
 	u->type = ~PORT_UNKNOWN;
 	u->fifosize = 32;
-	u->mapbase = pdata->mapbase;
-	u->membase = pdata->membase;
-	u->irq = pdata->irq;
+
+	resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!resource) {
+		ret = -ENXIO;
+		goto fail;
+	}
+
+	u->mapbase = resource->start;
+	u->membase = IO_ADDRESS(u->mapbase);
+	if (!u->membase) {
+		ret = -ENOMEM;
+		goto fail;
+	}
+
+	ret = platform_get_irq(pdev, 0);
+	if (ret < 0)
+		goto fail;
+
+	u->irq = ret;
+
 	u->regshift = 2;
 
 	t->clk = clk_get(&pdev->dev, NULL);
 	if (!t->clk) {
+		ret = -EINVAL;
 		dev_err(&pdev->dev, "Couldn't get the clock\n");
 		goto fail;
 	}
@@ -1282,9 +1302,8 @@ static int tegra_uart_probe(struct platform_device *pdev)
 	if (ret) {
 		pr_err("%s: Failed(%d) to add uart port %s%d\n",
 			__func__, ret, tegra_uart_driver.dev_name, u->line);
-		kfree(t);
 		platform_set_drvdata(pdev, NULL);
-		return ret;
+		goto fail;
 	}
 
 	snprintf(name, sizeof(name), "tegra_hsuart_%d", u->line);
@@ -1293,9 +1312,10 @@ static int tegra_uart_probe(struct platform_device *pdev)
 
 	INIT_WORK(&t->tx_work, tegra_tx_dma_complete_work);
 	return ret;
+
 fail:
 	kfree(t);
-	return -ENODEV;
+	return ret;
 }
 
 static int __init tegra_uart_init(void)
