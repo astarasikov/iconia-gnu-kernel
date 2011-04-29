@@ -696,14 +696,25 @@ static struct tegra_suspend_platform_data seaboard_suspend = {
 	.suspend_mode = TEGRA_SUSPEND_LP1,
 };
 
+static void __init __init_debug_uart_D(void)
+{
+	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTD_BASE);
+	debug_uart_platform_data[0].mapbase = TEGRA_UARTD_BASE;
+	debug_uart_platform_data[0].irq = INT_UARTD;
+}
+
+static void __init __init_debug_uart_B(void)
+{
+	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
+	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
+	debug_uart_platform_data[0].irq = INT_UARTB;
+}
+
 static void __init tegra_seaboard_init(void)
 {
 	tegra_init_suspend(&seaboard_suspend);
 
-	/* Seaboard uses UARTD for the debug port. */
-	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTD_BASE);
-	debug_uart_platform_data[0].mapbase = TEGRA_UARTD_BASE;
-	debug_uart_platform_data[0].irq = INT_UARTD;
+	__init_debug_uart_D();
 
 	seaboard_common_init();
 
@@ -716,10 +727,7 @@ static void __init tegra_kaen_init(void)
 	struct clk *c, *p;
 	tegra_init_suspend(&seaboard_suspend);
 
-	/* Kaen uses UARTB for the debug port. */
-	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
-	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
-	debug_uart_platform_data[0].irq = INT_UARTB;
+	__init_debug_uart_B();
 
 	seaboard_audio_pdata.gpio_hp_mute = TEGRA_GPIO_KAEN_HP_MUTE;
 	tegra_gpio_enable(TEGRA_GPIO_KAEN_HP_MUTE);
@@ -752,10 +760,7 @@ static void __init tegra_aebl_init(void)
 {
 	tegra_init_suspend(&seaboard_suspend);
 
-	/* Aebl uses UARTB for the debug port. */
-	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
-	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
-	debug_uart_platform_data[0].irq = INT_UARTB;
+	__init_debug_uart_B();
 
 	tegra_gpio_enable(TEGRA_GPIO_BATT_DETECT);
 	bq20z75_pdata.battery_detect = TEGRA_GPIO_BATT_DETECT;
@@ -776,10 +781,7 @@ static void __init tegra_wario_init(void)
 
 	tegra_init_suspend(&seaboard_suspend);
 
-	/* Wario uses UARTB for the debug port. */
-	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
-	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
-	debug_uart_platform_data[0].irq = INT_UARTB;
+	__init_debug_uart_B();
 
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
@@ -802,10 +804,7 @@ static void __init tegra_arthur_init(void)
 {
 	tegra_init_suspend(&seaboard_suspend);
 
-	/* Arthur uses UARTB for the debug port. */
-	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
-	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
-	debug_uart_platform_data[0].irq = INT_UARTB;
+	__init_debug_uart_B();
 
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
