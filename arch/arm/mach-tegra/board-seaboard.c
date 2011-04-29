@@ -476,6 +476,12 @@ static const u8 mxt_config_data[] = {
 	0x00, 0x00, 0x00, 0x00,
 	/* MXT_SPT_CTECONFIG(28) */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	/* MXT_PROCI_GRIP(40) */
+	0x00, 0x00, 0x00, 0x00, 0x00,
+	/* MXT_PROCI_PALM(41) */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	/* MXT_SPT_DIGITIZER(43) */
+	0x00, 0x00, 0x00, 0x00,
 };
 
 static struct mxt_platform_data mxt_platform_data = {
@@ -543,11 +549,13 @@ static void __init seaboard_i2c_register_devices(void)
 	tegra_pinmux_config_table(mxt_pinmux_config, ARRAY_SIZE(mxt_pinmux_config));
 
 	gpio_request(TEGRA_GPIO_MXT_RST, "TSP_LDO_ON");
+	tegra_gpio_enable(TEGRA_GPIO_MXT_RST);
 	gpio_direction_output(TEGRA_GPIO_MXT_RST, 1);
 	gpio_export(TEGRA_GPIO_MXT_RST, 0);
 
-	gpio_request(TEGRA_GPIO_MXT_RST, "TSP_INT");
-	gpio_direction_input(TEGRA_GPIO_MXT_RST);
+	gpio_request(TEGRA_GPIO_MXT_IRQ, "TSP_INT");
+	tegra_gpio_enable(TEGRA_GPIO_MXT_IRQ);
+	gpio_direction_input(TEGRA_GPIO_MXT_IRQ);
 
 	gpio_request(TEGRA_GPIO_MPU3050_IRQ, "mpu_int");
 	gpio_direction_input(TEGRA_GPIO_MPU3050_IRQ);
