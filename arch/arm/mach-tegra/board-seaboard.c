@@ -902,6 +902,11 @@ static void __init tegra_aebl_init(void)
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
 	debug_uart_platform_data[0].irq = INT_UARTB;
 
+	tegra_gpio_enable(TEGRA_GPIO_BATT_DETECT);
+	bq20z75_pdata.battery_detect = TEGRA_GPIO_BATT_DETECT;
+	/* battery present is low */
+	bq20z75_pdata.battery_detect_present = 0;
+
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
 	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
