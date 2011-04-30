@@ -98,6 +98,7 @@ static void tegra_camera_disable(struct nvhost_device *ndev)
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_PWDN, 0);
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_RST, 0);
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_PWR_EN, 0);
+	gpio_set_value_cansleep(TEGRA_CAMERA_GPIO_PMU, 0);
 
 	gpio_free(TEGRA_CAMERA_GPIO_PMU);
 

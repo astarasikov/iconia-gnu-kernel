@@ -221,6 +221,8 @@ static void tegra_camera_disable(struct nvhost_device *ndev)
 {
 	struct i2c_adapter *adapter;
 
+	gpio_set_value_cansleep(TEGRA_CAMERA_GPIO_PMU, 0);
+
 	gpio_free(TEGRA_CAMERA_GPIO_PMU);
 	gpio_free(TEGRA_CAMERA_GPIO_VI_GP3);
 	gpio_free(TEGRA_CAMERA_GPIO_CAM_PWR_EN);
