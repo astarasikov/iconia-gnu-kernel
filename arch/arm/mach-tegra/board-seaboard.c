@@ -136,7 +136,7 @@ static __initdata struct tegra_clk_init_table seaboard_clk_init_table[] = {
 	{ "dvc",        "clk_m",        3000000,        false},
 	{ "uarta",      "clk_m",        12000000,       false},
         { "uartb",      "pll_p",        216000000,      true},
-	{ "uartc",      "clk_m",        12000000,       false},
+	{ "uartc",      "pll_c",        600000000,      true},
         { "uartd",      "pll_p",        216000000,      true},
 	{ "uarte",      "clk_m",        12000000,       false},
 	{ "cve",        "clk_m",        12000000,       false},
@@ -461,6 +461,7 @@ static struct platform_device spdif_dit_device = {
 
 static struct platform_device *seaboard_devices[] __initdata = {
 	&debug_uart,
+	&tegra_uartc_device,
 	&tegra_pmu_device,
 	&tegra_rtc_device,
 	&tegra_gart_device,
