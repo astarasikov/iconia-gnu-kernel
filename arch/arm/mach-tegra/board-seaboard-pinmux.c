@@ -174,8 +174,8 @@ static __initdata struct tegra_pingroup_config seaboard_pinmux[] = {
 	{TEGRA_PINGROUP_UAB,   TEGRA_MUX_ULPI,          TEGRA_PUPD_PULL_UP,   TEGRA_TRI_NORMAL},
 	{TEGRA_PINGROUP_UAC,   TEGRA_MUX_RSVD2,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
 	{TEGRA_PINGROUP_UAD,   TEGRA_MUX_IRDA,          TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
-	{TEGRA_PINGROUP_UCA,   TEGRA_MUX_UARTC,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
-	{TEGRA_PINGROUP_UCB,   TEGRA_MUX_UARTC,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_UCA,   TEGRA_MUX_UARTC,         TEGRA_PUPD_PULL_UP,   TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_UCB,   TEGRA_MUX_UARTC,         TEGRA_PUPD_PULL_UP,   TEGRA_TRI_NORMAL},
 	{TEGRA_PINGROUP_UDA,   TEGRA_MUX_ULPI,          TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
 	{TEGRA_PINGROUP_CK32,  TEGRA_MUX_NONE,          TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
 	{TEGRA_PINGROUP_DDRC,  TEGRA_MUX_NONE,          TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
@@ -214,6 +214,8 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_LVDS_SHUTDOWN,	.enable = true },
 	{ .gpio = TEGRA_GPIO_BACKLIGHT_VDD,	.enable = true },
 	{ .gpio = TEGRA_GPIO_EN_VDD_PNL,	.enable = true },
+	{ .gpio = TEGRA_GPIO_BT_RESET,		.enable = true },
+	{ .gpio = TEGRA_GPIO_BT_SHUTDOWN,	.enable = true },
 };
 
 void __init seaboard_pinmux_init(void)
@@ -246,4 +248,17 @@ void __init seaboard_pinmux_init(void)
 					ARRAY_SIZE(seaboard_drive_pinmux));
 
 	tegra_gpio_config(gpio_table, ARRAY_SIZE(gpio_table));
+
+	/* exporting BT gpio's until the rfkill driver
+	 * is availabe upstream. Setting both gpio's to
+	 * 0, which blocks the BT radio. Set to 1 to enable.
+	 * This can be done from /sys/class/gpio
+	 */
+	gpio_request(TEGRA_GPIO_BT_RESET, "bt_nreset_gpio");
+	gpio_direction_output(TEGRA_GPIO_BT_RESET, 0);
+	gpio_export(TEGRA_GPIO_BT_RESET, false);
+
+	gpio_request(TEGRA_GPIO_BT_SHUTDOWN, "bt_nshutdown_gpio");
+	gpio_direction_output(TEGRA_GPIO_BT_SHUTDOWN, 0);
+	gpio_export(TEGRA_GPIO_BT_SHUTDOWN, false);
 }

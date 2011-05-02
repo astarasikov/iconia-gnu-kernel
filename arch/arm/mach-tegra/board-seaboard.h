@@ -54,6 +54,8 @@
 #define TEGRA_GPIO_EN_1V5		SEABOARD_GPIO_TPS6586X(0)
 #define TEGRA_GPIO_RESET		TEGRA_GPIO_PG3
 #define TEGRA_GPIO_W_DISABLE		TEGRA_GPIO_PU4
+#define TEGRA_GPIO_BT_RESET		TEGRA_GPIO_PU0
+#define TEGRA_GPIO_BT_SHUTDOWN		TEGRA_GPIO_PK2
 
 void seaboard_pinmux_init(void);
 int seaboard_power_init(void);
