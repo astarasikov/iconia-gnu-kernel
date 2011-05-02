@@ -97,27 +97,45 @@ static int seaboard_panel_disable(void)
 	return 0;
 }
 
-static struct regulator *seaboard_hdmi_reg;
-static struct regulator *seaboard_hdmi_pll;
+static int seaboard_set_hdmi_power(bool enable)
+{
+	static struct {
+		struct regulator *regulator;
+		const char *name;
+	} regs[] = {
+		{ .name = "avdd_hdmi" },
+		{ .name = "avdd_hdmi_pll" },
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(regs); i++) {
+		if (!regs[i].regulator) {
+			regs[i].regulator = regulator_get(NULL, regs[i].name);
+
+			if (IS_ERR(regs[i].regulator)) {
+				int ret = PTR_ERR(regs[i].regulator);
+				regs[i].regulator = NULL;
+				return ret;
+			}
+		}
+
+		if (enable)
+			regulator_enable(regs[i].regulator);
+		else
+			regulator_disable(regs[i].regulator);
+	}
+
+	return 0;
+}
 
 static int seaboard_hdmi_enable(void)
 {
-	if (WARN_ON(!seaboard_hdmi_reg || !seaboard_hdmi_pll))
-		return -ENODEV;
-
-	regulator_enable(seaboard_hdmi_reg);
-	regulator_enable(seaboard_hdmi_pll);
-	return 0;
+	return seaboard_set_hdmi_power(true);
 }
 
 static int seaboard_hdmi_disable(void)
 {
-	if (WARN_ON(!seaboard_hdmi_reg || !seaboard_hdmi_pll))
-		return -ENODEV;
-
-	regulator_disable(seaboard_hdmi_reg);
-	regulator_disable(seaboard_hdmi_pll);
-	return 0;
+	return seaboard_set_hdmi_power(false);
 }
 
 static struct resource seaboard_disp1_resources[] = {
@@ -354,37 +372,3 @@ int __init seaboard_panel_init(void)
 
 	return err;
 }
-
-static int __init seaboard_hdmi_late_init(void)
-{
-	int ret;
-
-	seaboard_hdmi_reg = regulator_get(NULL, "avdd_hdmi");
-	if (IS_ERR_OR_NULL(seaboard_hdmi_reg)) {
-		ret = PTR_ERR(seaboard_hdmi_reg);
-		goto fail;
-	}
-
-	seaboard_hdmi_pll = regulator_get(NULL, "avdd_hdmi_pll");
-	if (IS_ERR_OR_NULL(seaboard_hdmi_pll)) {
-		ret = PTR_ERR(seaboard_hdmi_pll);
-		goto fail;
-	}
-
-	return 0;
-
-fail:
-	if (seaboard_hdmi_pll) {
-		regulator_disable(seaboard_hdmi_pll);
-		seaboard_hdmi_pll = NULL;
-	}
-
-	if (seaboard_hdmi_reg) {
-		regulator_disable(seaboard_hdmi_reg);
-		seaboard_hdmi_reg = NULL;
-	}
-
-	return ret;
-}
-
-late_initcall(seaboard_hdmi_late_init);
