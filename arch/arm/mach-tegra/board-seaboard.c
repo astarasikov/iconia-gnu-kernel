@@ -640,6 +640,19 @@ static void __init aebl_i2c_register_devices(void)
 	i2c_register_board_info(4, &ak8975_device, 1);
 }
 
+static void __init arthur_i2c_register_devices(void)
+{
+	gpio_request(TEGRA_GPIO_ISL29018_IRQ, "isl29018");
+	gpio_direction_input(TEGRA_GPIO_ISL29018_IRQ);
+
+	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
+	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
+
+	i2c_register_board_info(0, &isl29018_device, 1);
+
+	i2c_register_board_info(4, &adt7461_device, 1);
+}
+
 static void __init seaboard_common_init(void)
 {
 	seaboard_pinmux_init();
@@ -772,6 +785,23 @@ static void __init tegra_wario_init(void)
 	seaboard_i2c_init();
 }
 
+static void __init tegra_arthur_init(void)
+{
+	tegra_init_suspend(&seaboard_suspend);
+
+	/* Arthur uses UARTB for the debug port. */
+	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
+	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
+	debug_uart_platform_data[0].irq = INT_UARTB;
+
+	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
+
+	seaboard_common_init();
+
+	arthur_i2c_register_devices();
+	seaboard_i2c_init();
+}
+
 
 MACHINE_START(SEABOARD, "seaboard")
 	.boot_params    = 0x00000100,
@@ -807,4 +837,13 @@ MACHINE_START(WARIO, "wario")
 	.init_irq       = tegra_init_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_wario_init,
+MACHINE_END
+
+MACHINE_START(ARTHUR, "arthur")
+	.boot_params    = 0x00000100,
+	.map_io         = tegra_map_common_io,
+	.init_early     = tegra_init_early,
+	.init_irq       = tegra_init_irq,
+	.timer          = &tegra_timer,
+	.init_machine   = tegra_arthur_init,
 MACHINE_END
