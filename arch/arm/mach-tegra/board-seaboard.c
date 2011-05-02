@@ -810,7 +810,7 @@ static struct tegra_suspend_platform_data seaboard_suspend = {
 	.separate_req = true,
 	.corereq_high = false,
 	.sysclkreq_high = true,
-	.suspend_mode = TEGRA_SUSPEND_LP0,
+	.suspend_mode = TEGRA_SUSPEND_LP1,
 };
 
 static void __init tegra_seaboard_init(void)
