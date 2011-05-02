@@ -1,0 +1,99 @@
+/include/ "skeleton.dtsi"
+
+/ {
+	model = "NVIDIA Tegra 250";
+	compatible = "nvidia,tegra250";
+	interrupt-parent = <&intc>;
+
+	amba {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		intc: interrupt-controller@50041000 {
+			compatible = "nvidia,tegra250-gic", "arm,gic";
+			interrupt-controller;
+			#interrupt-cells = <1>;
+			reg = < 0x50041000 0x1000 >,
+			      < 0x50040100 0x0100 >;
+		};
+	};
+
+	gpio: gpio@6000d000 {
+		compatible = "nvidia,tegra250-gpio";
+		reg = < 0x6000d000 0x1000 >;
+		interrupts = < 64 65 66 67 87 119 121 >;
+		#gpio-cells = <2>;
+		gpio-controller;
+	};
+
+	serial@70006000 {
+		compatible = "nvidia,tegra250-uart";
+		reg = <0x70006000 0x40>;
+		reg-shift = <2>;
+		interrupts = < 68 >;
+		status = "disabled";
+	};
+
+	serial@70006040 {
+		compatible = "nvidia,tegra250-uart";
+		reg = <0x70006040 0x40>;
+		reg-shift = <2>;
+		interrupts = < 69 >;
+		status = "disabled";
+	};
+
+	serial@70006200 {
+		compatible = "nvidia,tegra250-uart";
+		reg = <0x70006200 0x100>;
+		reg-shift = <2>;
+		interrupts = < 78 >;
+		status = "disabled";
+	};
+
+	serial@70006300 {
+		compatible = "nvidia,tegra250-uart";
+		reg = <0x70006300 0x100>;
+		reg-shift = <2>;
+		interrupts = < 122 >;
+		status = "disabled";
+	};
+
+	serial@70006400 {
+		compatible = "nvidia,tegra250-uart";
+		reg = <0x70006400 0x100>;
+		reg-shift = <2>;
+		interrupts = < 123 >;
+		status = "disabled";
+	};
+
+	sdhci@c8000000 {
+		compatible = "nvidia,tegra250-sdhci";
+		reg = <0xc8000000 0x200>;
+		interrupts = < 46 >;
+		status = "disabled";
+	};
+
+	sdhci@c8000200 {
+		compatible = "nvidia,tegra250-sdhci";
+		reg = <0xc8000200 0x200>;
+		interrupts = < 47 >;
+		status = "disabled";
+	};
+
+	sdhci@c8000400 {
+		compatible = "nvidia,tegra250-sdhci";
+		reg = <0xc8000400 0x200>;
+		interrupts = < 51 >;
+		status = "disabled";
+	};
+
+	sdhci@c8000600 {
+		compatible = "nvidia,tegra250-sdhci";
+		reg = <0xc8000600 0x200>;
+		interrupts = < 63 >;
+		status = "disabled";
+	};
+};
+

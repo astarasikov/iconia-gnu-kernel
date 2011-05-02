@@ -477,11 +477,6 @@ static void __init tegra_harmony_init(void)
 	harmony_i2c_init();
 }
 
-static const char * tegra_harmony_board_compat[] = {
-	"nvidia,harmony",
-	NULL
-};
-
 MACHINE_START(HARMONY, "harmony")
 	.boot_params  = 0x00000100,
 	.fixup		= tegra_harmony_fixup,
@@ -490,5 +485,4 @@ MACHINE_START(HARMONY, "harmony")
 	.init_irq       = tegra_init_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_harmony_init,
-	.dt_compat      = tegra_harmony_board_compat,
 MACHINE_END

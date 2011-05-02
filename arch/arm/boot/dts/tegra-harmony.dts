@@ -1,7 +1,37 @@
 /dts-v1/;
-/include/ "skeleton.dtsi"
+
+/memreserve/ 0x1c000000 0x04000000;
+/include/ "tegra250.dtsi"
 
 / {
 	model = "NVIDIA Tegra2 Harmony evaluation board";
 	compatible = "nvidia,harmony", "nvidia,tegra250";
+
+	chosen {
+		bootargs = "vmalloc=192M video=tegrafb console=ttyS0,115200n8 root=/dev/mmcblk0p2 rw rootwait";
+	};
+
+	memory {
+		device_type = "memory";
+		reg = < 0x00000000 0x40000000 >;
+	};
+
+	serial@70006300 {
+		status = "ok";
+		clock-frequency = < 216000000 >;
+	};
+
+	sdhci@c8000200 {
+		status = "ok";
+		gpios = <&gpio 69 0>, /* cd, gpio PI5 */
+			<&gpio 57 0>, /* wp, gpio PH1 */
+			<&gpio 155 0>; /* power, gpio PT3 */
+	};
+
+	sdhci@c8000600 {
+		status = "ok";
+		gpios = <&gpio 58 0>, /* cd, gpio PH2 */
+			<&gpio 59 0>, /* wp, gpio PH3 */
+			<&gpio 70 0>; /* power, gpio PI6 */
+	};
 };
