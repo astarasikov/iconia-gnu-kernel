@@ -204,6 +204,22 @@ static struct tegra_dc_mode wario_panel_modes[] = {
 	},
 };
 
+static struct tegra_dc_mode arthur_panel_modes[] = {
+	{
+		.pclk = 82400000,
+		.h_ref_to_sync = 11,
+		.v_ref_to_sync = 1,
+		.h_sync_width = 32,
+		.v_sync_width = 5,
+		.h_back_porch = 112,
+		.v_back_porch = 20,
+		.h_active = 1366,
+		.v_active = 910,
+		.h_front_porch = 48,
+		.v_front_porch = 2,
+	},
+};
+
 static struct tegra_fb_data seaboard_fb_data = {
 	.win		= 0,
 	.xres		= 1366,
@@ -216,6 +232,13 @@ static struct tegra_fb_data wario_fb_data = {
 	.xres		= 1280,
 	.yres		= 800,
 	.bits_per_pixel	= 16,
+};
+
+static struct tegra_fb_data arthur_fb_data = {
+	.win		= 0,
+	.xres		= 1366,
+	.yres		= 910,
+	.bits_per_pixel	= 24,
 };
 
 static struct tegra_fb_data seaboard_hdmi_fb_data = {
@@ -350,6 +373,9 @@ int __init seaboard_panel_init(void)
 	if (machine_is_wario()) {
 		seaboard_disp1_out.modes = wario_panel_modes;
 		seaboard_disp1_pdata.fb = &wario_fb_data;
+	} else if (machine_is_arthur()) {
+		seaboard_disp1_out.modes = arthur_panel_modes;
+		seaboard_disp1_pdata.fb = &arthur_fb_data;
 	}
 
 	err = platform_add_devices(seaboard_gfx_devices,
