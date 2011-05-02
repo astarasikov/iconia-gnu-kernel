@@ -22,6 +22,7 @@
 
 #include <linux/ioctl.h>
 #include <linux/file.h>
+#include <linux/rbtree.h>
 
 #if !defined(__KERNEL__)
 #define __user
@@ -69,6 +70,9 @@ struct nvmap_pinarray_elem {
 struct nvmap_client *nvmap_create_client(struct nvmap_device *dev,
 					 const char *name);
 
+struct nvmap_handle_ref *nvmap_create_handle(struct nvmap_client *client,
+					     size_t size);
+
 struct nvmap_handle_ref *nvmap_alloc(struct nvmap_client *client, size_t size,
 				     size_t align, unsigned int flags);
 
@@ -88,7 +92,19 @@ unsigned long nvmap_pin(struct nvmap_client *c, struct nvmap_handle_ref *r);
 
 unsigned long nvmap_handle_address(struct nvmap_client *c, unsigned long id);
 
+void nvmap_free_handle_id(struct nvmap_client *c, unsigned long id);
+
 void nvmap_unpin(struct nvmap_client *client, struct nvmap_handle_ref *r);
+
+void nvmap_unpin_ids(struct nvmap_client *priv,
+		     unsigned int nr, const unsigned long *ids);
+
+int nvmap_alloc_handle_id(struct nvmap_client *client,
+			  unsigned long id, unsigned int heap_mask,
+			  size_t align, unsigned int flags);
+
+int nvmap_pin_ids(struct nvmap_client *client,
+		  unsigned int nr, const unsigned long *ids);
 
 int nvmap_pin_array(struct nvmap_client *client, struct nvmap_handle *gather,
 		    const struct nvmap_pinarray_elem *arr, int nr,
@@ -96,6 +112,19 @@ int nvmap_pin_array(struct nvmap_client *client, struct nvmap_handle *gather,
 
 void nvmap_unpin_handles(struct nvmap_client *client,
 			 struct nvmap_handle **h, int nr);
+
+#define nvmap_ref_to_id(_ref)		((unsigned long)(_ref)->handle)
+
+/* handle_ref objects are client-local references to an nvmap_handle;
+ * they are distinct objects so that handles can be unpinned and
+ * unreferenced the correct number of times when a client abnormally
+ * terminates */
+struct nvmap_handle_ref {
+	struct nvmap_handle *handle;
+	struct rb_node	node;
+	atomic_t	dupes;	/* number of times to free on file close */
+	atomic_t	pin;	/* number of times to unpin on free */
+};
 
 struct nvmap_platform_carveout {
 	const char *name;
