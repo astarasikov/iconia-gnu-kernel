@@ -41,8 +41,7 @@
 #include <mach/io.h>
 #include <mach/iomap.h>
 #include <mach/nvmap.h>
-
-#include "../../../../video/tegra/nvmap/nvmap.h"
+#include <mach/nvavp.h>
 
 #include "headavp.h"
 #include "avp_msg.h"
@@ -1038,7 +1037,8 @@ static void avp_uninit(struct avp_info *avp)
 }
 
 /* returns the remote lib handle in lib->handle */
-static int _load_lib(struct avp_info *avp, struct tegra_avp_lib *lib)
+static int _load_lib(struct avp_info *avp, struct tegra_avp_lib *lib,
+		     bool from_user)
 {
 	struct svc_lib_attach svc;
 	struct svc_lib_attach_resp resp;
@@ -1057,7 +1057,10 @@ static int _load_lib(struct avp_info *avp, struct tegra_avp_lib *lib)
 			lib->args_len);
 		return -ENOMEM;
 	}
-	if (copy_from_user(args, lib->args, lib->args_len)) {
+
+	if (!from_user)
+		memcpy(args, lib->args, lib->args_len);
+	else if (copy_from_user(args, lib->args, lib->args_len)) {
 		pr_err("avp_lib: can't copy lib args\n");
 		ret = -EFAULT;
 		goto err_cp_args;
@@ -1125,6 +1128,9 @@ static int _load_lib(struct avp_info *avp, struct tegra_avp_lib *lib)
 	    "avp_lib: Successfully loaded library %s (lib_id=%x)\n",
 	    lib->name, resp.lib_id);
 
+	pr_info("avp_lib: Successfully loaded library %s (lib_id=%x)\n",
+			lib->name, resp.lib_id);
+
 	/* We free the memory here because by this point the AVP has already
 	 * requested memory for the library for all the sections since it does
 	 * it's own relocation and memory management. So, our allocations were
@@ -1164,6 +1170,9 @@ static int send_unload_lib_msg(struct avp_info *avp, u32 handle,
 		       name);
 		goto err;
 	}
+
+	/* Give it a few extra moments to unload. */
+	msleep(20);
 
 	ret = trpc_recv_msg(avp->rpc_node, avp->avp_ep, &resp,
 				 sizeof(resp), -1);
@@ -1226,7 +1235,7 @@ static int handle_load_lib_ioctl(struct avp_info *avp, unsigned long arg)
 	}
 
 	mutex_lock(&avp->libs_lock);
-	ret = _load_lib(avp, &lib);
+	ret = _load_lib(avp, &lib, true);
 	if (ret)
 		goto err_load_lib;
 
@@ -1249,32 +1258,6 @@ err_insert_lib:
 err_copy_to_user:
 	send_unload_lib_msg(avp, lib.handle, lib.name);
 err_load_lib:
-	mutex_unlock(&avp->libs_lock);
-	return ret;
-}
-
-static int handle_unload_lib_ioctl(struct avp_info *avp, unsigned long arg)
-{
-	struct lib_item *item;
-	int ret;
-
-	mutex_lock(&avp->libs_lock);
-	item = _find_lib_locked(avp, (u32)arg);
-	if (!item) {
-		pr_err("avp_lib: avp lib with handle 0x%x not found\n",
-		       (u32)arg);
-		ret = -ENOENT;
-		goto err_find;
-	}
-	ret = send_unload_lib_msg(avp, item->handle, item->name);
-	if (!ret)
-		DBG(AVP_DBG_TRACE_LIB, "avp_lib: unloaded '%s'\n", item->name);
-	else
-		pr_err("avp_lib: can't unload lib '%s'/0x%x (%d)\n", item->name,
-		       item->handle, ret);
-	_delete_lib_locked(avp, item);
-
-err_find:
 	mutex_unlock(&avp->libs_lock);
 	return ret;
 }
@@ -1310,7 +1293,7 @@ static long tegra_avp_ioctl(struct file *file, unsigned int cmd,
 		ret = handle_load_lib_ioctl(avp, arg);
 		break;
 	case TEGRA_AVP_IOCTL_UNLOAD_LIB:
-		ret = handle_unload_lib_ioctl(avp, arg);
+		ret = tegra_avp_unload_lib(arg);
 		break;
 	default:
 		pr_err("avp_lib: Unknown tegra_avp ioctl 0x%x\n", _IOC_NR(cmd));
@@ -1320,31 +1303,37 @@ static long tegra_avp_ioctl(struct file *file, unsigned int cmd,
 	return ret;
 }
 
-static int tegra_avp_open(struct inode *inode, struct file *file)
+int tegra_avp_open(void)
 {
 	struct avp_info *avp = tegra_avp;
 	int ret = 0;
-
-	nonseekable_open(inode, file);
 
 	mutex_lock(&avp->open_lock);
 
 	if (!avp->refcount)
 		ret = avp_init(avp, TEGRA_AVP_KERNEL_FW);
 
-	if (!ret)
-		avp->refcount++;
+	if (ret < 0)
+		goto out;
 
+	avp->refcount++;
+
+out:
 	mutex_unlock(&avp->open_lock);
 	return ret;
 }
 
-static int tegra_avp_release(struct inode *inode, struct file *file)
+static int tegra_avp_open_fop(struct inode *inode, struct file *file)
+{
+	nonseekable_open(inode, file);
+	return tegra_avp_open();
+}
+
+int tegra_avp_release(void)
 {
 	struct avp_info *avp = tegra_avp;
 	int ret = 0;
 
-	pr_info("%s: release\n", __func__);
 	mutex_lock(&avp->open_lock);
 	if (!avp->refcount) {
 		pr_err("%s: releasing while in invalid state\n", __func__);
@@ -1359,6 +1348,11 @@ static int tegra_avp_release(struct inode *inode, struct file *file)
 out:
 	mutex_unlock(&avp->open_lock);
 	return ret;
+}
+
+static int tegra_avp_release_fop(struct inode *inode, struct file *file)
+{
+	return tegra_avp_release();
 }
 
 static int avp_enter_lp0(struct avp_info *avp)
@@ -1472,8 +1466,8 @@ out:
 
 static const struct file_operations tegra_avp_fops = {
 	.owner		= THIS_MODULE,
-	.open		= tegra_avp_open,
-	.release	= tegra_avp_release,
+	.open		= tegra_avp_open_fop,
+	.release	= tegra_avp_release_fop,
 	.unlocked_ioctl	= tegra_avp_ioctl,
 };
 
@@ -1706,6 +1700,80 @@ static int tegra_avp_remove(struct platform_device *pdev)
 	kfree(avp);
 	tegra_avp = NULL;
 	return 0;
+}
+
+int tegra_avp_load_lib(struct tegra_avp_lib *lib)
+{
+	struct avp_info *avp = tegra_avp;
+	int ret = 0;
+
+	if (!avp)
+		return -ENODEV;
+
+	if (!lib)
+		return -EFAULT;
+
+	lib->name[TEGRA_AVP_LIB_MAX_NAME - 1] = '\0';
+
+	if (lib->args_len > TEGRA_AVP_LIB_MAX_ARGS) {
+		pr_err("%s: library args too long (%d)\n", __func__,
+			lib->args_len);
+		return -E2BIG;
+	}
+
+	mutex_lock(&avp->libs_lock);
+	ret = _load_lib(avp, lib, false);
+	if (ret)
+		goto out_unlock;
+
+	ret = _insert_lib_locked(avp, lib->handle, lib->name);
+	if (ret) {
+		pr_err("%s: can't insert lib (%d)\n", __func__, ret);
+		goto err_insert_lib;
+	}
+
+	goto out_unlock;
+
+err_insert_lib:
+	ret = send_unload_lib_msg(avp, lib->handle, lib->name);
+	if (!ret)
+		pr_debug("avp_lib: unloaded '%s'\n", lib->name);
+	else
+		pr_err("avp_lib: can't unload lib '%s' (%d)\n", lib->name, ret);
+	lib->handle = 0;
+out_unlock:
+	mutex_unlock(&avp->libs_lock);
+	return ret;
+}
+
+int tegra_avp_unload_lib(unsigned long handle)
+{
+	struct avp_info *avp = tegra_avp;
+	struct lib_item *item;
+	int ret;
+
+	if (!avp)
+		return -ENODEV;
+
+	mutex_lock(&avp->libs_lock);
+	item = _find_lib_locked(avp, handle);
+	if (!item) {
+		pr_err("avp_lib: avp lib with handle 0x%x not found\n",
+			   (u32)handle);
+		ret = -ENOENT;
+		goto err_find;
+	}
+	ret = send_unload_lib_msg(avp, item->handle, item->name);
+	if (!ret)
+		pr_debug("avp_lib: unloaded '%s'\n", item->name);
+	else
+		pr_err("avp_lib: can't unload lib '%s'/0x%x (%d)\n", item->name,
+			   item->handle, ret);
+	_delete_lib_locked(avp, item);
+
+err_find:
+	mutex_unlock(&avp->libs_lock);
+	return ret;
 }
 
 static struct platform_driver tegra_avp_driver = {
