@@ -268,7 +268,7 @@ static struct tegra_dc_out seaboard_disp2_out = {
 	.flags		= TEGRA_DC_OUT_HOTPLUG_HIGH,
 
 	.dcc_bus	= 1,
-	.hotplug_gpio	= TEGAR_GPIO_HDMI_HPD,
+	.hotplug_gpio	= TEGRA_GPIO_HDMI_HPD,
 
 	.align		= TEGRA_DC_ALIGN_MSB,
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
