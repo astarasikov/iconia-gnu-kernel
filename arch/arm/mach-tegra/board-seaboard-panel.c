@@ -370,6 +370,9 @@ int __init seaboard_panel_init(void)
 	gpio_request(TEGRA_GPIO_LVDS_SHUTDOWN, "lvds_shdn");
 	gpio_direction_output(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
 
+	gpio_request(TEGRA_GPIO_HDMI_HPD, "hdmi_hpd");
+	gpio_direction_input(TEGRA_GPIO_HDMI_HPD);
+
 	if (machine_is_wario()) {
 		seaboard_disp1_out.modes = wario_panel_modes;
 		seaboard_disp1_pdata.fb = &wario_fb_data;
