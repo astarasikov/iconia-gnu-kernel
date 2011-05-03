@@ -216,6 +216,7 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_EN_VDD_PNL,	.enable = true },
 	{ .gpio = TEGRA_GPIO_BT_RESET,		.enable = true },
 	{ .gpio = TEGRA_GPIO_BT_SHUTDOWN,	.enable = true },
+	{ .gpio = TEGRA_GPIO_HDMI_HPD,		.enable = true },
 };
 
 void __init seaboard_pinmux_init(void)

@@ -235,7 +235,7 @@ static struct tegra_dc_out seaboard_disp2_out = {
 	.flags		= TEGRA_DC_OUT_HOTPLUG_HIGH,
 
 	.dcc_bus	= 1,
-	.hotplug_gpio	= TEGAR_GPIO_HDMI_HPD,
+	.hotplug_gpio	= TEGRA_GPIO_HDMI_HPD,
 
 	.align		= TEGRA_DC_ALIGN_MSB,
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
@@ -334,6 +334,9 @@ int __init seaboard_panel_init(void)
 
 	gpio_request(TEGRA_GPIO_LVDS_SHUTDOWN, "lvds_shdn");
 	gpio_direction_output(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
+
+	gpio_request(TEGRA_GPIO_HDMI_HPD, "hdmi_hpd");
+	gpio_direction_input(TEGRA_GPIO_HDMI_HPD);
 
 	if (machine_is_wario()) {
 		seaboard_disp1_out.modes = wario_panel_modes;
