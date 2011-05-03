@@ -49,7 +49,8 @@ struct tegra_dc_hdmi_data {
 	struct tegra_dc			*dc;
 	struct tegra_edid		*edid;
 	struct tegra_nvhdcp		*nvhdcp;
-	struct delayed_work		work;
+	struct work_struct		hpd_debounce_edge_wq;
+	struct delayed_work		hpd_debounce_stable_wq;
 
 	struct resource			*base_res;
 	void __iomem			*base;
@@ -481,25 +482,15 @@ static void tegra_dc_hdmi_enqueue_detect(struct tegra_dc *dc)
 {
 	struct tegra_dc_hdmi_data *hdmi = tegra_dc_get_outdata(dc);
 
-	cancel_delayed_work(&hdmi->work);
-	if (tegra_dc_hdmi_hpd(dc)) {
-		/*
-		 * We need DDC enabled to read the EDID; give the sink some
-		 * time to power up by enabling before the delay.
-		 */
-		tegra_dc_enable_ddc(dc);
-		queue_delayed_work(system_nrt_wq, &hdmi->work,
-				   msecs_to_jiffies(100));
-	} else {
-		queue_delayed_work(system_nrt_wq, &hdmi->work,
-				   msecs_to_jiffies(30));
-	}
+	queue_work(system_nrt_wq, &hdmi->hpd_debounce_edge_wq);
 }
 
+/* This should only get called once the hotplug state is stable */
 static void tegra_dc_hdmi_detect_worker(struct work_struct *work)
 {
 	struct tegra_dc_hdmi_data *hdmi =
-		container_of(to_delayed_work(work), struct tegra_dc_hdmi_data, work);
+		container_of(to_delayed_work(work),
+			struct tegra_dc_hdmi_data, hpd_debounce_stable_wq);
 	struct tegra_dc *dc = hdmi->dc;
 
 	if (!tegra_dc_hdmi_detect(dc)) {
@@ -512,6 +503,39 @@ static void tegra_dc_hdmi_detect_worker(struct work_struct *work)
 
 	/* We don't need DDC enabled after reading the EDID. */
 	tegra_dc_disable_ddc(dc);
+}
+
+/*
+ * This is called asap in response to a hpd interrupt.  For debouncing, we
+ * don't actually report the hotplug immediately; instead, we queue up
+ * detection for later.  If we get another hpd interrupt before it's complete,
+ * we cancel the previously-queued work and requeue for even later.  This way,
+ * we'll only enable if we get no hotplug interrupts for ~100 ms and it still
+ * looks connected.
+ */
+static void tegra_dc_hdmi_hpd_debounce_edge(struct work_struct *work)
+{
+	struct tegra_dc_hdmi_data *hdmi =
+		container_of(work, struct tegra_dc_hdmi_data,
+			     hpd_debounce_edge_wq);
+	struct tegra_dc *dc = hdmi->dc;
+	unsigned long delay;
+
+	cancel_delayed_work_sync(&hdmi->hpd_debounce_stable_wq);
+
+	if (tegra_dc_hdmi_hpd(dc)) {
+		/*
+		 * We need DDC enabled to read the EDID; give the sink some
+		 * time to power up by enabling before the delay.
+		 */
+		tegra_dc_enable_ddc(dc);
+
+		delay = msecs_to_jiffies(100);
+	} else {
+		delay = msecs_to_jiffies(30);
+	}
+
+	queue_delayed_work(system_nrt_wq, &hdmi->hpd_debounce_stable_wq, delay);
 }
 
 static irqreturn_t tegra_dc_hdmi_irq(int irq, void *ptr)
@@ -639,7 +663,9 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 		goto err_edid_destroy;
 	}
 
-	INIT_DELAYED_WORK(&hdmi->work, tegra_dc_hdmi_detect_worker);
+	INIT_WORK(&hdmi->hpd_debounce_edge_wq, tegra_dc_hdmi_hpd_debounce_edge);
+	INIT_DELAYED_WORK(&hdmi->hpd_debounce_stable_wq,
+		tegra_dc_hdmi_detect_worker);
 
 	hdmi->dc = dc;
 	hdmi->base = base;
@@ -692,7 +718,8 @@ static void tegra_dc_hdmi_destroy(struct tegra_dc *dc)
 
 	disable_irq_wake(gpio_to_irq(dc->out->hotplug_gpio));
 	free_irq(gpio_to_irq(dc->out->hotplug_gpio), dc);
-	cancel_delayed_work_sync(&hdmi->work);
+	cancel_work_sync(&hdmi->hpd_debounce_edge_wq);
+	cancel_delayed_work_sync(&hdmi->hpd_debounce_stable_wq);
 	iounmap(hdmi->base);
 	release_resource(hdmi->base_res);
 	clk_put(hdmi->clk);
