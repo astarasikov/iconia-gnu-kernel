@@ -197,7 +197,6 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_MPU3050_IRQ,	.enable = true },
 	{ .gpio = TEGRA_GPIO_DISABLE_CHARGER,	.enable = true },
 	{ .gpio = TEGRA_GPIO_BT_RESET,		.enable = true },
-	{ .gpio = TEGRA_GPIO_BT_SHUTDOWN,	.enable = true },
 	{ .gpio = TEGRA_GPIO_HDMI_HPD,		.enable = true },
 };
 
@@ -235,8 +234,4 @@ void __init seaboard_pinmux_init(void)
 	gpio_request(TEGRA_GPIO_BT_RESET, "bt_nreset_gpio");
 	gpio_direction_output(TEGRA_GPIO_BT_RESET, 0);
 	gpio_export(TEGRA_GPIO_BT_RESET, false);
-
-	gpio_request(TEGRA_GPIO_BT_SHUTDOWN, "bt_nshutdown_gpio");
-	gpio_direction_output(TEGRA_GPIO_BT_SHUTDOWN, 0);
-	gpio_export(TEGRA_GPIO_BT_SHUTDOWN, false);
 }
