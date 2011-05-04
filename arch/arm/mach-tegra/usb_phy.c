@@ -486,25 +486,24 @@ static void utmi_phy_power_off(struct tegra_usb_phy *phy)
 
 	utmi_phy_clk_disable(phy);
 
+	/* We remove assertion of UTMIP_RESET in USB_SUSP_CTRL register
+	 * in order for USB_CLKEN (in USB_SUSP_CTRL) to be 0 to save power.
+	 */
 	if (phy->mode == TEGRA_USB_PHY_MODE_DEVICE) {
 		val = readl(base + USB_SUSP_CTRL);
 		val &= ~USB_WAKEUP_DEBOUNCE_COUNT(~0);
 		val |= USB_WAKE_ON_CNNT_EN_DEV | USB_WAKEUP_DEBOUNCE_COUNT(5);
 		writel(val, base + USB_SUSP_CTRL);
-	}
 
-	val = readl(base + USB_SUSP_CTRL);
-	val |= UTMIP_RESET;
-	writel(val, base + USB_SUSP_CTRL);
+		val = readl(base + UTMIP_XCVR_CFG0);
+		val |= UTMIP_FORCE_PD_POWERDOWN | UTMIP_FORCE_PD2_POWERDOWN |
+		       UTMIP_FORCE_PDZI_POWERDOWN;
+		writel(val, base + UTMIP_XCVR_CFG0);
+	}
 
 	val = readl(base + UTMIP_BAT_CHRG_CFG0);
 	val |= UTMIP_PD_CHRG;
 	writel(val, base + UTMIP_BAT_CHRG_CFG0);
-
-	val = readl(base + UTMIP_XCVR_CFG0);
-	val |= UTMIP_FORCE_PD_POWERDOWN | UTMIP_FORCE_PD2_POWERDOWN |
-	       UTMIP_FORCE_PDZI_POWERDOWN;
-	writel(val, base + UTMIP_XCVR_CFG0);
 
 	val = readl(base + UTMIP_XCVR_CFG1);
 	val |= UTMIP_FORCE_PDDISC_POWERDOWN | UTMIP_FORCE_PDCHRP_POWERDOWN |

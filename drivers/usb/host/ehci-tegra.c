@@ -261,6 +261,33 @@ static void tegra_ehci_restart(struct usb_hcd *hcd)
 	up_write(&ehci_cf_port_reset_rwsem);
 }
 
+/*
+ * Force HC to halt state from unknown (EHCI spec section 2.3)
+ *
+ * Copied from ehci_halt of "ehci-hcd.c".
+ * In order for Wake-on-Connect interrupt to work, we remove code that clears
+ * USB Interrupt (USBINTR) Enable register.
+ * We don't clear CONFIGFLAG (&hcd->flags) register as well in order
+ * to keep port routing to current host controller for next hot-plug
+ * event to be detected.
+ */
+static int tegra_ehci_halt(struct ehci_hcd *ehci)
+{
+	u32 temp = ehci_readl(ehci, &ehci->regs->status);
+
+	if (ehci_is_TDI(ehci) && tdi_in_host_mode(ehci) == 0)
+		return 0;
+
+	if ((temp & STS_HALT) != 0)
+		return 0;
+
+	temp = ehci_readl(ehci, &ehci->regs->command);
+	temp &= ~CMD_RUN;
+	ehci_writel(ehci, temp, &ehci->regs->command);
+	return handshake(ehci, &ehci->regs->status,
+		STS_HALT, STS_HALT, 16 * 125);
+}
+
 static int tegra_usb_suspend(struct usb_hcd *hcd)
 {
 	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
@@ -270,8 +297,8 @@ static int tegra_usb_suspend(struct usb_hcd *hcd)
 	spin_lock_irqsave(&tegra->ehci->lock, flags);
 
 	tegra->port_speed = (readl(&hw->port_status[0]) >> 26) & 0x3;
-	ehci_halt(tegra->ehci);
-	clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+
+	tegra_ehci_halt(tegra->ehci);
 
 	spin_unlock_irqrestore(&tegra->ehci->lock, flags);
 
