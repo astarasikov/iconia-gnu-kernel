@@ -23,6 +23,10 @@
 #include <linux/uaccess.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
+#include <linux/stat.h>
+#include <linux/io.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
 #include <asm/atomic.h>
 
 #include <mach/dc.h>
@@ -98,7 +102,17 @@ struct tegra_nvhdcp {
 	u32				num_bksv_list;
 	u64				bksv_list[TEGRA_NVHDCP_MAX_DEVS];
 	int				fail_count;
+	struct dentry			*debug_dir;
+	struct dentry			*debug_file;
 };
+
+#if CONFIG_DEBUG_FS
+static void nvhdcp_debuginit(struct tegra_nvhdcp *nvhdcp);
+static void nvhdcp_debug_remove(struct tegra_nvhdcp *nvhdcp);
+#else
+static inline void nvhdcp_debuginit(struct tegra_nvhdcp *nvhdcp) { }
+static inline void nvhdcp_debug_remove(struct tegra_nvhdcp *nvhdcp) { }
+#endif /* CONFIG_DEBUG_FS */
 
 static inline bool nvhdcp_is_plugged(struct tegra_nvhdcp *nvhdcp)
 {
@@ -1210,6 +1224,8 @@ struct tegra_nvhdcp *tegra_nvhdcp_create(struct tegra_dc_hdmi_data *hdmi,
 
 	nvhdcp_vdbg("%s(): created misc device %s\n", __func__, nvhdcp->name);
 
+	nvhdcp_debuginit(nvhdcp);
+
 	return nvhdcp;
 free_workqueue:
 	destroy_workqueue(nvhdcp->downstream_wq);
@@ -1222,9 +1238,127 @@ free_nvhdcp:
 
 void tegra_nvhdcp_destroy(struct tegra_nvhdcp *nvhdcp)
 {
+	nvhdcp_debug_remove(nvhdcp);
 	misc_deregister(&nvhdcp->miscdev);
 	tegra_nvhdcp_off(nvhdcp);
 	destroy_workqueue(nvhdcp->downstream_wq);
 	i2c_release_client(nvhdcp->client);
 	kfree(nvhdcp);
 }
+
+#ifdef CONFIG_DEBUG_FS
+static int nvhdcp_diagnostics(struct seq_file *s, void *data)
+{
+	struct tegra_nvhdcp *nvhdcp = s->private;
+	struct clk *hdmi_clk = NULL;
+	int e = 0;
+	u64 a_ksv = 0, d_ksv = 0;
+	u32 res;
+
+	if (!nvhdcp) {
+		e = -EINVAL;
+		goto failure;
+	}
+
+	hdmi_clk = clk_get_sys("hdmi", "hdmi");
+	if (IS_ERR(hdmi_clk)) {
+		e = PTR_ERR(hdmi_clk);
+		goto failure;
+	}
+
+	e = clk_enable(hdmi_clk);
+	if (e)
+		goto failure_clock;
+
+	mutex_lock(&nvhdcp->lock);
+
+	if (nvhdcp->state != STATE_OFF &&
+		nvhdcp->state != STATE_UNAUTHENTICATED) {
+		nvhdcp_err("nvhdcp failure - already in use\n");
+		goto failure_locked;
+	}
+
+	e = load_kfuse(nvhdcp->hdmi);
+	if (e)
+		goto failure_locked;
+
+	hdcp_ctrl_run(nvhdcp->hdmi, 1);
+	e = wait_hdcp_ctrl(nvhdcp->hdmi, AN_VALID | SROM_ERR, &res);
+	if (e)
+		goto failure_locked;
+
+	/* HW needs additional time to before it is ready from experience */
+	msleep(25);
+
+	a_ksv = get_aksv(nvhdcp->hdmi);
+	if (verify_ksv(a_ksv))
+		goto failure_locked;
+
+	/* set cn */
+	set_cn(nvhdcp->hdmi, 1);
+
+	tegra_hdmi_writel(nvhdcp->hdmi, TMDS0_LINK0 | READ_S,
+					HDMI_NV_PDISP_RG_HDCP_CMODE);
+
+	/* need to write cksv */
+#define CKSV_TEST	0xFFFFF
+	set_cksv(nvhdcp->hdmi, CKSV_TEST);
+
+	e = wait_hdcp_ctrl(nvhdcp->hdmi, SPRIME_VALID, NULL);
+	if (e)
+		goto failure_locked;
+
+	/* HW needs additional time to before it is ready from experience */
+	msleep(50);
+
+	d_ksv = get_dksv(nvhdcp->hdmi);
+	if (verify_ksv(d_ksv))
+		goto failure_locked;
+
+	mutex_unlock(&nvhdcp->lock);
+	clk_disable(hdmi_clk);
+	clk_put(hdmi_clk);
+	seq_printf(s, "A ksv = 0x%010llx\nD ksv = 0x%010llx\npass:1\n",
+		a_ksv, d_ksv);
+
+	return 0;
+
+failure_locked:
+	mutex_unlock(&nvhdcp->lock);
+	clk_disable(hdmi_clk);
+failure_clock:
+	clk_put(hdmi_clk);
+failure:
+	nvhdcp_err("diagnostic failure!\n");
+	seq_printf(s, "A ksv = 0x%010llx\nD ksv = 0x%010llx\npass:0\n",
+		a_ksv, d_ksv);
+
+	return e;
+
+}
+
+static int nvhdcp_diagnostics_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, nvhdcp_diagnostics, inode->i_private);
+}
+
+static const struct file_operations nvhdcp_debug_fops = {
+	.open		= nvhdcp_diagnostics_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static void nvhdcp_debuginit(struct tegra_nvhdcp *nvhdcp)
+{
+	nvhdcp->debug_dir = debugfs_create_dir("nvhdcp", NULL);
+	nvhdcp->debug_file = debugfs_create_file("diagnostics", S_IRUSR|S_IRGRP,
+				nvhdcp->debug_dir, nvhdcp, &nvhdcp_debug_fops);
+}
+
+static void nvhdcp_debug_remove(struct tegra_nvhdcp *nvhdcp)
+{
+	debugfs_remove(nvhdcp->debug_file);
+	debugfs_remove(nvhdcp->debug_dir);
+}
+#endif /* CONFIG_DEBUG_FS */
