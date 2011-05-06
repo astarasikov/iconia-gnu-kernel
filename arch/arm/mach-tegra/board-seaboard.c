@@ -801,6 +801,18 @@ static void __init seaboard_common_init(void)
 	seaboard_ehci_init();
 	seaboard_panel_init();
 	seaboard_kbc_init();
+
+	gpio_request(TEGRA_GPIO_RECOVERY_SWITCH, "recovery_switch");
+	gpio_direction_input(TEGRA_GPIO_RECOVERY_SWITCH);
+	gpio_export(TEGRA_GPIO_RECOVERY_SWITCH, false);
+
+	gpio_request(TEGRA_GPIO_DEV_SWITCH, "dev_switch");
+	gpio_direction_input(TEGRA_GPIO_DEV_SWITCH);
+	gpio_export(TEGRA_GPIO_DEV_SWITCH, false);
+
+	gpio_request(TEGRA_GPIO_WP_STATUS, "wp_status");
+	gpio_direction_input(TEGRA_GPIO_WP_STATUS);
+	gpio_export(TEGRA_GPIO_WP_STATUS, false);
 }
 
 static struct tegra_suspend_platform_data seaboard_suspend = {
