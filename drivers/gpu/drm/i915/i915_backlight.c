@@ -34,26 +34,13 @@
 #define PWM_FREQUENCY 0x1000
 
 /*
- * For compatibility with other (ACPI) backlight interfaces, set a base
- * backlight level about 10% of the max.  The implications of this are:
- * 1. We can no longer fully turn off the backlight by writing "0" to the
- *    backlight file.  DPMS should be used to turn the backlight off.
- * 2. The effective backlight range is decreased.  While the max brightness
- *    we can write to the register remains PWM_FREQUENCY, the minimum is now
- *    BRIGHTNESS_0_BASE instead of 0.  The user interface still provides
- *    MAX_BRIGHTNESS levels of granularity, but the range is smaller.
- */
-#define BRIGHTNESS_0_BASE (MAX_BRIGHTNESS / 10)
-#define BASED_MAX_BRIGHTNESS (MAX_BRIGHTNESS + BRIGHTNESS_0_BASE)
-
-/*
  * The Pineview LVDS Backlight PWM Control register is a 32 bit word split
  * into two unsigned 16 bit words: the high order short is the cycle frequency,
  * and the low order word is the duty cycle.  According to i915_opregion.c,
  * the low order bit of each short is unused.
  *
  * While the frequency is hardcoded, these macros provide masking and shifting
- * for the PWM duty cycle.
+ * for the duty cycle.
  */
 #define CTL_TO_PWM(ctl) ((ctl & BACKLIGHT_DUTY_CYCLE_MASK) >> 1)
 #define PWM_TO_CTL(pwm) ((pwm << 1) & BACKLIGHT_DUTY_CYCLE_MASK)
@@ -63,14 +50,11 @@ static int i915_get_intensity(struct backlight_device *bd)
 	struct drm_device *dev = bl_get_data(bd);
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 blc_pwm_ctl;
-	int level, pwm_val, based_level;
+	int level, pwm_val;
 
 	blc_pwm_ctl = I915_READ(BLC_PWM_CTL);
 	pwm_val = CTL_TO_PWM(blc_pwm_ctl);
-	based_level = (pwm_val * BASED_MAX_BRIGHTNESS) / PWM_FREQUENCY;
-	level = based_level - BRIGHTNESS_0_BASE;
-	if (level < 0)
-		level = 0;
+	level = (pwm_val * MAX_BRIGHTNESS) / PWM_FREQUENCY;
 
 	return level;
 }
@@ -79,15 +63,14 @@ static int i915_set_intensity(struct backlight_device *bd)
 {
 	struct drm_device *dev = bl_get_data(bd);
 	struct drm_i915_private *dev_priv = dev->dev_private;
-	int level, pwm_val, based_level;
+	int level, pwm_val;
 	u32 blc_pwm_ctl;
 
 	level = bd->props.brightness;
 	if (level > MAX_BRIGHTNESS)
 		level = MAX_BRIGHTNESS;
 
-	based_level = level + BRIGHTNESS_0_BASE;
-	pwm_val = (based_level * PWM_FREQUENCY) / BASED_MAX_BRIGHTNESS;
+	pwm_val = (level * PWM_FREQUENCY) / MAX_BRIGHTNESS;
 	blc_pwm_ctl = (PWM_FREQUENCY << BACKLIGHT_MODULATION_FREQ_SHIFT) |
 		PWM_TO_CTL(pwm_val);
 	I915_WRITE(BLC_PWM_CTL, blc_pwm_ctl);
