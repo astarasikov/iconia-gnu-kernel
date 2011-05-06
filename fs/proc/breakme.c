@@ -12,6 +12,7 @@
 #include <linux/irqnr.h>
 #include <asm/cputime.h>
 #include <asm/uaccess.h>
+#include <linux/chromeos_platform.h>
 
 #define MAX_BREAKME_WRITE 64
 static ssize_t write_breakme(struct file *file, const char __user *buf,
@@ -59,6 +60,8 @@ static ssize_t write_breakme(struct file *file, const char __user *buf,
 			while (1)
 				;
 		}
+		else if (!strcmp(kbuf, "need_recovery"))
+			chromeos_set_need_recovery();
 	}
 	return count;
 }

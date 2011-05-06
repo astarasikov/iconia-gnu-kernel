@@ -35,4 +35,3 @@ obj-$(CONFIG_GPIO_INTEL_PMIC)	+= intel_pmic_gpio.o
 obj-$(CONFIG_XO1_RFKILL)	+= xo1-rfkill.o
 obj-$(CONFIG_IBM_RTL)		+= ibm_rtl.o
 obj-$(CONFIG_ACPI_CHROMEOS)	+= chromeos_acpi.o
-obj-$(CONFIG_CHROMEOS)		+= chromeos.o
