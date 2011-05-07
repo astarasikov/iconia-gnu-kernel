@@ -38,6 +38,7 @@
 #include <mach/pinmux.h>
 #include <mach/pinmux-t2.h>
 #include <mach/kbc.h>
+#include <mach/clk.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -688,6 +689,16 @@ static void __init seaboard_common_init(void)
 	gpio_export(TEGRA_GPIO_WP_STATUS, false);
 }
 
+static void __init tegra_set_clock_readskew(const char *clk_name, int skew)
+{
+	struct clk *c = tegra_get_clock_by_name(clk_name);
+	if (!c)
+		return;
+
+	tegra_sdmmc_tap_delay(c, skew);
+	clk_put(c);
+}
+
 static struct tegra_suspend_platform_data seaboard_suspend = {
 	.cpu_timer = 5000,
 	.cpu_off_timer = 5000,
@@ -726,7 +737,6 @@ static void __init tegra_seaboard_init(void)
 
 static void __init tegra_kaen_init(void)
 {
-	struct clk *c, *p;
 	tegra_init_suspend(&seaboard_suspend);
 
 	__init_debug_uart_B();
@@ -741,16 +751,8 @@ static void __init tegra_kaen_init(void)
 
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
-	/* Temporary hack to keep SDIO for wifi capped at 43.2MHz due to
-	 * stability issues with brcmfmac at 48MHz.
-	 */
-	c = tegra_get_clock_by_name("sdmmc1");
-	p = tegra_get_clock_by_name("pll_p");
-	if (c && p) {
-		clk_set_parent(c, p);
-		clk_set_rate(c, 43200000);
-		clk_enable(c);
-	}
+	/* setting skew makes WIFI stable when sdmmc1 runs 48MHz. */
+	tegra_set_clock_readskew("sdmmc1", 8);
 
 	seaboard_common_init();
 
@@ -770,6 +772,9 @@ static void __init tegra_aebl_init(void)
 	bq20z75_pdata.battery_detect_present = 0;
 
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
+
+	/* setting skew makes WIFI stable when sdmmc1 runs 48MHz. */
+	tegra_set_clock_readskew("sdmmc1", 8);
 
 	seaboard_common_init();
 
