@@ -87,4 +87,10 @@ static inline int aebl_sensors_init(void) { return 0; }
 static inline void aebl_emc_init(void) { return; }
 #endif
 
+#ifdef CONFIG_MACH_ARTHUR
+void arthur_emc_init(void);
+#else
+static inline void arthur_emc_init(void) { return; }
+#endif
+
 #endif

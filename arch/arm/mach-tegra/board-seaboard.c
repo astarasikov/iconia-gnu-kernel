@@ -971,6 +971,7 @@ static void __init tegra_arthur_init(void)
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
 
 	seaboard_common_init();
+	arthur_emc_init();
 
 	arthur_i2c_register_devices();
 	seaboard_i2c_init();
