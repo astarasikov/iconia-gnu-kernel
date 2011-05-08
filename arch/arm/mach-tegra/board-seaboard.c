@@ -775,8 +775,9 @@ static void __init arthur_i2c_register_devices(void)
 	gpio_request(TEGRA_GPIO_CYTP_INT, "gpio_cytp_int");
 	gpio_direction_input(TEGRA_GPIO_CYTP_INT);
 
-	i2c_register_board_info(0, &isl29018_device, 1);
 	i2c_register_board_info(0, &cyapa_device, 1);
+
+	i2c_register_board_info(3, &isl29018_device, 1);
 
 	i2c_register_board_info(4, &nct1008_device, 1);
 }
