@@ -367,7 +367,7 @@ static const u32 cros_kbd_keymap[] = {
 	KEY(14, 5, KEY_SPACE),
 	KEY(14, 6, KEY_DOWN),
 	KEY(14, 7, KEY_UP),
-	
+
 	KEY(15, 6, KEY_RIGHT),
 	KEY(15, 7, KEY_LEFT),
 };

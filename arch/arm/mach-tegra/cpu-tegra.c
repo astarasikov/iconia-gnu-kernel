@@ -127,29 +127,29 @@ static void tegra_throttle_work_func(struct work_struct *work)
 void tegra_throttling_enable(bool enable)
 {
 	mutex_lock(&tegra_cpu_lock);
-	
- 	if (enable && !is_throttling) {
+
+	if (enable && !is_throttling) {
 		unsigned int current_freq = tegra_getspeed(0);
-		
- 		is_throttling = true;
+
+		is_throttling = true;
 		for (throttle_index = THROTTLE_HIGHEST_INDEX;
 		     throttle_index >= THROTTLE_LOWEST_INDEX;
 		     throttle_index--)
 			if (freq_table[throttle_index].frequency
 			    < current_freq)
 				break;
-		
+
 		throttle_index = max(throttle_index, THROTTLE_LOWEST_INDEX);
 		throttle_next_index = throttle_index;
 		queue_delayed_work(workqueue, &throttle_work, 0);
-		
- 	} else if (!enable && is_throttling) {
- 		cancel_delayed_work_sync(&throttle_work);
- 		is_throttling = false;
+
+	} else if (!enable && is_throttling) {
+		cancel_delayed_work_sync(&throttle_work);
+		is_throttling = false;
 		/* restore speed requested by governor */
 		tegra_update_cpu_speed(tegra_cpu_highest_speed());
- 	}
-	
+	}
+
 	mutex_unlock(&tegra_cpu_lock);
 }
 EXPORT_SYMBOL_GPL(tegra_throttling_enable);
@@ -172,7 +172,7 @@ cpufreq_freq_attr_ro(throttle);
 static int throttle_debug_set(void *data, u64 val)
 {
 	tegra_throttling_enable(val);
- 	return 0;
+	return 0;
 }
 
 static int throttle_debug_get(void *data, u64 *val)
