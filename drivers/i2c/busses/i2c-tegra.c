@@ -33,6 +33,7 @@
 #include <mach/pinmux.h>
 
 #define TEGRA_I2C_TIMEOUT (msecs_to_jiffies(1000))
+#define TEGRA_I2C_RETRIES 3
 #define BYTES_PER_FIFO_WORD 4
 
 #define I2C_CNFG				0x000
@@ -40,6 +41,7 @@
 #define I2C_CNFG_PACKET_MODE_EN			(1<<10)
 #define I2C_CNFG_NEW_MASTER_FSM			(1<<11)
 #define I2C_STATUS				0x01C
+#define I2C_STATUS_BUSY				(1<<8)
 #define I2C_SL_CNFG				0x020
 #define I2C_SL_CNFG_NACK			(1<<1)
 #define I2C_SL_CNFG_NEWSL			(1<<2)
@@ -83,6 +85,7 @@
 #define I2C_ERR_NO_ACK				0x01
 #define I2C_ERR_ARBITRATION_LOST		0x02
 #define I2C_ERR_UNKNOWN_INTERRUPT		0x04
+#define I2C_ERR_UNEXPECTED_STATUS		0x08
 
 #define PACKET_HEADER0_HEADER_SIZE_SHIFT	28
 #define PACKET_HEADER0_PACKET_ID_SHIFT		16
@@ -429,6 +432,21 @@ static irqreturn_t tegra_i2c_isr(int irq, void *dev_id)
 		goto err;
 	}
 
+	if ((i2c_readl(i2c_dev, I2C_STATUS) & I2C_STATUS_BUSY)
+	    && (status == I2C_INT_TX_FIFO_DATA_REQ)
+	    && i2c_dev->msg_read
+	    && i2c_dev->msg_buf_remaining) {
+		i2c_dev->msg_err |= I2C_ERR_UNEXPECTED_STATUS;
+
+		if (!i2c_dev->irq_disabled) {
+			disable_irq_nosync(i2c_dev->irq);
+			i2c_dev->irq_disabled = 1;
+		}
+
+		complete(&i2c_dev->msg_complete);
+		goto err;
+	}
+
 	if (i2c_dev->msg_read && (status & I2C_INT_RX_FIFO_DATA_REQ)) {
 		if (i2c_dev->msg_buf_remaining)
 			tegra_i2c_empty_rx_fifo(i2c_dev);
@@ -536,8 +554,11 @@ static int tegra_i2c_xfer_msg(struct tegra_i2c_bus *i2c_bus,
 	if (i2c_dev->msg_err == I2C_ERR_NO_ACK) {
 		if (msg->flags & I2C_M_IGNORE_NAK)
 			return 0;
-		return -EREMOTEIO;
+		return -EAGAIN;
 	}
+
+	if (i2c_dev->msg_err & I2C_ERR_UNEXPECTED_STATUS)
+		return -EAGAIN;
 
 	return -EIO;
 }
@@ -714,6 +735,8 @@ static int tegra_i2c_probe(struct platform_device *pdev)
 			sizeof(i2c_bus->adapter.name));
 		i2c_bus->adapter.dev.parent = &pdev->dev;
 		i2c_bus->adapter.nr = pdata->adapter_nr + i;
+		i2c_bus->adapter.retries = TEGRA_I2C_RETRIES;
+
 		ret = i2c_add_numbered_adapter(&i2c_bus->adapter);
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to add I2C adapter\n");
