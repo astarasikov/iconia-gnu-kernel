@@ -666,7 +666,7 @@ static const struct tegra_emc_table kaen_emc_tables_Samsung_380Mhz[] = {
 
 struct tegra_board_emc_table kaen_emc[] = {
 	{
-		.table 		= kaen_emc_tables_Samsung_333Mhz,
+		.table		= kaen_emc_tables_Samsung_333Mhz,
 		.table_size	= ARRAY_SIZE(kaen_emc_tables_Samsung_333Mhz),
 		.name		= "Samsung 333MHz",
 	},
@@ -844,5 +844,5 @@ void __init seaboard_emc_init(void)
 void __init aebl_emc_init(void)
 {
 	BUG_ON(!machine_is_aebl());
-	tegra_init_emc(aebl_emc_tables,	ARRAY_SIZE(aebl_emc_tables));
+	tegra_init_emc(aebl_emc_tables, ARRAY_SIZE(aebl_emc_tables));
 }

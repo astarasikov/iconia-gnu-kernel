@@ -69,7 +69,7 @@ struct tegra_iovmm_domain {
 struct iovmm_share_group;
 
 struct tegra_iovmm_client {
-	const char 			*name;
+	const char			*name;
 	unsigned long			flags;
 	struct iovmm_share_group	*group;
 	struct tegra_iovmm_domain	*domain;

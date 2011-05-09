@@ -274,8 +274,8 @@ static struct tegra_dc_out seaboard_disp1_out = {
 	.depth		= 18,
 	.dither		= TEGRA_DC_ORDERED_DITHER,
 
-	.modes	 	= seaboard_panel_modes,
-	.n_modes 	= ARRAY_SIZE(seaboard_panel_modes),
+	.modes		= seaboard_panel_modes,
+	.n_modes	= ARRAY_SIZE(seaboard_panel_modes),
 
 	.enable		= seaboard_panel_enable,
 	.disable	= seaboard_panel_disable,

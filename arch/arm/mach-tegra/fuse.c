@@ -29,7 +29,7 @@
 #define FUSE_UID_HIGH		0x10c
 #define FUSE_SKU_INFO		0x110
 #define FUSE_SPARE_BIT		0x200
- 
+
 #define CPU_SPEEDO_LSBIT		20
 #define CPU_SPEEDO_MSBIT		29
 #define CPU_SPEEDO_REDUND_LSBIT		30

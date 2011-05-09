@@ -184,7 +184,7 @@ static inline bool tegra_cpu_in_reset(int cpu)
 static int tegra_tear_down_cpu1(void)
 {
 	u32 reg;
-	
+
 	/* Signal to CPU1 to tear down */
 	tegra_legacy_force_irq_set(TEGRA_CPUIDLE_TEAR_DOWN);
 

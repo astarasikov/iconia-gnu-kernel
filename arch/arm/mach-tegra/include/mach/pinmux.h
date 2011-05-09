@@ -207,10 +207,10 @@ struct tegra_pingroup_desc {
 	int funcs[4];
 	int func_safe;
 	int vddio;
-	s16 tri_reg; 	/* offset into the TRISTATE_REG_* register bank */
+	s16 tri_reg;	/* offset into the TRISTATE_REG_* register bank */
 	s16 mux_reg;	/* offset into the PIN_MUX_CTL_* register bank */
 	s16 pupd_reg;	/* offset into the PULL_UPDOWN_REG_* register bank */
-	s8 tri_bit; 	/* offset into the TRISTATE_REG_* register bit */
+	s8 tri_bit;	/* offset into the TRISTATE_REG_* register bit */
 	s8 mux_bit;	/* offset into the PIN_MUX_CTL_* register bit */
 	s8 pupd_bit;	/* offset into the PULL_UPDOWN_REG_* register bit */
 };
@@ -246,4 +246,3 @@ void tegra_pinmux_config_tristate_table(const struct tegra_pingroup_config *conf
 void tegra_pinmux_config_pullupdown_table(const struct tegra_pingroup_config *config,
 	int len, enum tegra_pullupdown pupd);
 #endif
-
