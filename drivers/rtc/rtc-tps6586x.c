@@ -32,8 +32,9 @@
 #define TPS_EPOCH	2009
 
 #define RTC_CTRL	0xc0
-#  define RTC_ENABLE	(1 << 5)	/* enables tick updates */
-#  define RTC_HIRES	(1 << 4)	/* 1Khz or 32Khz updates */
+#define OSC_SRC_SEL	(1 << 6)	/* select internal or external clock */
+#define RTC_ENABLE	(1 << 5)	/* enables tick updates */
+#define PRE_BYPASS	(1 << 3)	/* 1Khz or 32Khz updates */
 #define RTC_ALARM1_HI	0xc1
 #define RTC_COUNT4	0xc6
 
@@ -142,7 +143,10 @@ static int tps6586x_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 		return -EINVAL;
 	}
 
-	if (rtc->irq_en && rtc->irq_en && (rtc->irq != -1)) {
+	if (alrm->enabled && !rtc->irq_en) {
+		enable_irq(rtc->irq);
+		rtc->irq_en = true;
+	} else if (!alrm->enabled && rtc->irq_en) {
 		disable_irq(rtc->irq);
 		rtc->irq_en = false;
 	}
@@ -155,15 +159,8 @@ static int tps6586x_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 	buff[2] = ticks & 0xff;
 
 	err = tps6586x_writes(tps_dev, RTC_ALARM1_HI, sizeof(buff), buff);
-	if (err) {
+	if (err)
 		dev_err(tps_dev, "unable to program alarm\n");
-		return err;
-	}
-
-	if (alrm->enabled && (rtc->irq != -1)) {
-		enable_irq(rtc->irq);
-		rtc->irq_en = true;
-	}
 
 	return err;
 }
@@ -191,11 +188,58 @@ static int tps6586x_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 	return 0;
 }
 
+static int tps6586x_rtc_alarm_irq_enable(struct device *dev,
+					 unsigned int enabled)
+{
+	struct tps6586x_rtc *rtc = dev_get_drvdata(dev);
+	struct device *tps_dev = to_tps6586x_dev(dev);
+	u8 buff;
+	int err;
+
+	if (rtc->irq == -1)
+		return -EIO;
+
+	err = tps6586x_read(tps_dev, RTC_CTRL, &buff);
+	if (err < 0) {
+		dev_err(dev, "failed to read RTC_CTRL\n");
+		return err;
+	}
+
+	if ((enabled && (buff & RTC_ENABLE)) ||
+	    (!enabled && !(buff & RTC_ENABLE)))
+		return 0;
+
+	if (enabled) {
+		err = tps6586x_set_bits(tps_dev, RTC_CTRL, RTC_ENABLE);
+		if (err < 0) {
+			dev_err(dev, "failed to set RTC_ENABLE\n");
+			return err;
+		}
+		if (!rtc->irq_en) {
+			enable_irq(rtc->irq);
+			rtc->irq_en = true;
+		}
+	} else {
+		err = tps6586x_clr_bits(tps_dev, RTC_CTRL, RTC_ENABLE);
+		if (err < 0) {
+			dev_err(dev, "failed to clear RTC_ENABLE\n");
+			return err;
+		}
+		if (rtc->irq_en) {
+			disable_irq(rtc->irq);
+			rtc->irq_en = false;
+		}
+	}
+
+	return 0;
+}
+
 static const struct rtc_class_ops tps6586x_rtc_ops = {
 	.read_time	= tps6586x_rtc_read_time,
 	.set_time	= tps6586x_rtc_set_time,
 	.set_alarm	= tps6586x_rtc_set_alarm,
 	.read_alarm	= tps6586x_rtc_read_alarm,
+	.alarm_irq_enable = tps6586x_rtc_alarm_irq_enable,
 };
 
 static irqreturn_t tps6586x_rtc_irq(int irq, void *data)
@@ -220,7 +264,13 @@ static int __devinit tps6586x_rtc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	rtc->irq = -1;
-	if (!pdata || (pdata->irq < 0))
+
+	if (!pdata) {
+		dev_err(&pdev->dev, "no platform_data specified\n");
+		return -EINVAL;
+	}
+
+	if (pdata->irq < 0)
 		dev_warn(&pdev->dev, "no IRQ specified, wakeup is disabled\n");
 
 	rtc->epoch_start = mktime(TPS_EPOCH, 1, 1, 0, 0, 0);
@@ -236,7 +286,9 @@ static int __devinit tps6586x_rtc_probe(struct platform_device *pdev)
 
 	/* disable high-res mode, enable tick counting */
 	err = tps6586x_update(tps_dev, RTC_CTRL,
-			      (RTC_ENABLE | RTC_HIRES), RTC_ENABLE);
+			      (RTC_ENABLE | OSC_SRC_SEL),
+			      (RTC_ENABLE | OSC_SRC_SEL | PRE_BYPASS));
+
 	if (err < 0) {
 		dev_err(&pdev->dev, "unable to start counter\n");
 		goto fail;
@@ -254,6 +306,7 @@ static int __devinit tps6586x_rtc_probe(struct platform_device *pdev)
 		} else {
 			disable_irq(rtc->irq);
 			enable_irq_wake(rtc->irq);
+			rtc->irq_en = false;
 		}
 	}
 
