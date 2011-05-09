@@ -46,10 +46,27 @@
 		.slew_falling = TEGRA_SLEW_SLOWEST,		\
 	}
 
+#define I2C_DRIVE(_name)					\
+	{							\
+		.pingroup = TEGRA_DRIVE_PINGROUP_##_name,	\
+		.hsm = TEGRA_HSM_DISABLE,			\
+		.schmitt = TEGRA_SCHMITT_ENABLE,		\
+		.drive = TEGRA_DRIVE_DIV_1,			\
+		.pull_down = TEGRA_PULL_31,			\
+		.pull_up = TEGRA_PULL_31,			\
+		.slew_rising = TEGRA_SLEW_FASTEST,		\
+		.slew_falling = TEGRA_SLEW_FASTEST,		\
+	}
+
+
 static __initdata struct tegra_drive_pingroup_config seaboard_drive_pinmux[] = {
+	I2C_DRIVE(DBG),
+	I2C_DRIVE(AO1),
+	I2C_DRIVE(AT1),
+	I2C_DRIVE(VI2),
+
 	DEFAULT_DRIVE(SDIO1),
 	VI_CSI_DRIVE(VI1),
-	VI_CSI_DRIVE(VI2),
 };
 
 static __initdata struct tegra_pingroup_config seaboard_pinmux[] = {
