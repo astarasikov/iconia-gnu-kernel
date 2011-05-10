@@ -402,6 +402,9 @@ static void tegra_suspend_dram(bool do_lp0)
 	suspend_cpu_complex();
 	stop_critical_timings();
 	flush_cache_all();
+#ifdef CONFIG_CACHE_L2X0
+	l2x0_shutdown();
+#endif
 	outer_flush_all();
 	outer_disable();
 
@@ -412,7 +415,9 @@ static void tegra_suspend_dram(bool do_lp0)
 	start_critical_timings();
 
 	writel(orig, evp_reset);
-	tegra_init_cache();
+#ifdef CONFIG_CACHE_L2X0
+	l2x0_restart();
+#endif
 
 	if (!do_lp0) {
 		memcpy(iram_code, iram_save, iram_save_size);
