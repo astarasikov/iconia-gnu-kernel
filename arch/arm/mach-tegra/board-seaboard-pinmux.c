@@ -245,13 +245,4 @@ void __init seaboard_pinmux_init(void)
 					ARRAY_SIZE(seaboard_drive_pinmux));
 
 	tegra_gpio_config(gpio_table, ARRAY_SIZE(gpio_table));
-
-	/* exporting BT gpio's until the rfkill driver
-	 * is availabe upstream. Setting both gpio's to
-	 * 0, which blocks the BT radio. Set to 1 to enable.
-	 * This can be done from /sys/class/gpio
-	 */
-	gpio_request(TEGRA_GPIO_BT_RESET, "bt_nreset_gpio");
-	gpio_direction_output(TEGRA_GPIO_BT_RESET, 0);
-	gpio_export(TEGRA_GPIO_BT_RESET, false);
 }

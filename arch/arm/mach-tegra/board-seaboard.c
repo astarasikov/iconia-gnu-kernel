@@ -31,6 +31,7 @@
 #include <linux/nct1008.h>
 #include <linux/power/bq20z75.h>
 #include <linux/cyapa.h>
+#include <linux/rfkill-gpio.h>
 
 #include <sound/wm8903.h>
 
@@ -412,6 +413,21 @@ static void seaboard_kbc_init(void)
        platform_device_register(&tegra_kbc_device);
 }
 
+static struct rfkill_gpio_platform_data bt_rfkill_platform_data = {
+	.name		= "bt_rfkill",
+	.reset_gpio	= TEGRA_GPIO_BT_RESET,
+	.power_clk_name	= "blink",
+	.type		= RFKILL_TYPE_BLUETOOTH,
+};
+
+static struct platform_device bt_rfkill_device = {
+	.name	= "rfkill_gpio",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &bt_rfkill_platform_data,
+	},
+};
+
 static struct tegra_sdhci_platform_data sdhci_pdata1 = {
 	.cd_gpio	= -1,
 	.wp_gpio	= -1,
@@ -468,6 +484,7 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&tegra_pcm_device,
 	&tegra_spdif_device,
 	&spdif_dit_device,
+	&bt_rfkill_device,
 };
 
 static struct nct1008_platform_data nct1008_pdata = {
