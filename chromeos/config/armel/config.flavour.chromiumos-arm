@@ -190,7 +190,6 @@ CONFIG_NEED_PER_CPU_KM=y
 # CONFIG_NOZOMI is not set
 # CONFIG_NO_HZ is not set
 # CONFIG_NS83820 is not set
-# CONFIG_P54_PCI is not set
 # CONFIG_PCH_GBE is not set
 # CONFIG_PCH_PHUB is not set
 CONFIG_PCI=y
