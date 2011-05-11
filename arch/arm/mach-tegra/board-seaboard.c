@@ -303,6 +303,7 @@ static const u32 cros_kbd_keymap[] = {
 	KEY(1, 7, KEY_Q),
 
 	KEY(2, 0, KEY_F1),
+	KEY(2, 1, KEY_F4),
 	KEY(2, 2, KEY_F3),
 	KEY(2, 3, KEY_F2),
 	KEY(2, 4, KEY_D),
@@ -322,6 +323,7 @@ static const u32 cros_kbd_keymap[] = {
 	KEY(5, 0, KEY_F10),
 	KEY(5, 1, KEY_F7),
 	KEY(5, 2, KEY_F6),
+	KEY(5, 3, KEY_F5),
 	KEY(5, 4, KEY_S),
 	KEY(5, 5, KEY_X),
 	KEY(5, 6, KEY_2),
