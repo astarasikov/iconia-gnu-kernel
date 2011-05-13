@@ -324,9 +324,7 @@ unsigned int tegra_suspend_lp2(unsigned int us)
 	__cortex_a9_save(mode);
 	/* return from __cortex_a9_restore */
 	barrier();
-	cpu_init();
 	restore_cpu_complex();
-	l2x0_restart();
 
 	remain = tegra_lp2_timer_remain();
 	if (us)
@@ -400,19 +398,17 @@ static void tegra_suspend_dram(bool do_lp0)
 	}
 
 	suspend_cpu_complex();
-	stop_critical_timings();
 	flush_cache_all();
 #ifdef CONFIG_CACHE_L2X0
 	l2x0_shutdown();
 #endif
 	outer_flush_all();
 	outer_disable();
+	barrier();
 
 	__cortex_a9_save(mode);
 	barrier();
-	cpu_init();
 	restore_cpu_complex();
-	start_critical_timings();
 
 	writel(orig, evp_reset);
 #ifdef CONFIG_CACHE_L2X0

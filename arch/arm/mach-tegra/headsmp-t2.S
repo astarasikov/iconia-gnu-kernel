@@ -105,7 +105,9 @@ __restart_plls:
 	ldr	r1, [r4]
 	add	r1, r1, #300
 	str	r1, [r0, #0x18]	@ pll_timeout
-	b	__cortex_a9_restore
+	/* FIXME: need to record actual power transition here */
+	mov	r0, #0
+	b	__cortex_a9_l2x0_restart
 ENDPROC(__restart_pllx)
 /*
  *	__enable_coresite_access
