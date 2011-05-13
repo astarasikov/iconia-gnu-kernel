@@ -103,6 +103,8 @@ static const struct usb_device_id id_table[] = {
 	{USB_DEVICE_DRVINFO(0x1410, 0xa021, GOBI3K)},	/* Novatel Gobi 3000 Composite */
 	{USB_DEVICE_DRVINFO(0x413c, 0x8193, GOBI3K)},	/* Dell Gobi 3000 QDL */
 	{USB_DEVICE_DRVINFO(0x413c, 0x8194, GOBI3K)},	/* Dell Gobi 3000 Composite */
+	{USB_DEVICE_DRVINFO(0x12D1, 0x14F0, GOBI3K)},	/* Sony Gobi 3000 QDL */
+	{USB_DEVICE_DRVINFO(0x12D1, 0x14F1, GOBI3K)},	/* Sony Gobi 3000 Composite */
 	{ }				/* Terminating entry */
 };
 MODULE_DEVICE_TABLE(usb, id_table);
