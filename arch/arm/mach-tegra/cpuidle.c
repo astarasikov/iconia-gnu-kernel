@@ -604,7 +604,14 @@ static int __init tegra_cpuidle_init(void)
 
 	return 0;
 }
+
+static void __exit tegra_cpuidle_exit(void)
+{
+	cpuidle_unregister_driver(&tegra_idle);
+}
+
 module_init(tegra_cpuidle_init);
+module_exit(tegra_cpuidle_exit);
 
 #ifdef CONFIG_DEBUG_FS
 static int tegra_lp2_debug_show(struct seq_file *s, void *data)

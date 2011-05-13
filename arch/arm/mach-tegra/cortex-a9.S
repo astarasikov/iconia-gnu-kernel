@@ -209,6 +209,22 @@ ENTRY(__cortex_a9_save)
 	add	r9, r8, #CTX_CSSELR
 	stmia	r9, {r0-r2, r4}
 
+#ifdef CONFIG_VFPv3
+	orr	r2, r3, #0xF00000
+	mcr	p15, 0, r2, c1, c0, 2	@ enable access to FPU
+	VFPFMRX	r2, FPEXC
+	str	r2, [r8, #CTX_FPEXC]
+	mov	r1, #0x40000000		@ enable access to FPU
+	VFPFMXR	FPEXC, r1
+	VFPFMRX	r1, FPSCR
+	str	r1, [r8, #CTX_FPSCR]
+	isb
+	add	r9, r8, #CTX_VFP_REGS
+
+	VFPFSTMIA r9, r12	@ save out (16 or 32)*8B of FPU registers
+	VFPFMXR	FPEXC, r2
+	mrc	p15, 0, r3, c1, c0, 2	@ restore original FPEXC/CPACR
+#endif
 	mrc	p15, 0, r0, c15, c0, 1	@ diag
 	str	r0, [r8, #CTX_DIAGNOSTIC]
 
@@ -228,6 +244,25 @@ ENTRY(__cortex_a9_save)
 	mrc	p15, 0, r3, c13, c0, 4	@ TPIDRPRW
 	stmia	r9, {r0-r3}
 
+	cps	0x1f			@ SYS mode
+	add	r9, r8, #CTX_SYS_SP
+	stmia	r9, {sp,lr}
+
+	cps	0x17			@ Abort mode
+	mrs	r12, spsr
+	add	r9, r8, #CTX_ABT_SPSR
+	stmia	r9, {r12,sp,lr}
+
+	cps	0x12			@ IRQ mode
+	mrs	r12, spsr
+	add	r9, r8, #CTX_IRQ_SPSR
+	stmia	r9, {r12,sp,lr}
+
+	cps	0x1b			@ Undefined mode
+	mrs	r12, spsr
+	add	r9, r8, #CTX_UND_SPSR
+	stmia	r9, {r12,sp,lr}
+
 	mov	r0, r8
 	add	r1, r8, #CTX_FIQ_SPSR
 	cps	0x11			@ FIQ mode
@@ -236,6 +271,63 @@ ENTRY(__cortex_a9_save)
 
 	cps	0x13			@ back to SVC
 	mov	r8, r0
+
+	/* Save CP14 debug controller context */
+	add	r9, r8, #CTX_CP14_REGS
+	mrc     p14, 0, r0, c0, c1, 0	@ DSCR
+	mrc	p14, 0, r1, c0, c6, 0	@ WFAR
+	mrc	p14, 0, r2, c0, c7, 0	@ VCR
+	mrc	p14, 0, r3, c7, c9, 6	@ CLAIM
+	stmia	r9, {r0-r3}
+
+	add	r9, r8, #CTS_CP14_BKPT_0
+	mrc	p14, 0, r2, c0, c0, 4
+	mrc	p14, 0, r3, c0, c0, 5
+	stmia	r9!, {r2-r3}     	@ BRKPT_0
+	mrc	p14, 0, r2, c0, c1, 4
+	mrc	p14, 0, r3, c0, c1, 5
+	stmia	r9!, {r2-r3}     	@ BRKPT_0
+	mrc	p14, 0, r2, c0, c2, 4
+	mrc	p14, 0, r3, c0, c2, 5
+	stmia	r9!, {r2-r3}     	@ BRKPT_0
+	mrc	p14, 0, r2, c0, c3, 4
+	mrc	p14, 0, r3, c0, c3, 5
+	stmia	r9!, {r2-r3}     	@ BRKPT_0
+	mrc	p14, 0, r2, c0, c4, 4
+	mrc	p14, 0, r3, c0, c4, 5
+	stmia	r9!, {r2-r3}     	@ BRKPT_0
+	mrc	p14, 0, r2, c0, c5, 4
+	mrc	p14, 0, r3, c0, c5, 5
+	stmia	r9!, {r2-r3}     	@ BRKPT_0
+
+	add	r9, r8, #CTS_CP14_WPT_0
+	mrc	p14, 0, r2, c0, c0, 6
+	mrc	p14, 0, r3, c0, c0, 7
+	stmia	r9!, {r2-r3}     	@ WPT_0
+	mrc	p14, 0, r2, c0, c1, 6
+	mrc	p14, 0, r3, c0, c1, 7
+	stmia	r9!, {r2-r3}     	@ WPT_0
+	mrc	p14, 0, r2, c0, c2, 6
+	mrc	p14, 0, r3, c0, c2, 7
+	stmia	r9!, {r2-r3}     	@ WPT_0
+	mrc	p14, 0, r2, c0, c3, 6
+	mrc	p14, 0, r3, c0, c3, 7
+	stmia	r9!, {r2-r3}     	@ WPT_0
+
+#ifdef CONFIG_CACHE_L2X0
+	cpu_id	r4
+	cmp	r4, #0
+	bne	__cortex_a9_save_clean_cache
+	mov32	r4, (TEGRA_ARM_PL310_BASE-IO_CPU_PHYS+IO_CPU_VIRT)
+	add	r9, r8, #CTX_L2_CTRL
+	ldr	r0, [r4, #L2X0_CTRL]
+	ldr	r1, [r4, #L2X0_AUX_CTRL]
+	ldr	r2, [r4, #L2X0_TAG_LATENCY_CTRL]
+	ldr	r3, [r4, #L2X0_DATA_LATENCY_CTRL]
+	ldr	r4, [r4, #L2X0_PREFETCH_CTRL]
+	stmia	r9, {r0-r4}
+#endif
+
 
 __cortex_a9_save_clean_cache:
 	mov	r10, r8
@@ -285,6 +377,25 @@ ENTRY(__cortex_a9_restore)
 	add	r1, r0, #CTX_FIQ_SPSR
 	ldmia	r1, {r7-r12,sp,lr}
 	msr	spsr_fsxc, r7
+
+	cps	0x12			@ IRQ mode
+	add	r1, r0, #CTX_IRQ_SPSR
+	ldmia	r1, {r12, sp, lr}
+	msr	spsr_fsxc, r12
+
+	cps	0x17			@ abort mode
+	add	r1, r0, #CTX_ABT_SPSR
+	ldmia	r1, {r12, sp, lr}
+	msr	spsr_fsxc, r12
+
+	cps	0x1f			@ SYS mode
+	add	r1, r0, #CTX_SYS_SP
+	ldmia	r1, {sp, lr}
+
+	cps	0x1b			@ Undefined mode
+	add	r1, r0, #CTX_UND_SPSR
+	ldmia	r1, {r12, sp, lr}
+	msr	spsr_fsxc, r12
 
 	cps	0x13			@ back to SVC
 	mov	r8, r0
@@ -341,6 +452,62 @@ ENTRY(__cortex_a9_restore)
 	msr	cpsr_cxsf, r6
 	msr	spsr_cxsf, r7
 
+	/* Restore CP14 debug controller context */
+	add	r9, r8, #CTX_CP14_REGS
+	ldmia	r9, {r0-r3}
+	mcr	p14, 0, r1, c0, c6, 0	@ WFAR
+	mcr	p14, 0, r2, c0, c7, 0	@ VCR
+	mcr	p14, 0, r3, c7, c8, 6	@ CLAIM
+
+	add	r9, r8, #CTS_CP14_BKPT_0
+	ldmia	r9!, {r2-r3}		@ BRKPT_0
+	mcr	p14, 0, r2, c0, c0, 4
+	mcr	p14, 0, r3, c0, c0, 5
+	ldmia	r9!, {r2-r3}		@ BRKPT_0
+	mcr	p14, 0, r2, c0, c1, 4
+	mcr	p14, 0, r3, c0, c1, 5
+	ldmia	r9!, {r2-r3}		@ BRKPT_0
+	mcr	p14, 0, r2, c0, c2, 4
+	mcr	p14, 0, r3, c0, c2, 5
+	ldmia	r9!, {r2-r3}		@ BRKPT_0
+	mcr	p14, 0, r2, c0, c3, 4
+	mcr	p14, 0, r3, c0, c3, 5
+	ldmia	r9!, {r2-r3}		@ BRKPT_0
+	mcr	p14, 0, r2, c0, c4, 4
+	mcr	p14, 0, r3, c0, c4, 5
+	ldmia	r9!, {r2-r3}		@ BRKPT_0
+	mcr	p14, 0, r2, c0, c5, 4
+	mcr	p14, 0, r3, c0, c5, 5
+
+	add	r9, r8, #CTS_CP14_WPT_0
+	ldmia	r9!, {r2-r3}		@ WPT_0
+	mcr	p14, 0, r2, c0, c0, 6
+	mcr	p14, 0, r3, c0, c0, 7
+	ldmia	r9!, {r2-r3}		@ WPT_0
+	mcr	p14, 0, r2, c0, c1, 6
+	mcr	p14, 0, r3, c0, c1, 7
+	ldmia	r9!, {r2-r3}		@ WPT_0
+	mcr	p14, 0, r2, c0, c2, 6
+	mcr	p14, 0, r3, c0, c2, 7
+	ldmia	r9!, {r2-r3}		@ WPT_0
+	mcr	p14, 0, r2, c0, c3, 6
+	mcr	p14, 0, r3, c0, c3, 7
+	isb
+	mcr	p14, 0, r0, c0, c2, 2	@ DSCR
+	isb
+
+#ifdef CONFIG_VFPv3
+	orr	r4, lr, #0xF00000
+	mcr	p15, 0, r4, c1, c0, 2	@ enable coproc access
+	mov	r5, #0x40000000
+	VFPFMXR	FPEXC, r5		@ enable FPU access
+	add	r9, r8, #CTX_VFP_REGS
+	add	r7, r8, #CTX_FPEXC
+	VFPFLDMIA r9, r10
+	ldmia	r7, {r0, r4}
+	VFPFMXR	FPSCR, r4
+	VFPFMXR	FPEXC, r0
+#endif
 	mcr	p15, 0, lr, c1, c0, 2	@ cpacr (loaded before VFP)
 
 	ldr	r9, [r8, #CTX_DIAGNOSTIC]
@@ -352,6 +519,45 @@ ENTRY(__cortex_a9_restore)
         isb
 	mov	pc, lr
 ENDPROC(__cortex_a9_restore)
+
+/*
+ *	__cortex_a9_l2x0_restart(bool invalidate)
+ *
+ *	 Reconfigures the L2 cache following a power event.
+ */
+	.align L1_CACHE_SHIFT
+ENTRY(__cortex_a9_l2x0_restart)
+#ifdef CONFIG_CACHE_L2X0
+	ctx_ptr	r8, r9
+	mov32	r9, (TEGRA_ARM_PL310_BASE-IO_CPU_PHYS+IO_CPU_VIRT)
+	add	r10, r8, #CTX_L2_CTRL
+	ldmia	r10, {r3-r7}
+	str	r5, [r9, #L2X0_TAG_LATENCY_CTRL]
+	str	r6, [r9, #L2X0_DATA_LATENCY_CTRL]
+	str	r7, [r9, #L2X0_PREFETCH_CTRL]
+	str	r4, [r9, #L2X0_AUX_CTRL]
+	cmp	r0, #0
+
+	beq	__reenable_l2x0
+
+	mov	r0, #0xff
+	str	r0, [r9, #L2X0_INV_WAY]
+1:	ldr	r1, [r9, #L2X0_INV_WAY]
+	tst	r1, r0
+	bne	1b
+	mov	r0, #0
+	str	r0, [r9, #L2X0_CACHE_SYNC]
+__reenable_l2x0:
+	mov	r5, #0
+	mcr	p15, 0, r5, c8, c3, 0	@ invalidate TLB
+	mcr	p15, 0, r5, c7, c5, 6	@ flush BTAC
+	mcr	p15, 0, r5, c7, c5, 0	@ flush instruction cache
+	dsb
+	isb
+	str	r3, [r9, #L2X0_CTRL]
+#endif
+	b	__cortex_a9_restore
+
 
 	.align L1_CACHE_SHIFT
 ENTRY(__shut_off_mmu)
