@@ -164,7 +164,8 @@ static struct resource seaboard_disp1_resources[] = {
 	{
 		.name	= "fbmem",
 		.start	= 0x18012000,
-		.end	= 0x18012000 + 0x402000 - 1, /* enough for 1368*768 16bpp */
+		/* enough space for 1368*910 32bpp */
+		.end	= 0x18012000 + 0x97f680 - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -256,7 +257,7 @@ static struct tegra_fb_data arthur_fb_data = {
 	.win		= 0,
 	.xres		= 1366,
 	.yres		= 910,
-	.bits_per_pixel	= 24,
+	.bits_per_pixel	= 32,
 };
 
 static struct tegra_fb_data seaboard_hdmi_fb_data = {
@@ -427,6 +428,7 @@ int __init arthur_panel_init(void)
 {
 	seaboard_panel_gpio_init();
 	seaboard_disp1_out.modes = arthur_panel_modes;
+	seaboard_disp1_out.depth = 24;
 	seaboard_disp1_pdata.fb = &arthur_fb_data;
 	return seaboard_panel_register_devices();
 }
