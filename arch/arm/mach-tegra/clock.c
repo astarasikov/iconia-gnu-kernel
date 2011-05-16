@@ -96,23 +96,22 @@ static inline bool clk_cansleep(struct clk *c)
 	return c->cansleep;
 }
 
-#define clk_lock_save(c, flags)						\
-	do {								\
-		if (clk_cansleep(c)) {					\
-			flags = 0;					\
-			mutex_lock(&c->mutex);				\
-		} else {						\
-			spin_lock_irqsave(&c->spinlock, flags);		\
-		}							\
-	} while (0)
+void __clk_lock_save(struct clk *c, unsigned long *flags)
+{
+	if (clk_cansleep(c)) {
+		*flags = 0;
+		mutex_lock(&c->mutex);
+	} else
+		spin_lock_irqsave(&c->spinlock, *flags);
+}
 
-#define clk_unlock_restore(c, flags)					\
-	do {								\
-		if (clk_cansleep(c))					\
-			mutex_unlock(&c->mutex);			\
-		else							\
-			spin_unlock_irqrestore(&c->spinlock, flags);	\
-	} while (0)
+void __clk_unlock_restore(struct clk *c, unsigned long *flags)
+{
+	if (clk_cansleep(c))
+		mutex_unlock(&c->mutex);
+	else
+		spin_unlock_irqrestore(&c->spinlock, *flags);
+}
 
 static inline void clk_lock_init(struct clk *c)
 {
@@ -348,14 +347,11 @@ struct clk *clk_get_parent(struct clk *c)
 }
 EXPORT_SYMBOL(clk_get_parent);
 
-int clk_set_rate(struct clk *c, unsigned long rate)
+int clk_set_rate_locked(struct clk *c, unsigned long rate)
 {
 	int ret = 0;
-	unsigned long flags;
 	unsigned long old_rate;
 	long new_rate;
-
-	clk_lock_save(c, flags);
 
 	if (!c->ops || !c->ops->set_rate) {
 		ret = -ENOSYS;
@@ -393,6 +389,16 @@ int clk_set_rate(struct clk *c, unsigned long rate)
 		ret = tegra_dvfs_set_rate(c, rate);
 
 out:
+	return ret;
+}
+
+int clk_set_rate(struct clk *c, unsigned long rate)
+{
+	int ret = 0;
+	unsigned long flags;
+
+	clk_lock_save(c, flags);
+	ret = clk_set_rate_locked(c, rate);
 	clk_unlock_restore(c, flags);
 
 	return ret;
