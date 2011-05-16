@@ -100,7 +100,7 @@ static const struct file_operations tegra_spdif_debug_fops = {
 	.release = single_release,
 };
 
-static void tegra_spdif_debug_add(struct tegra_spdif *spdif, int id)
+static void tegra_spdif_debug_add(struct tegra_spdif *spdif)
 {
 	spdif->debug = debugfs_create_file(DRV_NAME, S_IRUGO,
 						snd_soc_debugfs_root, spdif,
@@ -315,7 +315,7 @@ static __devinit int tegra_spdif_platform_probe(struct platform_device *pdev)
 		goto err_unmap;
 	}
 
-	tegra_spdif_debug_add(spdif, pdev->id);
+	tegra_spdif_debug_add(spdif);
 
 	return 0;
 
