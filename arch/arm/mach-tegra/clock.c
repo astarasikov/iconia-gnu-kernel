@@ -907,6 +907,10 @@ static int clk_debugfs_register_one(struct clk *c)
 	if (!d)
 		goto err_out;
 
+	d = debugfs_create_u32("max", S_IRUGO, c->dent, (u32 *)&c->max_rate);
+	if (!d)
+		goto err_out;
+
 	if (c->inputs) {
 		d = debugfs_create_file("possible_parents", S_IRUGO, c->dent,
 			c, &possible_parents_fops);

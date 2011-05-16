@@ -294,6 +294,9 @@ int __init tegra_enable_dvfs_on_clk(struct clk *c, struct dvfs *d)
 		clk_set_cansleep(c);
 	}
 
+	if (c->max_rate > d->freqs[d->num_freqs-1])
+		c->max_rate = d->freqs[d->num_freqs-1];
+
 	c->dvfs = d;
 
 	mutex_lock(&dvfs_lock);

@@ -37,10 +37,30 @@
 #include <mach/hardware.h>
 #include <mach/clk.h>
 
+#include "clock.h"
 #include "fuse.h"
 
-/* Frequency table index must be sequential starting at 0 and frequencies must be ascending*/
-static struct cpufreq_frequency_table freq_table_t20[] = {
+/*
+ * Frequency table index must be sequential starting at 0 and frequencies
+ * must be ascending.
+ */
+
+struct tegra_cpufreq_table_data {
+	struct cpufreq_frequency_table *freq_table;
+	int throttle_lowest_index;
+	int throttle_highest_index;
+};
+
+static struct cpufreq_frequency_table freq_table_750MHz[] = {
+	{ 0, 216000 },
+	{ 1, 312000 },
+	{ 2, 456000 },
+	{ 3, 608000 },
+	{ 4, 750000 },
+	{ 5, CPUFREQ_TABLE_END },
+};
+
+static struct cpufreq_frequency_table freq_table_1000GHz[] = {
 	{ 0, 216000 },
 	{ 1, 312000 },
 	{ 2, 456000 },
@@ -52,7 +72,7 @@ static struct cpufreq_frequency_table freq_table_t20[] = {
 	{ 8, CPUFREQ_TABLE_END },
 };
 
-static struct cpufreq_frequency_table freq_table_t25[] = {
+static struct cpufreq_frequency_table freq_table_1200GHz[] = {
 	{ 0, 216000 },
 	{ 1, 312000 },
 	{ 2, 456000 },
@@ -63,6 +83,12 @@ static struct cpufreq_frequency_table freq_table_t25[] = {
 	{ 7, 1000000 },
 	{ 8, 1200000 },
 	{ 9, CPUFREQ_TABLE_END },
+};
+
+static struct tegra_cpufreq_table_data cpufreq_tables[] = {
+	{ freq_table_750MHz,  1, 4 },
+	{ freq_table_1000GHz, 2, 6 },
+	{ freq_table_1200GHz, 2, 7 },
 };
 
 static struct cpufreq_frequency_table *freq_table;
@@ -83,20 +109,15 @@ static unsigned long tegra_cpu_highest_speed(void);
 
 #ifdef CONFIG_TEGRA_THERMAL_THROTTLE
 /* CPU frequency is gradually lowered when throttling is enabled */
-#define THROTTLE_LOWEST_INDEX	2 /* 456000 */
-#define THROTTLE_HIGHEST_INDEX	6 /* 912000 */
 #define THROTTLE_DELAY		msecs_to_jiffies(2000)
 
 static bool is_throttling;
+static int throttle_lowest_index;
+static int throttle_highest_index;
 static int throttle_index;
 static int throttle_next_index;
 static struct delayed_work throttle_work;
 static struct workqueue_struct *workqueue;
-
-int tegra_verify_speed(struct cpufreq_policy *policy)
-{
-	return cpufreq_frequency_table_verify(policy, freq_table);
-}
 
 #define tegra_cpu_is_throttling() (is_throttling)
 
@@ -112,7 +133,7 @@ static void tegra_throttle_work_func(struct work_struct *work)
 	if (freq_table[throttle_index].frequency < current_freq)
 		tegra_update_cpu_speed(freq_table[throttle_index].frequency);
 
-	if (throttle_index > THROTTLE_LOWEST_INDEX) {
+	if (throttle_index > throttle_lowest_index) {
 		throttle_next_index = throttle_index - 1;
 		queue_delayed_work(workqueue, &throttle_work, THROTTLE_DELAY);
 	}
@@ -132,14 +153,14 @@ void tegra_throttling_enable(bool enable)
 		unsigned int current_freq = tegra_getspeed(0);
 
 		is_throttling = true;
-		for (throttle_index = THROTTLE_HIGHEST_INDEX;
-		     throttle_index >= THROTTLE_LOWEST_INDEX;
+		for (throttle_index = throttle_highest_index;
+		     throttle_index >= throttle_lowest_index;
 		     throttle_index--)
 			if (freq_table[throttle_index].frequency
 			    < current_freq)
 				break;
 
-		throttle_index = max(throttle_index, THROTTLE_LOWEST_INDEX);
+		throttle_index = max(throttle_index, throttle_lowest_index);
 		throttle_next_index = throttle_index;
 		queue_delayed_work(workqueue, &throttle_work, 0);
 
@@ -220,6 +241,11 @@ void tegra_throttling_enable(bool enable)
 {
 }
 #endif /* CONFIG_TEGRA_THERMAL_THROTTLE */
+
+int tegra_verify_speed(struct cpufreq_policy *policy)
+{
+	return cpufreq_frequency_table_verify(policy, freq_table);
+}
 
 unsigned int tegra_getspeed(unsigned int cpu)
 {
@@ -341,11 +367,6 @@ static int tegra_cpu_init(struct cpufreq_policy *policy)
 	if (policy->cpu >= NUM_CPUS)
 		return -EINVAL;
 
-	if (tegra_sku_id == SKU_ID_T25)
-		freq_table = freq_table_t25;
-	else
-		freq_table = freq_table_t20;
-
 	cpu_clk = clk_get_sys(NULL, "cpu");
 	if (IS_ERR(cpu_clk))
 		return PTR_ERR(cpu_clk);
@@ -404,8 +425,32 @@ static struct cpufreq_driver tegra_cpufreq_driver = {
 	.attr		= tegra_cpufreq_attr,
 };
 
+static struct tegra_cpufreq_table_data *tegra_cpufreq_table_get(void)
+{
+	int i;
+	struct tegra_cpufreq_table_data *ret;
+	struct clk *cpu_clk = tegra_get_clock_by_name("cpu");
+
+	for (i = 0; i < ARRAY_SIZE(cpufreq_tables); i++) {
+		struct cpufreq_policy policy;
+		cpufreq_frequency_table_cpuinfo(&policy,
+			cpufreq_tables[i].freq_table);
+		if ((policy.max * 1000) == cpu_clk->max_rate) {
+			ret = &cpufreq_tables[i];
+			goto out;
+		}
+	}
+	pr_err("%s: No cpufreq table matching cpu range", __func__);
+	ret = &cpufreq_tables[0];
+out:
+	return ret;
+}
+
 static int __init tegra_cpufreq_init(void)
 {
+	struct tegra_cpufreq_table_data *table_data;
+	table_data = tegra_cpufreq_table_get();
+
 #ifdef CONFIG_TEGRA_THERMAL_THROTTLE
 	/*
 	 * High-priority, others flags default: not bound to a specific
@@ -417,7 +462,11 @@ static int __init tegra_cpufreq_init(void)
 	if (!workqueue)
 		return -ENOMEM;
 	INIT_DELAYED_WORK(&throttle_work, tegra_throttle_work_func);
+
+	throttle_lowest_index = table_data->throttle_lowest_index;
+	throttle_highest_index = table_data->throttle_highest_index;
 #endif
+	freq_table = table_data->freq_table;
 	return cpufreq_register_driver(&tegra_cpufreq_driver);
 }
 
