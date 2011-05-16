@@ -247,6 +247,35 @@ static const struct tegra_emc_table seaboard_emc_tables_hynix_380Mhz[] = {
 	}
 };
 
+void __init seaboard_emc_init(void)
+{
+	/* Adding allowances for wario as it shares the same memory
+	 * configuration as seaboard.
+	 */
+	BUG_ON(!machine_is_seaboard() && !machine_is_wario());
+
+	if (tegra_sku_id == SKU_ID_T20) {
+		tegra_init_emc(seaboard_emc_tables_hynix_333Mhz,
+			ARRAY_SIZE(seaboard_emc_tables_hynix_333Mhz));
+		pr_info("Tegra EMC table in use: Hynix 333MHz\n");
+	} else if (tegra_sku_id == SKU_ID_T25) {
+		tegra_init_emc(seaboard_emc_tables_hynix_380Mhz,
+			ARRAY_SIZE(seaboard_emc_tables_hynix_380Mhz));
+		pr_info("Tegra EMC table in use: Hynix 380MHz\n");
+	} else {
+		pr_err("EMC table not found for Tegra SKU %d. " \
+		       "System stability might be compromised\n", tegra_sku_id);
+	}
+}
+
+#ifdef CONFIG_MACH_KAEN
+
+#define STRAP_OPT 0x008
+#define GMI_AD0 (1 << 4)
+#define GMI_AD1 (1 << 5)
+#define RAM_ID_MASK (GMI_AD0 | GMI_AD1)
+#define RAM_CODE_SHIFT 4
+
 static const struct tegra_emc_table kaen_emc_tables_Nanya_333Mhz[] = {
 	{
 		.rate = 166500,   /* SDRAM frequency */
@@ -663,7 +692,6 @@ static const struct tegra_emc_table kaen_emc_tables_Samsung_380Mhz[] = {
 	}
 };
 
-
 struct tegra_board_emc_table kaen_emc[] = {
 	{
 		.table		= kaen_emc_tables_Samsung_333Mhz,
@@ -687,13 +715,6 @@ struct tegra_board_emc_table kaen_emc[] = {
 	},
 };
 
-#define STRAP_OPT 0x008
-#define GMI_AD0 (1 << 4)
-#define GMI_AD1 (1 << 5)
-#define RAM_ID_MASK (GMI_AD0 | GMI_AD1)
-#define RAM_CODE_SHIFT 4
-
-
 void __init kaen_emc_init(void)
 {
 	u32 reg;
@@ -715,7 +736,9 @@ void __init kaen_emc_init(void)
 			       kaen_emc[ram_id].table_size);
 	}
 }
+#endif
 
+#ifdef CONFIG_MACH_AEBL
 static const struct tegra_emc_table aebl_emc_tables[] = {
 	{
 		.rate = 190000,   /* SDRAM frequency */
@@ -820,34 +843,14 @@ static const struct tegra_emc_table aebl_emc_tables[] = {
 	}
 };
 
-void __init seaboard_emc_init(void)
-{
-	/* Adding allowances for wario as it shares the same memory
-	 * configuration as seaboard.
-	 */
-	BUG_ON(!machine_is_seaboard() && !machine_is_wario());
-
-	if (tegra_sku_id == SKU_ID_T20) {
-		tegra_init_emc(seaboard_emc_tables_hynix_333Mhz,
-			ARRAY_SIZE(seaboard_emc_tables_hynix_333Mhz));
-		pr_info("Tegra EMC table in use: Hynix 333MHz\n");
-	} else if (tegra_sku_id == SKU_ID_T25) {
-		tegra_init_emc(seaboard_emc_tables_hynix_380Mhz,
-			ARRAY_SIZE(seaboard_emc_tables_hynix_380Mhz));
-		pr_info("Tegra EMC table in use: Hynix 380MHz\n");
-	} else {
-		pr_err("EMC table not found for Tegra SKU %d. " \
-		       "System stability might be compromised\n", tegra_sku_id);
-	}
-}
-
 void __init aebl_emc_init(void)
 {
 	BUG_ON(!machine_is_aebl());
 	tegra_init_emc(aebl_emc_tables, ARRAY_SIZE(aebl_emc_tables));
 }
+#endif
 
-
+#ifdef CONFIG_MACH_ARTHUR
 static const struct tegra_emc_table arthur_emc_tables[] = {
 	{
 		.rate = 190000,   /* SDRAM frequency */
@@ -957,3 +960,4 @@ void __init arthur_emc_init(void)
 	BUG_ON(!machine_is_arthur());
 	tegra_init_emc(arthur_emc_tables, ARRAY_SIZE(arthur_emc_tables));
 }
+#endif
