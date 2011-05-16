@@ -383,23 +383,11 @@ static const struct matrix_keymap_data cros_keymap_data = {
         .keymap_size    = ARRAY_SIZE(cros_kbd_keymap),
 };
 
-static struct tegra_kbc_wake_key seaboard_wake_cfg[] = {
-       [0] = {
-               .row = 1,
-               .col = 7,
-       },
-       [1] = {
-               .row = 15,
-               .col = 0,
-       },
-};
-
 static struct tegra_kbc_platform_data seaboard_kbc_platform_data = {
-       .debounce_cnt = 2,
-       .repeat_cnt = 5 * 32,
-       .use_ghost_filter = true,
-       .wake_cnt = ARRAY_SIZE(seaboard_wake_cfg),
-       .wake_cfg = seaboard_wake_cfg,
+	.debounce_cnt = 2,
+	.repeat_cnt = 5 * 32,
+	.use_ghost_filter = true,
+	.wakeup = true,
 };
 
 static void seaboard_kbc_init(void)
