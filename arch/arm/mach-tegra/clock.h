@@ -42,6 +42,9 @@
 #define PERIPH_SOURCE_CLK_4BIT	(1 << 15)
 #define ENABLE_ON_INIT		(1 << 28)
 
+#define clk_lock_save(c, flags)		__clk_lock_save(c, &(flags))
+#define clk_unlock_restore(c, flags)	__clk_unlock_restore(c, &(flags))
+
 struct clk;
 
 struct clk_mux_sel {
@@ -164,6 +167,7 @@ int clk_set_rate_locked(struct clk *c, unsigned long rate);
 void tegra2_sdmmc_tap_delay(struct clk *c, int delay);
 void clk_set_cansleep(struct clk *c);
 unsigned long clk_get_rate_locked(struct clk *c);
-
+void __clk_lock_save(struct clk *c, unsigned long *flags);
+void __clk_unlock_restore(struct clk *c, unsigned long *flags);
 
 #endif
