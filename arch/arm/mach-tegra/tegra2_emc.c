@@ -175,6 +175,7 @@ int tegra_emc_set_rate(unsigned long rate)
 void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 {
 	struct clk *c = tegra_get_clock_by_name("emc");
+	struct clk *user;
 	unsigned long max = 0;
 	int i;
 
@@ -193,4 +194,7 @@ void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 	}
 
 	c->max_rate = max * 2 * 1000;
+
+	list_for_each_entry(user, &c->shared_bus_list, u.shared_bus_user.node)
+		user->max_rate = c->max_rate;
 }
