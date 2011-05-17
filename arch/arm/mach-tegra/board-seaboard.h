@@ -71,6 +71,12 @@ int seaboard_power_init(void);
 int seaboard_sensors_init(void);
 void seaboard_emc_init(void);
 
+#ifdef CONFIG_MACH_WARIO
+int wario_panel_init(void);
+#else
+static inline int wario_panel_init(void) { return 0; }
+#endif
+
 #ifdef CONFIG_MACH_KAEN
 int kaen_sensors_init(void);
 void kaen_emc_init(void);
@@ -89,8 +95,10 @@ static inline void aebl_emc_init(void) { return; }
 
 #ifdef CONFIG_MACH_ARTHUR
 void arthur_emc_init(void);
+int arthur_panel_init(void);
 #else
 static inline void arthur_emc_init(void) { return; }
+static inline int arthur_panel_init(void) { return 0; }
 #endif
 
 #endif
