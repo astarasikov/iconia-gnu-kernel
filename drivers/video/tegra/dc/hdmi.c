@@ -448,8 +448,6 @@ static bool tegra_dc_hdmi_detect(struct tegra_dc *dc)
 	if (!tegra_dc_hdmi_hpd(dc))
 		goto fail;
 
-	BUG_ON(!dc->ddc_enabled);
-
 	err = tegra_edid_get_monspecs(hdmi->edid, &specs);
 	if (err < 0) {
 		dev_err(&dc->ndev->dev, "error reading edid\n");
@@ -500,9 +498,6 @@ static void tegra_dc_hdmi_detect_worker(struct work_struct *work)
 		dc->connected = false;
 		tegra_dc_ext_process_hotplug(dc->ndev->id);
 	}
-
-	/* We don't need DDC enabled after reading the EDID. */
-	tegra_dc_disable_ddc(dc);
 }
 
 /*
@@ -523,17 +518,10 @@ static void tegra_dc_hdmi_hpd_debounce_edge(struct work_struct *work)
 
 	cancel_delayed_work_sync(&hdmi->hpd_debounce_stable_wq);
 
-	if (tegra_dc_hdmi_hpd(dc)) {
-		/*
-		 * We need DDC enabled to read the EDID; give the sink some
-		 * time to power up by enabling before the delay.
-		 */
-		tegra_dc_enable_ddc(dc);
-
+	if (tegra_dc_hdmi_hpd(dc))
 		delay = msecs_to_jiffies(100);
-	} else {
+	else
 		delay = msecs_to_jiffies(30);
-	}
 
 	queue_delayed_work(system_nrt_wq, &hdmi->hpd_debounce_stable_wq, delay);
 }
