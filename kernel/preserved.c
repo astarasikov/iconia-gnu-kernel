@@ -12,55 +12,9 @@
 #include <linux/magic.h>
 #include <linux/mm.h>
 #include <linux/mutex.h>
-#include <linux/nvram.h>
 #include <linux/preserved.h>
 #include <linux/reboot.h>
-#include <linux/rtc.h>
-#include <linux/sysctl.h>
 #include <linux/uaccess.h>
-
-/*
- * x86 notes:
- *
- * Much of the complexity here comes from a particular feature of the ChromeOS
- * boot firmware: although it reserves an area of RAM for our use, and that
- * area has been seen to be preserved across ordinary reboot, that can only
- * be guaranteed if we approach reboot from the S3 suspend-to-RAM state.
- *
- * In /sys/devices/platform/chromeos_acpi/CHNV, the ChromeOS ACPI driver
- * reports an offset in /dev/nvram at which a flag can be set before entering
- * S3: to tell the firmware to reboot instead of resume when awakened.
- *
- * The ifdefs below allow this file to be built without all the dependencies
- * which that feature adds.  And even when it is built in, by default we go
- * to a simple reboot, unless the required nvram offset has been written into
- * /sys/kernel/debug/preserved/chnv here.
- */
-#if defined(CONFIG_PROC_SYSCTL)	/* for proc_dointvec_minmax() */	&& \
-    defined(CONFIG_NVRAM)	/* for nvram_read/write_byte () */	&& \
-    defined(CONFIG_RTC_CLASS)	/* for rtc_read/write_time() */		&& \
-    defined(CONFIG_ACPI_SLEEP)	/* for acpi_S3_reboot() */		&& \
-    defined(CONFIG_SUSPEND)	/* for acpi_S3_reboot() */
-
-#define CHROMEOS_S3_REBOOT
-
-#define NVRAM_BYTES (128 - NVRAM_FIRST_BYTE)	/* from drivers/char/nvram.c */
-#define CHNV_DEBUG_RESET_FLAG	0x40		/* magic flag for S3 reboot */
-#define AWAKEN_AFTER_SECONDS	2		/* 1 might fire too early?? */
-
-/*
- * ACPI reports offset in NVRAM of CHromeos NVram byte used to program BIOS:
- * that offset is expected to be 94 (0x5e) when it is supported.  We shall
- * rely upon userspace to pass it here from the chromeos_acpi driver;
- * or leave it at -1, in which case a simple reboot works for now.
- */
-static int chromeos_nvram_index = -1;
-
-#else /* !CHROMEOS_S3_REBOOT */
-
-#define chromeos_nvram_index	-1
-
-#endif /* CHROMEOS_S3_REBOOT */
 
 struct preserved {
 	unsigned int	magic;
@@ -355,122 +309,6 @@ static const struct file_operations utrace_operations = {
 	.write	= utrace_write,
 };
 
-#ifdef CHROMEOS_S3_REBOOT
-/*
- * chnv read and write chromeos_nvram_index like a /proc/sys sysctl value
- * (debugfs builtins are designed for unsigned values without rangechecking).
- */
-static int minus_one = -1;
-static int nvram_max = NVRAM_BYTES - 1;
-static struct ctl_table chnv_ctl = {
-	.procname	= "chnv",
-	.data		= &chromeos_nvram_index,
-	.maxlen		= sizeof(int),
-	.mode		= 0644,
-	.proc_handler	= &proc_dointvec_minmax,
-	.extra1		= &minus_one,
-	.extra2		= &nvram_max,
-};
-
-static ssize_t chnv_read(struct file *file, char __user *buf,
-				size_t count, loff_t *ppos)
-{
-	return proc_dointvec_minmax(&chnv_ctl, 0,
-		(void __user *)buf, &count, ppos) ? : count;
-}
-
-static ssize_t chnv_write(struct file *file, const char __user *buf,
-				size_t count, loff_t *ppos)
-{
-	return proc_dointvec_minmax(&chnv_ctl, 1,
-		(void __user *)buf, &count, ppos) ? : count;
-}
-
-static const struct file_operations chnv_operations = {
-	.read	= chnv_read,
-	.write	= chnv_write,
-};
-
-/*
- * For emergency_restart: at the time of a bug, oops or panic.
- */
-
-static int rtc_may_wakeup(struct device *dev, void *data)
-{
-	struct rtc_device *rtc = to_rtc_device(dev);
-	return rtc->ops->set_alarm && device_may_wakeup(rtc->dev.parent);
-}
-
-static int set_rtc_alarm(int seconds)
-{
-	struct device *dev;
-	struct rtc_device *rtc;
-	struct rtc_wkalrm alarm;
-	unsigned long now;
-	int error;
-
-	dev = class_find_device(rtc_class, NULL, NULL, rtc_may_wakeup);
-	if (!dev)
-		return -ENODEV;
-
-	rtc = to_rtc_device(dev);
-	error = rtc_read_time(rtc, &alarm.time);
-	if (error)
-		return error;
-
-	rtc_tm_to_time(&alarm.time, &now);
-	rtc_time_to_tm(now + seconds, &alarm.time);
-	alarm.enabled = 1;
-
-	return rtc_set_alarm(rtc, &alarm);
-}
-
-static void chromeos_S3_reboot(void)
-{
-	unsigned char chromeos_nvram_flags;
-	int error;
-
-	/*
-	 * Overly paranoid, but just reboot if chnv has been corrupted.
-	 */
-	if (chromeos_nvram_index < 0 ||
-	    chromeos_nvram_index >= NVRAM_BYTES) {
-		printk(KERN_ERR "S3 reboot: chromeos_nvram_index=%d\n",
-					    chromeos_nvram_index);
-		return;
-	}
-
-	/*
-	 * Tell the ChromeOS BIOS to use S3 to preserve RAM,
-	 * but then to reboot instead of resuming.
-	 */
-	chromeos_nvram_flags = nvram_read_byte(chromeos_nvram_index);
-	if (chromeos_nvram_flags & CHNV_DEBUG_RESET_FLAG) {
-		printk(KERN_ERR "S3 reboot: chromeos_nvram_flags=0x%08x\n",
-					    chromeos_nvram_flags);
-		return;
-	}
-	chromeos_nvram_flags |= CHNV_DEBUG_RESET_FLAG;
-	nvram_write_byte(chromeos_nvram_flags, chromeos_nvram_index);
-
-	/*
-	 * Must set an alarm to awaken from S3 to reboot.
-	 */
-	error = set_rtc_alarm(AWAKEN_AFTER_SECONDS);
-	if (error) {
-		printk(KERN_ERR "S3 reboot: set_rtc_alarm()=%d\n", error);
-		return;
-	}
-
-	acpi_S3_reboot();
-}
-#else /* !CHROMEOS_S3_REBOOT */
-
-static inline void chromeos_S3_reboot(void)
-{
-}
-#endif /* CHROMEOS_S3_REBOOT */
-
 static void kcrash_append(unsigned int log_size)
 {
 	int excess = preserved_ftr->usize + preserved_ftr->ksize +
@@ -529,23 +367,13 @@ void emergency_restart(void)	/* overriding the __weak one in kernel/sys.c */
 	 * Initialize a good header if that's not already been done.
 	 */
 	if (preserved_is_valid() || preserved_make_valid()) {
-		printk(KERN_INFO "Preserving kcrash across %sreboot\n",
-			(chromeos_nvram_index == -1) ? "" : "S3 ");
+		printk(KERN_INFO "Preserving kcrash across reboot\n");
 
 		/*
 		 * Copy printk's log_buf (kmsg or dmesg) into our preserved buf,
 		 * perhaps appending to a kcrash from the previous boot.
 		 */
 		kcrash_preserve(true);
-
-		/* on x86, slip into S3 then reboot */
-		if (chromeos_nvram_index != -1) {
-			chromeos_S3_reboot();
-			/*
-			 * It's an error if we reach here, so rewrite the log.
-			 */
-			kcrash_preserve(false);
-		}
 	}
 	machine_emergency_restart();
 }
@@ -652,10 +480,6 @@ static int __init preserved_init(void)
 		 */
 		dir = debugfs_create_dir("preserved", NULL);
 		if (dir && !IS_ERR(dir)) {
-#ifdef CHROMEOS_S3_REBOOT
-			debugfs_create_file("chnv", S_IFREG|S_IRUGO|S_IWUSR,
-						dir, NULL, &chnv_operations);
-#endif
 			debugfs_create_file("kcrash", S_IFREG|S_IRUSR|S_IWUSR,
 						dir, NULL, &kcrash_operations);
 			debugfs_create_file("utrace", S_IFREG|S_IRUSR|S_IWUGO,
