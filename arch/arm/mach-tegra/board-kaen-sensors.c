@@ -79,7 +79,6 @@ static int tegra_camera_enable(struct nvhost_device *ndev)
 	/* Set up GPIOs. */
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_PWR_EN, 1);
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_RST, 1);
-	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_PWDN, 0);
 
 	/* Give the sensor time to come out of reset.  The OV9740 needs
 	 * 8192 clock cycles (from vi_sensor clock) before the first I2C
@@ -99,7 +98,6 @@ exit:
 
 static void tegra_camera_disable(struct nvhost_device *ndev)
 {
-	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_PWDN, 1);
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_RST, 0);
 	gpio_set_value(TEGRA_CAMERA_GPIO_CAM_PWR_EN, 0);
 	gpio_set_value_cansleep(TEGRA_CAMERA_GPIO_PMU, 0);
@@ -171,7 +169,8 @@ int __init kaen_sensors_init(void)
 	err = gpio_request(TEGRA_CAMERA_GPIO_CAM_PWDN, "cam_pwdn");
 	if (err != 0)
 		goto exit_free_gpio_cam_rst;
-	err = gpio_direction_output(TEGRA_CAMERA_GPIO_CAM_PWDN, 1);
+	/* This GPIO is active low.  Set it to 0, and don't touch it again. */
+	err = gpio_direction_output(TEGRA_CAMERA_GPIO_CAM_PWDN, 0);
 	if (err != 0)
 		goto exit_free_gpio_cam_pwdn;
 
