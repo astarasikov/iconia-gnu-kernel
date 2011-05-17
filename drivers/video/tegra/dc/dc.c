@@ -1218,28 +1218,6 @@ static void tegra_dc_init(struct tegra_dc *dc)
 		tegra_dc_program_mode(dc, &dc->mode);
 }
 
-void tegra_dc_enable_ddc(struct tegra_dc *dc)
-{
-	if (dc->ddc_enabled)
-		return;
-
-	if (dc->out && dc->out->enable_ddc)
-		dc->out->enable_ddc();
-
-	dc->ddc_enabled = true;
-}
-
-void tegra_dc_disable_ddc(struct tegra_dc *dc)
-{
-	if (!dc->ddc_enabled)
-		return;
-
-	if (dc->out && dc->out->disable_ddc)
-		dc->out->disable_ddc();
-
-	dc->ddc_enabled = false;
-}
-
 static bool _tegra_dc_enable(struct tegra_dc *dc)
 {
 	if (dc->mode.pclk == 0)
@@ -1247,7 +1225,6 @@ static bool _tegra_dc_enable(struct tegra_dc *dc)
 
 	tegra_dc_io_start(dc);
 
-	tegra_dc_enable_ddc(dc);
 	if (dc->out && dc->out->enable)
 		dc->out->enable();
 
@@ -1298,7 +1275,6 @@ static void _tegra_dc_disable(struct tegra_dc *dc)
 
 	if (dc->out && dc->out->disable)
 		dc->out->disable();
-	tegra_dc_disable_ddc(dc);
 
 	/* flush any pending syncpt waits */
 	for (i = 0; i < dc->n_windows; i++) {
