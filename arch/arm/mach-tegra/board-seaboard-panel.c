@@ -372,10 +372,8 @@ static struct platform_device *seaboard_gfx_devices[] __initdata = {
 	&seaboard_backlight_device,
 };
 
-int __init seaboard_panel_init(void)
+static void __init seaboard_panel_gpio_init(void)
 {
-	int err;
-
 	gpio_request(TEGRA_GPIO_EN_VDD_PNL, "en_vdd_pnl");
 	gpio_direction_output(TEGRA_GPIO_EN_VDD_PNL, 1);
 
@@ -390,14 +388,11 @@ int __init seaboard_panel_init(void)
 
 	gpio_request(TEGRA_GPIO_HDMI_HPD, "hdmi_hpd");
 	gpio_direction_input(TEGRA_GPIO_HDMI_HPD);
+}
 
-	if (machine_is_wario()) {
-		seaboard_disp1_out.modes = wario_panel_modes;
-		seaboard_disp1_pdata.fb = &wario_fb_data;
-	} else if (machine_is_arthur()) {
-		seaboard_disp1_out.modes = arthur_panel_modes;
-		seaboard_disp1_pdata.fb = &arthur_fb_data;
-	}
+static int __init seaboard_panel_register_devices(void)
+{
+	int err;
 
 	err = platform_add_devices(seaboard_gfx_devices,
 				   ARRAY_SIZE(seaboard_gfx_devices));
@@ -410,3 +405,29 @@ int __init seaboard_panel_init(void)
 
 	return err;
 }
+
+int __init seaboard_panel_init(void)
+{
+	seaboard_panel_gpio_init();
+	return seaboard_panel_register_devices();
+}
+
+#ifdef CONFIG_MACH_WARIO
+int __init wario_panel_init(void)
+{
+	seaboard_panel_gpio_init();
+	seaboard_disp1_out.modes = wario_panel_modes;
+	seaboard_disp1_pdata.fb = &wario_fb_data;
+	return seaboard_panel_register_devices();
+}
+#endif
+
+#ifdef CONFIG_MACH_ARTHUR
+int __init arthur_panel_init(void)
+{
+	seaboard_panel_gpio_init();
+	seaboard_disp1_out.modes = arthur_panel_modes;
+	seaboard_disp1_pdata.fb = &arthur_fb_data;
+	return seaboard_panel_register_devices();
+}
+#endif

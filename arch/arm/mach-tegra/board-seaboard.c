@@ -793,7 +793,6 @@ static void __init seaboard_common_init(void)
 
 	seaboard_power_init();
 	seaboard_ehci_init();
-	seaboard_panel_init();
 	seaboard_kbc_init();
 
 	gpio_request(TEGRA_GPIO_RECOVERY_SWITCH, "recovery_switch");
@@ -845,7 +844,7 @@ static void __init tegra_seaboard_init(void)
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
 
 	seaboard_common_init();
-
+	seaboard_panel_init();
 	seaboard_emc_init();
 
 	seaboard_i2c_register_devices();
@@ -887,6 +886,7 @@ static void __init tegra_kaen_init(void)
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
 
 	seaboard_common_init();
+	seaboard_panel_init();
 	kaen_emc_init();
 
 	kaen_i2c_register_devices();
@@ -913,6 +913,7 @@ static void __init tegra_aebl_init(void)
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
 
 	seaboard_common_init();
+	seaboard_panel_init();
 	aebl_emc_init();
 
 	aebl_i2c_register_devices();
@@ -936,7 +937,7 @@ static void __init tegra_wario_init(void)
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
 
 	seaboard_common_init();
-
+	wario_panel_init();
 	/* wario has same memory config as seaboard */
 	seaboard_emc_init();
 
@@ -967,6 +968,7 @@ static void __init tegra_arthur_init(void)
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
 
 	seaboard_common_init();
+	arthur_panel_init();
 	arthur_emc_init();
 
 	/* Temporary hack to keep SDIO for wifi capped at 43.2MHz due to
