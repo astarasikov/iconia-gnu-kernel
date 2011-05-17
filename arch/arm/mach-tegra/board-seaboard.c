@@ -960,6 +960,8 @@ static void __init tegra_wario_init(void)
 
 static void __init tegra_arthur_init(void)
 {
+	struct clk *c, *p;
+
 	tegra_init_suspend(&seaboard_suspend);
 
 	__init_debug_uart_B();
@@ -971,6 +973,17 @@ static void __init tegra_arthur_init(void)
 
 	seaboard_common_init();
 	arthur_emc_init();
+
+	/* Temporary hack to keep SDIO for wifi capped at 43.2MHz due to
+	 * stability issues with brcmfmac at 48MHz.
+	 */
+	c = tegra_get_clock_by_name("sdmmc1");
+	p = tegra_get_clock_by_name("pll_p");
+	if (c && p) {
+		clk_set_parent(c, p);
+		clk_set_rate(c, 43200000);
+		clk_enable(c);
+	}
 
 	arthur_i2c_register_devices();
 	seaboard_i2c_init();
