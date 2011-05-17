@@ -138,6 +138,18 @@ static int seaboard_hdmi_disable(void)
 	return seaboard_set_hdmi_power(false);
 }
 
+static int seaboard_hdmi_hotplug_init(void)
+{
+	gpio_set_value(TEGRA_GPIO_HDMI_ENB, 1);
+	return 0;
+}
+
+static int seaboard_hdmi_postsuspend(void)
+{
+	gpio_set_value(TEGRA_GPIO_HDMI_ENB, 0);
+	return 0;
+}
+
 static struct resource seaboard_disp1_resources[] = {
 	{
 		.name	= "irq",
@@ -260,6 +272,8 @@ static struct tegra_dc_out seaboard_disp2_out = {
 
 	.enable		= seaboard_hdmi_enable,
 	.disable	= seaboard_hdmi_disable,
+	.hotplug_init	= seaboard_hdmi_hotplug_init,
+	.postsuspend	= seaboard_hdmi_postsuspend,
 };
 
 static struct tegra_dc_platform_data seaboard_disp1_pdata = {
