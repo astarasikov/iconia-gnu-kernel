@@ -8,6 +8,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/dmi.h>
 #include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/module.h>
@@ -388,6 +389,26 @@ static struct acpi_bus_type acpi_pci_bus = {
 	.find_bridge = acpi_pci_find_root_bridge,
 };
 
+static const struct dmi_system_id acpi_pci_retain_aspm[] = {
+	{
+		.callback = NULL,
+		.ident = "IEC Mario",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "IEC"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Mario"),
+		},
+	},
+	{
+		.callback = NULL,
+		.ident = "SAMSUNG Alex",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Alex"),
+		},
+	},
+	{ }
+};
+
 static int __init acpi_pci_init(void)
 {
 	int ret;
@@ -399,7 +420,8 @@ static int __init acpi_pci_init(void)
 
 	if (acpi_gbl_FADT.boot_flags & ACPI_FADT_NO_ASPM) {
 		printk(KERN_INFO"ACPI FADT declares the system doesn't support PCIe ASPM, so disable it\n");
-		pcie_clear_aspm();
+		if (!dmi_check_system(acpi_pci_retain_aspm))
+			pcie_clear_aspm();
 		pcie_no_aspm();
 	}
 
