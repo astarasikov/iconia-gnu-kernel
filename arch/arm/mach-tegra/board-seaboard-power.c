@@ -103,6 +103,29 @@ static struct fixed_voltage_config wwan_pwr = {
 	.init_data		= &wwan_pwr_initdata,
 };
 
+static struct regulator_consumer_supply vdd_1v5_consumer_supply[] = {
+	REGULATOR_SUPPLY("vdd_1v5", NULL),
+};
+
+struct regulator_init_data vdd_1v5_initdata = {
+	.consumer_supplies = vdd_1v5_consumer_supply,
+	.num_consumer_supplies = 1,
+	.constraints = {
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+		.always_on = 0,
+	},
+};
+
+static struct fixed_voltage_config vdd_1v5 = {
+	.supply_name		= "vdd_1v5",
+	.microvolts		= 1500000, /* 1.5V */
+	.gpio			= TPS_GPIO_EN_1V5,
+	.startup_delay		= 0,
+	.enable_high		= 0,
+	.enabled_at_boot	= 0,
+	.init_data		= &vdd_1v5_initdata,
+};
+
 #define REGULATOR_INIT(_id, _minmv, _maxmv, _always_on)			\
 	{								\
 		.constraints = {					\
@@ -167,6 +190,7 @@ static struct tps6586x_subdev_info tps_devs[] = {
 	TPS_REG(LDO_8, &ldo8_data),
 	TPS_REG(LDO_9, &ldo9_data),
 	TPS_GPIO_FIXED_REG(0, &wwan_pwr),
+	TPS_GPIO_FIXED_REG(1, &vdd_1v5),
 	{
 		.id	= 0,
 		.name	= "tps6586x-rtc",
