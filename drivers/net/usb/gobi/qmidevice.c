@@ -1218,6 +1218,9 @@ static ssize_t devqmi_write(struct file *file, const char __user * buf,
 		return -EBADR;
 	}
 
+	if (size + qmux_size <= size)
+		return -EINVAL;
+
 	wbuf = kmalloc(size + qmux_size, GFP_KERNEL);
 	if (!wbuf)
 		return -ENOMEM;
