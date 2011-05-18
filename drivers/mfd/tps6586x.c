@@ -577,7 +577,7 @@ static int tps6586x_suspend(struct i2c_client *client, pm_message_t mesg)
 	return 0;
 }
 
-static int tps6586x_resume(struct i2c_client *client, pm_message_t mesg)
+static int tps6586x_resume(struct i2c_client *client)
 {
 	if (client->irq)
 		enable_irq(client->irq);
