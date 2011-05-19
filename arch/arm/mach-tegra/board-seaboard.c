@@ -962,11 +962,19 @@ static void __init tegra_wario_init(void)
 
 static void __init tegra_arthur_init(void)
 {
+	int err;
 	struct clk *c, *p;
 
 	tegra_init_suspend(&seaboard_suspend);
 
 	__init_debug_uart_B();
+
+	/* Turn on the keyboard backlight.  TODO: actually use the PWM. */
+	tegra_gpio_enable(TEGRA_GPIO_PU4);
+	err = gpio_request(TEGRA_GPIO_PU4, "kb_bl_pwm");
+	WARN_ON(err);
+	err = gpio_direction_output(TEGRA_GPIO_PU4, 1);
+	WARN_ON(err);
 
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
