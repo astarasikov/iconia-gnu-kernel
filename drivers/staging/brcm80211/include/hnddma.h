@@ -22,6 +22,11 @@
 struct hnddma_pub;
 #endif				/* _hnddma_pub_ */
 
+/* map/unmap direction */
+#define	DMA_TX	1		/* TX direction for DMA */
+#define	DMA_RX	2		/* RX direction for DMA */
+#define BUS_SWAP32(v)		(v)
+
 /* range param for dma_getnexttxp() and dma_txreclaim */
 typedef enum txd_range {
 	HNDDMA_RANGE_ALL = 1,
@@ -143,8 +148,7 @@ struct hnddma_pub {
 	uint txnobuf;		/* tx out of dma descriptors */
 };
 
-extern struct hnddma_pub *dma_attach(struct osl_info *osh, char *name,
-			    si_t *sih,
+extern struct hnddma_pub *dma_attach(char *name, si_t *sih,
 			    void *dmaregstx, void *dmaregsrx, uint ntxd,
 			    uint nrxd, uint rxbufsize, int rxextheadroom,
 			    uint nrxpost, uint rxoffset, uint *msg_level);
@@ -198,5 +202,25 @@ extern const di_fcn_t dma64proc;
  * This info is needed by DMA_ALLOC_CONSISTENT in dma attach
  */
 extern uint dma_addrwidth(si_t *sih, void *dmaregs);
+void dma_walk_packets(struct hnddma_pub *dmah, void (*callback_fnc)
+		      (void *pkt, void *arg_a), void *arg_a);
+
+/*
+ * DMA(Bug) on some chips seems to declare that the packet is ready, but the
+ * packet length is not updated yet (by DMA) on the expected time.
+ * Workaround is to hold processor till DMA updates the length, and stay off
+ * the bus to allow DMA update the length in buffer
+ */
+static inline void dma_spin_for_len(uint len, struct sk_buff *head)
+{
+#if defined(__mips__)
+	if (!len) {
+		while (!(len = *(u16 *) KSEG1ADDR(head->data)))
+			udelay(1);
+
+		*(u16 *) (head->data) = cpu_to_le16((u16) len);
+	}
+#endif				/* defined(__mips__) */
+}
 
 #endif				/* _hnddma_h_ */

@@ -17,10 +17,6 @@
 #ifndef _wlc_pub_h_
 #define _wlc_pub_h_
 
-#include <wlioctl.h>
-#include <wlc_types.h>
-#include <wlc_scb.h>
-
 #define	WLC_NUMRATES	16	/* max # of rates in a rateset */
 #define	MAXMULTILIST	32	/* max # multicast addresses */
 #define	D11_PHY_HDR_LEN	6	/* Phy header length - 6 bytes */
@@ -63,6 +59,10 @@
  */
 #define WLC_TXPWR_MAX		(127)	/* ~32 dBm = 1,500 mW */
 
+/* rate related definitions */
+#define	WLC_RATE_FLAG	0x80	/* Flag to indicate it is a basic rate */
+#define	WLC_RATE_MASK	0x7f	/* Rate value mask w/o basic rate flag */
+
 /* legacy rx Antenna diversity for SISO rates */
 #define	ANT_RX_DIV_FORCE_0		0	/* Use antenna 0 */
 #define	ANT_RX_DIV_FORCE_1		1	/* Use antenna 1 */
@@ -95,6 +95,8 @@
 #ifndef AIDMAPSZ
 #define AIDMAPSZ	(roundup(MAXSCB, NBBY)/NBBY)	/* aid bitmap size in bytes */
 #endif				/* AIDMAPSZ */
+
+struct ieee80211_tx_queue_params;
 
 typedef struct wlc_tunables {
 	int ntxd;		/* size of tx descriptor table */
@@ -146,21 +148,9 @@ struct rsn_parms {
 #define AMPDU_DEF_MPDU_DENSITY	6	/* default mpdu density (110 ==> 4us) */
 
 /* defaults for the HT (MIMO) bss */
-#define HT_CAP	((HT_CAP_MIMO_PS_OFF << IEEE80211_HT_CAP_SM_PS_SHIFT) |\
+#define HT_CAP	(IEEE80211_HT_CAP_SM_PS |\
 	IEEE80211_HT_CAP_SUP_WIDTH_20_40 | IEEE80211_HT_CAP_GRN_FLD |\
-	HT_CAP_MAX_AMSDU | IEEE80211_HT_CAP_DSSSCCK40)
-
-/* Event data type */
-typedef struct wlc_event {
-	wl_event_msg_t event;	/* encapsulated event */
-	struct ether_addr *addr;	/* used to keep a trace of the potential present of
-					 * an address in wlc_event_msg_t
-					 */
-	int bsscfgidx;		/* BSS config when needed */
-	struct wl_if *wlif;	/* pointer to wlif */
-	void *data;		/* used to hang additional data on an event */
-	struct wlc_event *next;	/* enables ordered list of pending events */
-} wlc_event_t;
+	IEEE80211_HT_CAP_MAX_AMSDU | IEEE80211_HT_CAP_DSSSCCK40)
 
 /* wlc internal bss_info, wl external one is in wlioctl.h */
 typedef struct wlc_bss_info {
@@ -257,7 +247,6 @@ struct wlc_pub {
 	uint mac80211_state;
 	uint unit;		/* device instance number */
 	uint corerev;		/* core revision */
-	struct osl_info *osh;		/* pointer to os handle */
 	si_t *sih;		/* SB handle (cookie for siutils calls) */
 	char *vars;		/* "environment" name=value */
 	bool up;		/* interface up and running */
@@ -495,9 +484,9 @@ extern const u8 wme_fifo2ac[];
 #define	WLC_PROT_N_OBSS		16	/* non-HT OBSS present */
 
 /* common functions for every port */
-extern void *wlc_attach(void *wl, u16 vendor, u16 device, uint unit,
-			bool piomode, struct osl_info *osh, void *regsva,
-			uint bustype, void *btparam, uint *perr);
+extern void *wlc_attach(struct wl_info *wl, u16 vendor, u16 device, uint unit,
+			bool piomode, void *regsva, uint bustype, void *btparam,
+			uint *perr);
 extern uint wlc_detach(struct wlc_info *wlc);
 extern int wlc_up(struct wlc_info *wlc);
 extern uint wlc_down(struct wlc_info *wlc);
@@ -516,8 +505,6 @@ extern void wlc_intrsrestore(struct wlc_info *wlc, u32 macintmask);
 extern bool wlc_intrsupd(struct wlc_info *wlc);
 extern bool wlc_isr(struct wlc_info *wlc, bool *wantdpc);
 extern bool wlc_dpc(struct wlc_info *wlc, bool bounded);
-extern bool wlc_send80211_raw(struct wlc_info *wlc, struct wlc_if *wlcif,
-			      void *p, uint ac);
 extern bool wlc_sendpkt_mac80211(struct wlc_info *wlc, struct sk_buff *sdu,
 				 struct ieee80211_hw *hw);
 extern int wlc_iovar_op(struct wlc_info *wlc, const char *name, void *params,
@@ -525,6 +512,8 @@ extern int wlc_iovar_op(struct wlc_info *wlc, const char *name, void *params,
 			struct wlc_if *wlcif);
 extern int wlc_ioctl(struct wlc_info *wlc, int cmd, void *arg, int len,
 		     struct wlc_if *wlcif);
+extern bool wlc_aggregatable(struct wlc_info *wlc, u8 tid);
+
 /* helper functions */
 extern void wlc_statsupd(struct wlc_info *wlc);
 extern void wlc_protection_upd(struct wlc_info *wlc, uint idx, int val);
@@ -532,35 +521,26 @@ extern int wlc_get_header_len(void);
 extern void wlc_mac_bcn_promisc_change(struct wlc_info *wlc, bool promisc);
 extern void wlc_set_addrmatch(struct wlc_info *wlc, int match_reg_offset,
 			      const u8 *addr);
-extern void wlc_wme_setparams(struct wlc_info *wlc, u16 aci, void *arg,
+extern void wlc_wme_setparams(struct wlc_info *wlc, u16 aci,
+			      const struct ieee80211_tx_queue_params *arg,
 			      bool suspend);
-
 extern struct wlc_pub *wlc_pub(void *wlc);
 
 /* common functions for every port */
-extern int wlc_bmac_up_prep(struct wlc_hw_info *wlc_hw);
-extern int wlc_bmac_up_finish(struct wlc_hw_info *wlc_hw);
-extern int wlc_bmac_down_prep(struct wlc_hw_info *wlc_hw);
-extern int wlc_bmac_down_finish(struct wlc_hw_info *wlc_hw);
-
-extern u32 wlc_reg_read(struct wlc_info *wlc, void *r, uint size);
-extern void wlc_reg_write(struct wlc_info *wlc, void *r, u32 v, uint size);
-extern void wlc_corereset(struct wlc_info *wlc, u32 flags);
 extern void wlc_mhf(struct wlc_info *wlc, u8 idx, u16 mask, u16 val,
 		    int bands);
-extern u16 wlc_mhf_get(struct wlc_info *wlc, u8 idx, int bands);
-extern u32 wlc_delta_txfunfl(struct wlc_info *wlc, int fifo);
 extern void wlc_rate_lookup_init(struct wlc_info *wlc, wlc_rateset_t *rateset);
 extern void wlc_default_rateset(struct wlc_info *wlc, wlc_rateset_t *rs);
+
+struct ieee80211_sta;
+extern void wlc_ampdu_flush(struct wlc_info *wlc, struct ieee80211_sta *sta,
+			    u16 tid);
 
 /* wlc_phy.c helper functions */
 extern void wlc_set_ps_ctrl(struct wlc_info *wlc);
 extern void wlc_mctrl(struct wlc_info *wlc, u32 mask, u32 val);
-extern void wlc_scb_ratesel_init_all(struct wlc_info *wlc);
 
 /* ioctl */
-extern int wlc_iovar_gets8(struct wlc_info *wlc, const char *name,
-			     s8 *arg);
 extern int wlc_iovar_check(struct wlc_pub *pub, const bcm_iovar_t *vi,
 			   void *arg,
 			   int len, bool set);
@@ -570,57 +550,25 @@ extern int wlc_module_register(struct wlc_pub *pub, const bcm_iovar_t *iovars,
 			       watchdog_fn_t watchdog_fn, down_fn_t down_fn);
 extern int wlc_module_unregister(struct wlc_pub *pub, const char *name,
 				 void *hdl);
-extern void wlc_event_if(struct wlc_info *wlc, struct wlc_bsscfg *cfg,
-			 wlc_event_t *e, const struct ether_addr *addr);
 extern void wlc_suspend_mac_and_wait(struct wlc_info *wlc);
 extern void wlc_enable_mac(struct wlc_info *wlc);
-extern u16 wlc_rate_shm_offset(struct wlc_info *wlc, u8 rate);
-extern u32 wlc_get_rspec_history(struct wlc_bsscfg *cfg);
-extern u32 wlc_get_current_highest_rate(struct wlc_bsscfg *cfg);
 extern void wlc_associate_upd(struct wlc_info *wlc, bool state);
 extern void wlc_scan_start(struct wlc_info *wlc);
 extern void wlc_scan_stop(struct wlc_info *wlc);
-
-static inline int wlc_iovar_getuint(struct wlc_info *wlc, const char *name,
-				    uint *arg)
-{
-	return wlc_iovar_getint(wlc, name, (int *)arg);
-}
-
-static inline int wlc_iovar_getu8(struct wlc_info *wlc, const char *name,
-				     u8 *arg)
-{
-	return wlc_iovar_gets8(wlc, name, (s8 *) arg);
-}
-
-static inline int wlc_iovar_setuint(struct wlc_info *wlc, const char *name,
-				    uint arg)
-{
-	return wlc_iovar_setint(wlc, name, (int)arg);
-}
+extern int wlc_get_curband(struct wlc_info *wlc);
+extern void wlc_wait_for_tx_completion(struct wlc_info *wlc, bool drop);
 
 #if defined(BCMDBG)
 extern int wlc_iocregchk(struct wlc_info *wlc, uint band);
 #endif
-#if defined(BCMDBG)
-extern int wlc_iocpichk(struct wlc_info *wlc, uint phytype);
-#endif
 
 /* helper functions */
-extern void wlc_getrand(struct wlc_info *wlc, u8 *buf, int len);
-
-struct scb;
-extern void wlc_ps_on(struct wlc_info *wlc, struct scb *scb);
-extern void wlc_ps_off(struct wlc_info *wlc, struct scb *scb, bool discard);
 extern bool wlc_check_radio_disabled(struct wlc_info *wlc);
 extern bool wlc_radio_monitor_stop(struct wlc_info *wlc);
 
 #if defined(BCMDBG)
 extern int wlc_format_ssid(char *buf, const unsigned char ssid[], uint ssid_len);
 #endif
-
-extern void wlc_pmkid_build_cand_list(struct wlc_bsscfg *cfg, bool check_SSID);
-extern void wlc_pmkid_event(struct wlc_bsscfg *cfg);
 
 #define	MAXBANDS		2	/* Maximum #of bands */
 /* bandstate array indices */

@@ -31,6 +31,7 @@
 #include <linux/random.h>
 #include <linux/spinlock.h>
 #include <linux/ethtool.h>
+#include <linux/suspend.h>
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
 /* The kernel threading is sdio-specific */
@@ -52,7 +53,6 @@ enum dhd_bus_state {
 /* Common structure for module and instance linkage */
 typedef struct dhd_pub {
 	/* Linkage ponters */
-	struct osl_info *osh;		/* OSL handle */
 	struct dhd_bus *bus;	/* Bus module handle */
 	struct dhd_prot *prot;	/* Protocol module handle */
 	struct dhd_info *info;	/* Info module handle */
@@ -123,19 +123,22 @@ typedef struct dhd_pub {
 } dhd_pub_t;
 
 #if defined(CONFIG_PM_SLEEP)
-
+extern atomic_t dhd_mmc_suspend;
 #define DHD_PM_RESUME_WAIT_INIT(a) DECLARE_WAIT_QUEUE_HEAD(a);
-#define _DHD_PM_RESUME_WAIT(a, b) do {\
-			int retry = 0; \
-			while (dhd_mmc_suspend && retry++ != b) { \
-				wait_event_timeout(a, false, HZ/100); \
-			} \
-		}	while (0)
+#define _DHD_PM_RESUME_WAIT(a, b) do { \
+		int retry = 0; \
+		while (atomic_read(&dhd_mmc_suspend) && retry++ != b) { \
+			wait_event_timeout(a, false, HZ/100); \
+		} \
+	}	while (0)
 #define DHD_PM_RESUME_WAIT(a)	_DHD_PM_RESUME_WAIT(a, 30)
 #define DHD_PM_RESUME_WAIT_FOREVER(a)	_DHD_PM_RESUME_WAIT(a, ~0)
 #define DHD_PM_RESUME_RETURN_ERROR(a)	\
-	do { if (dhd_mmc_suspend) return a; } while (0)
-#define DHD_PM_RESUME_RETURN	do { if (dhd_mmc_suspend) return; } while (0)
+	do { if (atomic_read(&dhd_mmc_suspend)) return a; } while (0)
+#define DHD_PM_RESUME_RETURN	do { \
+	if (atomic_read(&dhd_mmc_suspend)) \
+		return; \
+	} while (0)
 
 #define DHD_SPINWAIT_SLEEP_INIT(a) DECLARE_WAIT_QUEUE_HEAD(a);
 #define SPINWAIT_SLEEP(a, exp, us) do { \
@@ -213,16 +216,12 @@ typedef struct dhd_if_event {
  * Exported from dhd OS modules (dhd_linux/dhd_ndis)
  */
 
-/* To allow osl_attach/detach calls from os-independent modules */
-struct osl_info *dhd_osl_attach(void *pdev, uint bustype);
-void dhd_osl_detach(struct osl_info *osh);
-
 /* Indication from bus module regarding presence/insertion of dongle.
  * Return dhd_pub_t pointer, used as handle to OS module in later calls.
  * Returned structure should have bus and prot pointers filled in.
  * bus_hdrlen specifies required headroom for bus module header.
  */
-extern dhd_pub_t *dhd_attach(struct osl_info *osh, struct dhd_bus *bus,
+extern dhd_pub_t *dhd_attach(struct dhd_bus *bus,
 				uint bus_hdrlen);
 extern int dhd_net_attach(dhd_pub_t *dhdp, int idx);
 
@@ -401,5 +400,15 @@ extern char nv_path[MOD_PARAM_PATHLEN];
 
 extern void dhd_wait_for_event(dhd_pub_t *dhd, bool * lockvar);
 extern void dhd_wait_event_wakeup(dhd_pub_t *dhd);
+
+extern u32 g_assert_type;
+
+#ifdef BCMDBG
+#define ASSERT(exp) \
+	  do { if (!(exp)) osl_assert(#exp, __FILE__, __LINE__); } while (0)
+extern void osl_assert(char *exp, char *file, int line);
+#else
+#define ASSERT(exp)	do {} while (0)
+#endif  /* defined(BCMDBG) */
 
 #endif				/* _dhd_h_ */

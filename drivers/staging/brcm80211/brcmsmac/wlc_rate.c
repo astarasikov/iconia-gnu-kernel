@@ -14,21 +14,22 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include <linux/kernel.h>
-#include <bcmdefs.h>
-#include <wlc_cfg.h>
-#include <osl.h>
 #include <linux/module.h>
-#include <bcmutils.h>
-#include <siutils.h>
-#include <wlioctl.h>
 
-#include <sbhndpio.h>
-#include <sbhnddma.h>
 #include <proto/802.11.h>
-#include <d11.h>
-#include <wlc_rate.h>
-#include <wl_dbg.h>
-#include <wlc_pub.h>
+#include <bcmdefs.h>
+#include <bcmutils.h>
+#include <aiutils.h>
+#include <wlioctl.h>
+#include <sbhnddma.h>
+
+#include "wlc_types.h"
+#include "d11.h"
+#include "wl_dbg.h"
+#include "wlc_cfg.h"
+#include "wlc_scb.h"
+#include "wlc_pub.h"
+#include "wlc_rate.h"
 
 /* Rate info per rate: It tells whether a rate is ofdm or not and its phy_rate value */
 const u8 rate_info[WLC_MAXRATE + 1] = {
@@ -303,7 +304,7 @@ wlc_rate_hwrs_filter_sort_validate(wlc_rateset_t *rs,
 
 	for (i = 0; i < count; i++) {
 		/* mask off "basic rate" bit, WLC_RATE_FLAG */
-		r = (int)rs->rates[i] & RATE_MASK;
+		r = (int)rs->rates[i] & WLC_RATE_MASK;
 		if ((r > WLC_MAXRATE) || (rate_info[r] == 0)) {
 			continue;
 		}
@@ -313,8 +314,7 @@ wlc_rate_hwrs_filter_sort_validate(wlc_rateset_t *rs,
 	/* fill out the rates in order, looking at only supported rates */
 	count = 0;
 	for (i = 0; i < hw_rs->count; i++) {
-		r = hw_rs->rates[i] & RATE_MASK;
-		ASSERT(r <= WLC_MAXRATE);
+		r = hw_rs->rates[i] & WLC_RATE_MASK;
 		if (rateset[r])
 			rs->rates[count++] = rateset[r];
 	}
@@ -331,8 +331,8 @@ wlc_rate_hwrs_filter_sort_validate(wlc_rateset_t *rs,
 		return false;
 }
 
-/* caluclate the rate of a rx'd frame and return it as a ratespec */
-ratespec_t BCMFASTPATH wlc_compute_rspec(d11rxhdr_t *rxh, u8 *plcp)
+/* calculate the rate of a rx'd frame and return it as a ratespec */
+ratespec_t wlc_compute_rspec(d11rxhdr_t *rxh, u8 *plcp)
 {
 	int phy_type;
 	ratespec_t rspec = PHY_TXC1_BW_20MHZ << RSPEC_BW_SHIFT;
@@ -363,8 +363,7 @@ ratespec_t BCMFASTPATH wlc_compute_rspec(d11rxhdr_t *rxh, u8 *plcp)
 		case PRXS0_STDN:
 			/* fallthru */
 		default:
-			/* not supported */
-			ASSERT(0);
+			/* not supported, error condition */
 			break;
 		}
 		if (PLCP3_ISSGI(plcp[3]))
@@ -406,9 +405,9 @@ wlc_rateset_filter(wlc_rateset_t *src, wlc_rateset_t *dst, bool basic_only,
 		r = src->rates[i];
 		if (basic_only && !(r & WLC_RATE_FLAG))
 			continue;
-		if ((rates == WLC_RATES_CCK) && IS_OFDM((r & RATE_MASK)))
+		if ((rates == WLC_RATES_CCK) && IS_OFDM((r & WLC_RATE_MASK)))
 			continue;
-		if ((rates == WLC_RATES_OFDM) && IS_CCK((r & RATE_MASK)))
+		if ((rates == WLC_RATES_OFDM) && IS_CCK((r & WLC_RATE_MASK)))
 			continue;
 		dst->rates[count++] = r & xmask;
 	}
@@ -450,7 +449,7 @@ wlc_rateset_default(wlc_rateset_t *rs_tgt, const wlc_rateset_t *rs_hw,
 	} else if (PHYTYPE_IS(phy_type, PHY_TYPE_G)) {
 		rs_dflt = &cck_ofdm_rates;
 	} else {
-		ASSERT(0);	/* should not happen */
+		/* should not happen, error condition */
 		rs_dflt = &cck_rates;	/* force cck */
 	}
 
@@ -467,7 +466,7 @@ wlc_rateset_default(wlc_rateset_t *rs_tgt, const wlc_rateset_t *rs_hw,
 					   mcsallow ? txstreams : 1);
 }
 
-s16 BCMFASTPATH wlc_rate_legacy_phyctl(uint rate)
+s16 wlc_rate_legacy_phyctl(uint rate)
 {
 	uint i;
 	for (i = 0; i < LEGACY_PHYCFG_TABLE_SIZE; i++)

@@ -16,32 +16,31 @@
 
 #include <wlc_cfg.h>
 
-#ifdef WLANTSEL
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+
 #include <bcmdefs.h>
-#include <osl.h>
 #include <bcmutils.h>
-#include <siutils.h>
+#include <bcmnvram.h>
+#include <aiutils.h>
+#include <bcmdevs.h>
+#include <sbhnddma.h>
 #include <wlioctl.h>
 
-#include <bcmdevs.h>
-#include <sbhndpio.h>
-#include <sbhnddma.h>
-#include <d11.h>
-#include <wlc_rate.h>
-#include <wlc_key.h>
-#include <wlc_pub.h>
-#include <wl_dbg.h>
-#include <wlc_event.h>
-#include <wlc_mac80211.h>
-#include <wlc_bmac.h>
-#include <wlc_phy_hal.h>
-#include <wl_export.h>
-#include <wlc_antsel.h>
-#include <wlc_phy_shim.h>
+#include "d11.h"
+#include "wlc_rate.h"
+#include "wlc_key.h"
+#include "wlc_scb.h"
+#include "wlc_pub.h"
+#include "wl_dbg.h"
+#include "phy/wlc_phy_hal.h"
+#include "wlc_bmac.h"
+#include "wlc_channel.h"
+#include "wlc_main.h"
+#include "wl_export.h"
+#include "wlc_phy_shim.h"
+#include "wlc_antsel.h"
 
 /* useful macros */
 #define WLC_ANTSEL_11N_0(ant)	((((ant) & ANT_SELCFG_MASK) >> 4) & 0xf)
@@ -94,20 +93,19 @@ const u8 mimo_2x3_div_antselid_tbl[16] = {
 	0, 0, 0, 0, 0, 0, 0, 0	/* pat to antselid */
 };
 
-struct antsel_info *wlc_antsel_attach(struct wlc_info *wlc,
-				      struct osl_info *osh,
-				      struct wlc_pub *pub,
-				      struct wlc_hw_info *wlc_hw) {
+struct antsel_info *wlc_antsel_attach(struct wlc_info *wlc)
+{
 	struct antsel_info *asi;
 
 	asi = kzalloc(sizeof(struct antsel_info), GFP_ATOMIC);
 	if (!asi) {
-		WL_ERROR("wl%d: wlc_antsel_attach: out of mem\n", pub->unit);
+		wiphy_err(wlc->wiphy, "wl%d: wlc_antsel_attach: out of mem\n",
+			  wlc->pub->unit);
 		return NULL;
 	}
 
 	asi->wlc = wlc;
-	asi->pub = pub;
+	asi->pub = wlc->pub;
 	asi->antsel_type = ANTSEL_NA;
 	asi->antsel_avail = false;
 	asi->antsel_antswitch = (u8) getintvar(asi->pub->vars, "antswitch");
@@ -131,8 +129,8 @@ struct antsel_info *wlc_antsel_attach(struct wlc_info *wlc,
 				asi->antsel_avail = false;
 			} else {
 				asi->antsel_avail = false;
-				WL_ERROR("wlc_antsel_attach: 2o3 board cfg invalid\n");
-				ASSERT(0);
+				wiphy_err(wlc->wiphy, "wlc_antsel_attach: 2o3 "
+					  "board cfg invalid\n");
 			}
 			break;
 		default:
@@ -150,7 +148,7 @@ struct antsel_info *wlc_antsel_attach(struct wlc_info *wlc,
 	}
 
 	/* Set the antenna selection type for the low driver */
-	wlc_bmac_antsel_type_set(wlc_hw, asi->antsel_type);
+	wlc_bmac_antsel_type_set(wlc->hw, asi->antsel_type);
 
 	/* Init (auto/manual) antenna selection */
 	wlc_antsel_init_cfg(asi, &asi->antcfg_11n, true);
@@ -161,9 +159,6 @@ struct antsel_info *wlc_antsel_attach(struct wlc_info *wlc,
 
 void wlc_antsel_detach(struct antsel_info *asi)
 {
-	if (!asi)
-		return;
-
 	kfree(asi);
 }
 
@@ -206,7 +201,7 @@ wlc_antsel_init_cfg(struct antsel_info *asi, wlc_antselcfg_t *antsel,
 	}
 }
 
-void BCMFASTPATH
+void
 wlc_antsel_antcfg_get(struct antsel_info *asi, bool usedef, bool sel,
 		      u8 antselid, u8 fbantselid, u8 *antcfg,
 		      u8 *fbantcfg)
@@ -303,8 +298,6 @@ static int wlc_antsel_cfgupd(struct antsel_info *asi, wlc_antselcfg_t *antsel)
 	u8 ant_cfg;
 	u16 mimo_antsel;
 
-	ASSERT(asi->antsel_type != ANTSEL_NA);
-
 	/* 1) Update TX antconfig for all frames that are not unicast data
 	 *    (aka default TX)
 	 */
@@ -325,5 +318,3 @@ static int wlc_antsel_cfgupd(struct antsel_info *asi, wlc_antselcfg_t *antsel)
 
 	return 0;
 }
-
-#endif				/* WLANTSEL */

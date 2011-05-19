@@ -17,13 +17,11 @@
 #ifndef _wl_mac80211_h_
 #define _wl_mac80211_h_
 
-#include <wlc_types.h>
-
 /* BMAC Note: High-only driver is no longer working in softirq context as it needs to block and
  * sleep so perimeter lock has to be a semaphore instead of spinlock. This requires timers to be
  * submitted to workqueue instead of being on kernel timer
  */
-typedef struct wl_timer {
+struct wl_timer {
 	struct timer_list timer;
 	struct wl_info *wl;
 	void (*fn) (void *);
@@ -35,7 +33,7 @@ typedef struct wl_timer {
 #ifdef BCMDBG
 	char *name;		/* Description of the timer */
 #endif
-} wl_timer_t;
+};
 
 struct wl_if {
 	uint subunit;		/* WDS/BSS unit */
@@ -53,7 +51,6 @@ struct wl_firmware {
 struct wl_info {
 	struct wlc_pub *pub;		/* pointer to public wlc state */
 	void *wlc;		/* pointer to private common os-independent data */
-	struct osl_info *osh;		/* pointer to os handler */
 	u32 magic;
 
 	int irq;
@@ -70,11 +67,8 @@ struct wl_info {
 #ifdef LINUXSTA_PS
 	u32 pci_psstate[16];	/* pci ps-state save/restore */
 #endif
-	/* RPC, handle, lock, txq, workitem */
-	uint stats_id;		/* the current set of stats */
-	/* ping-pong stats counters updated by Linux watchdog */
-	struct net_device_stats stats_watchdog[2];
 	struct wl_firmware fw;
+	struct wiphy *wiphy;
 };
 
 #define WL_LOCK(wl)	spin_lock_bh(&(wl)->lock)
@@ -87,22 +81,5 @@ struct wl_info {
 /* locking under WL_LOCK() to synchronize with wl_isr */
 #define INT_LOCK(wl, flags)	spin_lock_irqsave(&(wl)->isr_lock, flags)
 #define INT_UNLOCK(wl, flags)	spin_unlock_irqrestore(&(wl)->isr_lock, flags)
-
-#ifndef PCI_D0
-#define PCI_D0		0
-#endif
-
-#ifndef PCI_D3hot
-#define PCI_D3hot	3
-#endif
-
-/* exported functions */
-
-extern irqreturn_t wl_isr(int irq, void *dev_id);
-
-extern int __devinit wl_pci_probe(struct pci_dev *pdev,
-				  const struct pci_device_id *ent);
-extern void wl_free(struct wl_info *wl);
-extern int wl_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 
 #endif				/* _wl_mac80211_h_ */

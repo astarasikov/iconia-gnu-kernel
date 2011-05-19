@@ -16,29 +16,34 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <wlc_cfg.h>
-#include <bcmdefs.h>
-#include <osl.h>
-#include <bcmutils.h>
-#include <siutils.h>
+
 #include <proto/802.11.h>
+
+#include <bcmdefs.h>
+#include <bcmutils.h>
+#include <aiutils.h>
 #include <wlioctl.h>
 #include <bcmwifi.h>
-#include <sbhndpio.h>
+#include <bcmnvram.h>
 #include <sbhnddma.h>
-#include <d11.h>
-#include <wlc_rate.h>
-#include <wlc_pub.h>
-#include <wlc_key.h>
-#include <wlc_channel.h>
-#include <wlc_bsscfg.h>
-#include <wlc_event.h>
-#include <wlc_mac80211.h>
-#include <wlc_scb.h>
-#include <wl_export.h>
-#include <wlc_bmac.h>
-#include <wlc_stf.h>
-#include <wl_dbg.h>
+
+#include "wlc_types.h"
+#include "d11.h"
+#include "wl_dbg.h"
+#include "wlc_cfg.h"
+#include "wlc_rate.h"
+#include "wlc_scb.h"
+#include "wlc_pub.h"
+#include "wlc_key.h"
+#include "phy/wlc_phy_hal.h"
+#include "wlc_channel.h"
+#include "wlc_main.h"
+#include "wl_export.h"
+#include "wlc_bmac.h"
+#include "wlc_stf.h"
+
+#define MIN_SPATIAL_EXPANSION	0
+#define MAX_SPATIAL_EXPANSION	1
 
 #define WLC_STF_SS_STBC_RX(wlc) (WLCISNPHY(wlc->band) && \
 	NREV_GT(wlc->band->phyrev, 3) && NREV_LE(wlc->band->phyrev, 6))
@@ -65,17 +70,14 @@ const u8 txcore_default[5] = {
 
 static void wlc_stf_stbc_rx_ht_update(struct wlc_info *wlc, int val)
 {
-	ASSERT((val == HT_CAP_RX_STBC_NO)
-	       || (val == HT_CAP_RX_STBC_ONE_STREAM));
-
 	/* MIMOPHYs rev3-6 cannot receive STBC with only one rx core active */
 	if (WLC_STF_SS_STBC_RX(wlc)) {
 		if ((wlc->stf->rxstreams == 1) && (val != HT_CAP_RX_STBC_NO))
 			return;
 	}
 
-	wlc->ht_cap.cap_info &= ~HT_CAP_RX_STBC_MASK;
-	wlc->ht_cap.cap_info |= (val << HT_CAP_RX_STBC_SHIFT);
+	wlc->ht_cap.cap_info &= ~IEEE80211_HT_CAP_RX_STBC;
+	wlc->ht_cap.cap_info |= (val << IEEE80211_HT_CAP_RX_STBC_SHIFT);
 
 	if (wlc->pub->up) {
 		wlc_update_beacon(wlc);
@@ -189,10 +191,8 @@ bool wlc_stf_stbc_rx_set(struct wlc_info *wlc, s32 int_val)
 
 static int wlc_stf_txcore_set(struct wlc_info *wlc, u8 Nsts, u8 core_mask)
 {
-	WL_TRACE("wl%d: %s: Nsts %d core_mask %x\n",
-		 wlc->pub->unit, __func__, Nsts, core_mask);
-
-	ASSERT((Nsts > 0) && (Nsts <= MAX_STREAMS_SUPPORTED));
+	BCMMSG(wlc->wiphy, "wl%d: Nsts %d core_mask %x\n",
+		 wlc->pub->unit, Nsts, core_mask);
 
 	if (WLC_BITSCNT(core_mask) > wlc->stf->txstreams) {
 		core_mask = 0;
@@ -203,8 +203,6 @@ static int wlc_stf_txcore_set(struct wlc_info *wlc, u8 Nsts, u8 core_mask)
 	     || !(core_mask & wlc->stf->txchain))) {
 		core_mask = wlc->stf->txchain;
 	}
-
-	ASSERT(!core_mask || Nsts <= WLC_BITSCNT(core_mask));
 
 	wlc->stf->txcore[Nsts] = core_mask;
 	/* Nsts = 1..4, txcore index = 1..4 */
@@ -221,7 +219,7 @@ static int wlc_stf_txcore_set(struct wlc_info *wlc, u8 Nsts, u8 core_mask)
 		}
 	}
 
-	return BCME_OK;
+	return 0;
 }
 
 static int wlc_stf_spatial_policy_set(struct wlc_info *wlc, int val)
@@ -229,7 +227,7 @@ static int wlc_stf_spatial_policy_set(struct wlc_info *wlc, int val)
 	int i;
 	u8 core_mask = 0;
 
-	WL_TRACE("wl%d: %s: val %x\n", wlc->pub->unit, __func__, val);
+	BCMMSG(wlc->wiphy, "wl%d: val %x\n", wlc->pub->unit, val);
 
 	wlc->stf->spatial_policy = (s8) val;
 	for (i = 1; i <= MAX_STREAMS_SUPPORTED; i++) {
@@ -237,7 +235,7 @@ static int wlc_stf_spatial_policy_set(struct wlc_info *wlc, int val)
 		    wlc->stf->txchain : txcore_default[i];
 		wlc_stf_txcore_set(wlc, (u8) i, core_mask);
 	}
-	return BCME_OK;
+	return 0;
 }
 
 int wlc_stf_txchain_set(struct wlc_info *wlc, s32 int_val, bool force)
@@ -247,16 +245,16 @@ int wlc_stf_txchain_set(struct wlc_info *wlc, s32 int_val, bool force)
 	uint i;
 
 	if (wlc->stf->txchain == txchain)
-		return BCME_OK;
+		return 0;
 
 	if ((txchain & ~wlc->stf->hw_txchain)
 	    || !(txchain & wlc->stf->hw_txchain))
-		return BCME_RANGE;
+		return -EINVAL;
 
 	/* if nrate override is configured to be non-SISO STF mode, reject reducing txchain to 1 */
 	txstreams = (u8) WLC_BITSCNT(txchain);
 	if (txstreams > MAX_STREAMS_SUPPORTED)
-		return BCME_RANGE;
+		return -EINVAL;
 
 	if (txstreams == 1) {
 		for (i = 0; i < NBANDS(wlc); i++)
@@ -265,21 +263,25 @@ int wlc_stf_txchain_set(struct wlc_info *wlc, s32 int_val, bool force)
 			    || (RSPEC_STF(wlc->bandstate[i]->mrspec_override) !=
 				PHY_TXC1_MODE_SISO)) {
 				if (!force)
-					return BCME_ERROR;
+					return -EBADE;
 
 				/* over-write the override rspec */
 				if (RSPEC_STF(wlc->bandstate[i]->rspec_override)
 				    != PHY_TXC1_MODE_SISO) {
 					wlc->bandstate[i]->rspec_override = 0;
-					WL_ERROR("%s(): temp sense override non-SISO rspec_override\n",
-						 __func__);
+					wiphy_err(wlc->wiphy, "%s(): temp "
+						  "sense override non-SISO "
+						  "rspec_override\n",
+						  __func__);
 				}
 				if (RSPEC_STF
 				    (wlc->bandstate[i]->mrspec_override) !=
 				    PHY_TXC1_MODE_SISO) {
 					wlc->bandstate[i]->mrspec_override = 0;
-					WL_ERROR("%s(): temp sense override non-SISO mrspec_override\n",
-						 __func__);
+					wiphy_err(wlc->wiphy, "%s(): temp "
+						  "sense override non-SISO "
+						  "mrspec_override\n",
+						  __func__);
 				}
 			}
 	}
@@ -299,7 +301,7 @@ int wlc_stf_txchain_set(struct wlc_info *wlc, s32 int_val, bool force)
 	for (i = 1; i <= MAX_STREAMS_SUPPORTED; i++)
 		wlc_stf_txcore_set(wlc, (u8) i, txcore_default[i]);
 
-	return BCME_OK;
+	return 0;
 }
 
 /* update wlc->stf->ss_opmode which represents the operational stf_ss mode we're using */
@@ -315,9 +317,6 @@ int wlc_stf_ss_update(struct wlc_info *wlc, struct wlcband *band)
 	if (WLC_STBC_CAP_PHY(wlc) &&
 	    wlc->stf->ss_algosel_auto
 	    && (wlc->stf->ss_algo_channel != (u16) -1)) {
-		ASSERT(isset(&wlc->stf->ss_algo_channel, PHY_TXC1_MODE_CDD)
-		       || isset(&wlc->stf->ss_algo_channel,
-				PHY_TXC1_MODE_SISO));
 		upd_stf_ss = (wlc->stf->no_cddstbc || (wlc->stf->txstreams == 1)
 			      || isset(&wlc->stf->ss_algo_channel,
 				       PHY_TXC1_MODE_SISO)) ? PHY_TXC1_MODE_SISO
@@ -367,11 +366,11 @@ void wlc_stf_detach(struct wlc_info *wlc)
 
 int wlc_stf_ant_txant_validate(struct wlc_info *wlc, s8 val)
 {
-	int bcmerror = BCME_OK;
+	int bcmerror = 0;
 
 	/* when there is only 1 tx_streams, don't allow to change the txant */
 	if (WLCISNPHY(wlc->band) && (wlc->stf->txstreams == 1))
-		return ((val == wlc->stf->txant) ? bcmerror : BCME_RANGE);
+		return ((val == wlc->stf->txant) ? bcmerror : -EINVAL);
 
 	switch (val) {
 	case -1:
@@ -387,11 +386,11 @@ int wlc_stf_ant_txant_validate(struct wlc_info *wlc, s8 val)
 		val = ANT_TX_LAST_RX;
 		break;
 	default:
-		bcmerror = BCME_RANGE;
+		bcmerror = -EINVAL;
 		break;
 	}
 
-	if (bcmerror == BCME_OK)
+	if (bcmerror == 0)
 		wlc->stf->txant = (s8) val;
 
 	return bcmerror;
@@ -417,9 +416,6 @@ static void _wlc_stf_phy_txant_upd(struct wlc_info *wlc)
 	s8 txant;
 
 	txant = (s8) wlc->stf->txant;
-	ASSERT(txant == ANT_TX_FORCE_0 || txant == ANT_TX_FORCE_1
-	       || txant == ANT_TX_LAST_RX);
-
 	if (WLC_PHY_11N_CAP(wlc->band)) {
 		if (txant == ANT_TX_FORCE_0) {
 			wlc->stf->phytxant = PHY_TXC_ANT_0;
@@ -435,8 +431,8 @@ static void _wlc_stf_phy_txant_upd(struct wlc_info *wlc)
 			if (WLCISLCNPHY(wlc->band) || WLCISSSLPNPHY(wlc->band))
 				wlc->stf->phytxant = PHY_TXC_LCNPHY_ANT_LAST;
 			else {
-				/* keep this assert to catch out of sync wlc->stf->txcore */
-				ASSERT(wlc->stf->txchain > 0);
+				/* catch out of sync wlc->stf->txcore */
+				WARN_ON(wlc->stf->txchain <= 0);
 				wlc->stf->phytxant =
 				    wlc->stf->txchain << PHY_TXC_ANT_SHIFT;
 			}
@@ -500,7 +496,6 @@ static u16 _wlc_stf_phytxchain_sel(struct wlc_info *wlc, ratespec_t rspec)
 	u16 phytxant = wlc->stf->phytxant;
 
 	if (RSPEC_STF(rspec) != PHY_TXC1_MODE_SISO) {
-		ASSERT(wlc->stf->txstreams > 1);
 		phytxant = wlc->stf->txchain << PHY_TXC_ANT_SHIFT;
 	} else if (wlc->stf->txant == ANT_TX_DEF)
 		phytxant = wlc->stf->txchain << PHY_TXC_ANT_SHIFT;
@@ -520,7 +515,6 @@ u16 wlc_stf_d11hdrs_phyctl_txant(struct wlc_info *wlc, ratespec_t rspec)
 
 	/* for non-siso rates or default setting, use the available chains */
 	if (WLCISNPHY(wlc->band)) {
-		ASSERT(wlc->stf->txchain != 0);
 		phytxant = _wlc_stf_phytxchain_sel(wlc, rspec);
 		mask = PHY_TXC_HTANT_MASK;
 	}

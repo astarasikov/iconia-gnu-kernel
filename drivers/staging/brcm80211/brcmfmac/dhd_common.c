@@ -17,7 +17,6 @@
 #include <linux/string.h>
 #include <bcmdefs.h>
 #include <linux/netdevice.h>
-#include <osl.h>
 #include <bcmutils.h>
 #include <dngl_stats.h>
 #include <dhd.h>
@@ -190,7 +189,7 @@ static int dhd_dump(dhd_pub_t *dhdp, char *buf, int buflen)
 	/* Add any bus info */
 	dhd_bus_dump(dhdp, strbuf);
 
-	return !strbuf->size ? BCME_BUFTOOSHORT : 0;
+	return !strbuf->size ? -EOVERFLOW : 0;
 }
 
 static int
@@ -226,7 +225,7 @@ dhd_doiovar(dhd_pub_t *dhd_pub, const bcm_iovar_t *vi, u32 actionid,
 		break;
 
 	case IOV_GVAL(IOV_BCMERRORSTR):
-		strncpy((char *)arg, bcmerrorstr(dhd_pub->bcmerror),
+		strncpy((char *)arg, "bcm_error",
 			BCME_STRLEN);
 		((char *)arg)[BCME_STRLEN - 1] = 0x00;
 		break;
@@ -243,7 +242,7 @@ dhd_doiovar(dhd_pub_t *dhd_pub, const bcm_iovar_t *vi, u32 actionid,
 
 	case IOV_SVAL(IOV_WDTICK):
 		if (!dhd_pub->up) {
-			bcmerror = BCME_NOTUP;
+			bcmerror = -ENOLINK;
 			break;
 		}
 		dhd_os_wd_timer(dhd_pub, (uint) int_val);
@@ -290,7 +289,7 @@ dhd_doiovar(dhd_pub_t *dhd_pub, const bcm_iovar_t *vi, u32 actionid,
 
 	case IOV_SVAL(IOV_IOCTLTIMEOUT):{
 			if (int_val <= 0)
-				bcmerror = BCME_BADARG;
+				bcmerror = -EINVAL;
 			else
 				dhd_os_set_ioctl_resp_timeout((unsigned int)
 							      int_val);
@@ -298,7 +297,7 @@ dhd_doiovar(dhd_pub_t *dhd_pub, const bcm_iovar_t *vi, u32 actionid,
 		}
 
 	default:
-		bcmerror = BCME_UNSUPPORTED;
+		bcmerror = -ENOTSUPP;
 		break;
 	}
 
@@ -317,7 +316,7 @@ bool dhd_prec_enq(dhd_pub_t *dhdp, struct pktq *q, struct sk_buff *pkt,
 	 * exceeding total queue length
 	 */
 	if (!pktq_pfull(q, prec) && !pktq_full(q)) {
-		pktq_penq(q, prec, pkt);
+		bcm_pktq_penq(q, prec, pkt);
 		return true;
 	}
 
@@ -325,7 +324,7 @@ bool dhd_prec_enq(dhd_pub_t *dhdp, struct pktq *q, struct sk_buff *pkt,
 	if (pktq_pfull(q, prec))
 		eprec = prec;
 	else if (pktq_full(q)) {
-		p = pktq_peek_tail(q, &eprec);
+		p = bcm_pktq_peek_tail(q, &eprec);
 		ASSERT(p);
 		if (eprec > prec)
 			return false;
@@ -339,21 +338,21 @@ bool dhd_prec_enq(dhd_pub_t *dhdp, struct pktq *q, struct sk_buff *pkt,
 		if (eprec == prec && !discard_oldest)
 			return false;	/* refuse newer (incoming) packet */
 		/* Evict packet according to discard policy */
-		p = discard_oldest ? pktq_pdeq(q, eprec) : pktq_pdeq_tail(q,
-						  eprec);
+		p = discard_oldest ? bcm_pktq_pdeq(q, eprec) :
+			bcm_pktq_pdeq_tail(q, eprec);
 		if (p == NULL) {
-			DHD_ERROR(("%s: pktq_penq() failed, oldest %d.",
+			DHD_ERROR(("%s: bcm_pktq_penq() failed, oldest %d.",
 				   __func__, discard_oldest));
 			ASSERT(p);
 		}
 
-		pkt_buf_free_skb(dhdp->osh, p, true);
+		bcm_pkt_buf_free_skb(p);
 	}
 
 	/* Enqueue */
-	p = pktq_penq(q, prec, pkt);
+	p = bcm_pktq_penq(q, prec, pkt);
 	if (p == NULL) {
-		DHD_ERROR(("%s: pktq_penq() failed.", __func__));
+		DHD_ERROR(("%s: bcm_pktq_penq() failed.", __func__));
 		ASSERT(p);
 	}
 
@@ -382,7 +381,7 @@ dhd_iovar_op(dhd_pub_t *dhd_pub, const char *name,
 
 	vi = bcm_iovar_lookup(dhd_iovars, name);
 	if (vi == NULL) {
-		bcmerror = BCME_UNSUPPORTED;
+		bcmerror = -ENOTSUPP;
 		goto exit;
 	}
 
@@ -421,19 +420,19 @@ int dhd_ioctl(dhd_pub_t *dhd_pub, dhd_ioctl_t *ioc, void *buf, uint buflen)
 	DHD_TRACE(("%s: Enter\n", __func__));
 
 	if (!buf)
-		return BCME_BADARG;
+		return -EINVAL;
 
 	switch (ioc->cmd) {
 	case DHD_GET_MAGIC:
 		if (buflen < sizeof(int))
-			bcmerror = BCME_BUFTOOSHORT;
+			bcmerror = -EOVERFLOW;
 		else
 			*(int *)buf = DHD_IOCTL_MAGIC;
 		break;
 
 	case DHD_GET_VERSION:
 		if (buflen < sizeof(int))
-			bcmerror = -BCME_BUFTOOSHORT;
+			bcmerror = -EOVERFLOW;
 		else
 			*(int *)buf = DHD_IOCTL_VERSION;
 		break;
@@ -449,7 +448,7 @@ int dhd_ioctl(dhd_pub_t *dhd_pub, dhd_ioctl_t *ioc, void *buf, uint buflen)
 				;
 
 			if (*arg) {
-				bcmerror = BCME_BUFTOOSHORT;
+				bcmerror = -EOVERFLOW;
 				break;
 			}
 
@@ -465,7 +464,7 @@ int dhd_ioctl(dhd_pub_t *dhd_pub, dhd_ioctl_t *ioc, void *buf, uint buflen)
 				bcmerror =
 				    dhd_iovar_op(dhd_pub, buf, NULL, 0, arg,
 						 arglen, IOV_SET);
-			if (bcmerror != BCME_UNSUPPORTED)
+			if (bcmerror != -ENOTSUPP)
 				break;
 
 			/* not in generic table, try protocol module */
@@ -477,7 +476,7 @@ int dhd_ioctl(dhd_pub_t *dhd_pub, dhd_ioctl_t *ioc, void *buf, uint buflen)
 				bcmerror = dhd_prot_iovar_op(dhd_pub, buf,
 							     NULL, 0, arg,
 							     arglen, IOV_SET);
-			if (bcmerror != BCME_UNSUPPORTED)
+			if (bcmerror != -ENOTSUPP)
 				break;
 
 			/* if still not found, try bus module */
@@ -494,7 +493,7 @@ int dhd_ioctl(dhd_pub_t *dhd_pub, dhd_ioctl_t *ioc, void *buf, uint buflen)
 		}
 
 	default:
-		bcmerror = BCME_UNSUPPORTED;
+		bcmerror = -ENOTSUPP;
 	}
 
 	return bcmerror;
@@ -587,6 +586,8 @@ static void wl_show_host_event(wl_event_msg_t *event, void *event_data)
 	}
 
 	DHD_EVENT(("EVENT: %s, event ID = %d\n", event_name, event_type));
+	DHD_EVENT(("flags 0x%04x, status %d, reason %d, auth_type %d MAC %s\n",
+				flags, status, reason, auth_type, eabuf));
 
 	if (flags & WLC_EVENT_MSG_LINK)
 		link = true;
@@ -632,9 +633,9 @@ static void wl_show_host_event(wl_event_msg_t *event, void *event_data)
 
 	case WLC_E_AUTH:
 	case WLC_E_AUTH_IND:
-		if (auth_type == DOT11_OPEN_SYSTEM)
+		if (auth_type == WLAN_AUTH_OPEN)
 			auth_str = "Open System";
-		else if (auth_type == DOT11_SHARED_KEY)
+		else if (auth_type == WLAN_AUTH_SHARED_KEY)
 			auth_str = "Shared Key";
 		else {
 			sprintf(err_msg, "AUTH unknown: %d", (int)auth_type);
@@ -816,14 +817,14 @@ wl_host_event(struct dhd_info *dhd, int *ifidx, void *pktdata,
 
 	if (memcmp(BRCM_OUI, &pvt_data->bcm_hdr.oui[0], DOT11_OUI_LEN)) {
 		DHD_ERROR(("%s: mismatched OUI, bailing\n", __func__));
-		return BCME_ERROR;
+		return -EBADE;
 	}
 
 	/* BRCM event pkt may be unaligned - use xxx_ua to load user_subtype. */
 	if (get_unaligned_be16(&pvt_data->bcm_hdr.usr_subtype) !=
 	    BCMILCP_BCM_SUBTYPE_EVENT) {
 		DHD_ERROR(("%s: mismatched subtype, bailing\n", __func__));
-		return BCME_ERROR;
+		return -EBADE;
 	}
 
 	*data_ptr = &pvt_data[1];
@@ -903,7 +904,7 @@ wl_host_event(struct dhd_info *dhd, int *ifidx, void *pktdata,
 	wl_show_host_event(event, event_data);
 #endif				/* SHOW_EVENTS */
 
-	return BCME_OK;
+	return 0;
 }
 
 /* Convert user's input in hex pattern to byte-size mask */
@@ -997,8 +998,7 @@ dhd_pktfilter_offload_enable(dhd_pub_t *dhd, char *arg, int enable,
 			   __func__, arg, rc));
 
 fail:
-	if (arg_org)
-		kfree(arg_org);
+	kfree(arg_org);
 }
 
 void dhd_pktfilter_offload_set(dhd_pub_t *dhd, char *arg)
@@ -1133,11 +1133,9 @@ void dhd_pktfilter_offload_set(dhd_pub_t *dhd, char *arg)
 			   __func__, arg));
 
 fail:
-	if (arg_org)
-		kfree(arg_org);
+	kfree(arg_org);
 
-	if (buf)
-		kfree(buf);
+	kfree(buf);
 }
 
 void dhd_arp_offload_set(dhd_pub_t *dhd, int arp_mode)
@@ -1807,7 +1805,7 @@ dhd_pno_set(dhd_pub_t *dhd, wlc_ssid_t *ssids_local, int nssid, unsigned char sc
 	for (i = 0; i < nssid; i++) {
 
 		pfn_element.bss_type = DOT11_BSSTYPE_INFRASTRUCTURE;
-		pfn_element.auth = DOT11_OPEN_SYSTEM;
+		pfn_element.auth = WLAN_AUTH_OPEN;
 		pfn_element.wpa_auth = WPA_AUTH_PFN_ANY;
 		pfn_element.wsec = 0;
 		pfn_element.infra = 1;

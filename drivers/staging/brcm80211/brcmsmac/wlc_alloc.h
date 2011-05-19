@@ -14,12 +14,5 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-extern void *wlc_calloc(struct osl_info *osh, uint unit, uint size);
-
-extern struct wlc_info *wlc_attach_malloc(struct osl_info *osh, uint unit,
-					  uint *err, uint devid);
-extern void wlc_detach_mfree(struct wlc_info *wlc, struct osl_info *osh);
-
-struct wlc_bsscfg;
-extern struct wlc_bsscfg *wlc_bsscfg_malloc(struct osl_info *osh, uint unit);
-extern void wlc_bsscfg_mfree(struct osl_info *osh, struct wlc_bsscfg *cfg);
+extern struct wlc_info *wlc_attach_malloc(uint unit, uint *err, uint devid);
+extern void wlc_detach_mfree(struct wlc_info *wlc);
