@@ -31,6 +31,7 @@
  * but we do not need that level of flexibility.
  */
 #define MAX_BRIGHTNESS 256
+#define STARTUP_BRIGHTNESS 102
 #define PWM_FREQUENCY 0x1000
 
 /*
@@ -104,7 +105,7 @@ void i915_backlight_init(struct drm_device *dev)
 
 	dev_priv->backlight = bd;
 	bd->props.max_brightness = MAX_BRIGHTNESS;
-	bd->props.brightness = 0;
+	bd->props.brightness = STARTUP_BRIGHTNESS;
 	backlight_update_status(bd);
 	return;
 }
