@@ -376,3 +376,4 @@ module_exit(snd_tegra_spdif_exit);
 MODULE_AUTHOR("Stephen Warren <swarren@nvidia.com>");
 MODULE_DESCRIPTION("Tegra SPDIF ASoC driver");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:" DRV_NAME);
