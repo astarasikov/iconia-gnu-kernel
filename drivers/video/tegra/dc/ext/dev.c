@@ -29,6 +29,7 @@
 #include <mach/dc.h>
 #include <mach/nvmap.h>
 #include <mach/tegra_dc_ext.h>
+#include <mach/fb.h>
 
 /* XXX ew */
 #include "../dc_priv.h"
@@ -221,6 +222,19 @@ static int tegra_dc_ext_set_windowattr(struct tegra_dc_ext *ext,
 	return 0;
 }
 
+static void process_window_change(struct tegra_dc_ext *ext, int delta)
+{
+	mutex_lock(&ext->enable_change_lock);
+
+	if (!ext->nr_win_ena || ext->nr_win_ena + delta == 0)
+		tegra_fb_transition(ext->dc->fb, delta < 0);
+
+	ext->nr_win_ena += delta;
+	BUG_ON(ext->nr_win_ena < 0);
+
+	mutex_unlock(&ext->enable_change_lock);
+}
+
 static void tegra_dc_ext_flip_worker(struct work_struct *work)
 {
 	struct tegra_dc_ext_flip_data *data =
@@ -228,13 +242,14 @@ static void tegra_dc_ext_flip_worker(struct work_struct *work)
 	struct tegra_dc_ext *ext = data->ext;
 	struct tegra_dc_win *wins[DC_N_WINDOWS];
 	struct nvmap_handle_ref *unpin_handles[DC_N_WINDOWS];
-	int i, nr_unpin = 0, nr_win = 0;
+	int i, nr_unpin = 0, nr_win = 0, nr_disable = 0;
 
 	for (i = 0; i < DC_N_WINDOWS; i++) {
 		struct tegra_dc_ext_flip_win *flip_win = &data->win[i];
 		int index = flip_win->attr.index;
 		struct tegra_dc_win *win;
 		struct tegra_dc_ext_win *ext_win;
+		bool old_ena, new_ena;
 
 		if (index < 0)
 			continue;
@@ -242,8 +257,17 @@ static void tegra_dc_ext_flip_worker(struct work_struct *work)
 		win = tegra_dc_get_window(ext->dc, index);
 		ext_win = &ext->win[index];
 
-		if ((win->flags & TEGRA_WIN_FLAG_ENABLED) &&
-		    ext_win->cur_handle)
+		old_ena = ext->win[index].enabled;
+		new_ena = flip_win->handle != NULL;
+		if (old_ena != new_ena) {
+			if (new_ena)
+				process_window_change(ext, 1);
+			else
+				nr_disable++;
+		}
+		ext->win[index].enabled = new_ena;
+
+		if (old_ena && ext_win->cur_handle)
 			unpin_handles[nr_unpin++] = ext_win->cur_handle;
 
 		tegra_dc_ext_set_windowattr(ext, win, &data->win[i]);
@@ -270,6 +294,9 @@ static void tegra_dc_ext_flip_worker(struct work_struct *work)
 		nvmap_unpin(ext->nvmap, unpin_handles[i]);
 		nvmap_free(ext->nvmap, unpin_handles[i]);
 	}
+
+	if (nr_disable)
+		process_window_change(ext, -nr_disable);
 
 	kfree(data);
 }
@@ -714,6 +741,7 @@ struct tegra_dc_ext *tegra_dc_ext_register(struct nvhost_device *ndev,
 		goto cleanup_nvmap;
 
 	mutex_init(&ext->cursor.lock);
+	mutex_init(&ext->enable_change_lock);
 
 	head_count++;
 

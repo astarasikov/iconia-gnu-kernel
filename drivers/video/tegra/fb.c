@@ -44,7 +44,7 @@ struct tegra_fb_info {
 	struct tegra_dc_win	*win;
 	struct nvhost_device	*ndev;
 	struct fb_info		*info;
-	bool			valid;
+	bool			in_use;
 
 	struct resource		*fb_mem;
 
@@ -190,6 +190,9 @@ static void tegra_fb_flip_win(struct tegra_fb_info *tegra_fb)
 	struct tegra_dc_win *win = tegra_fb->win;
 	struct fb_info *info = tegra_fb->info;
 
+	if (!tegra_fb->in_use)
+		return;
+
 	win->x.full = dfixed_const(0);
 	win->y.full = dfixed_const(0);
 	win->w.full = dfixed_const(tegra_fb->xres);
@@ -221,6 +224,16 @@ static void tegra_fb_flip_win(struct tegra_fb_info *tegra_fb)
 		break;
 	}
 	win->flags = TEGRA_WIN_FLAG_ENABLED;
+
+	tegra_dc_update_windows(&tegra_fb->win, 1);
+	tegra_dc_sync_windows(&tegra_fb->win, 1);
+}
+
+static void tegra_fb_unflip_win(struct tegra_fb_info *tegra_fb)
+{
+	struct tegra_dc_win *win = tegra_fb->win;
+
+	win->flags &= ~TEGRA_WIN_FLAG_ENABLED;
 
 	tegra_dc_update_windows(&tegra_fb->win, 1);
 	tegra_dc_sync_windows(&tegra_fb->win, 1);
@@ -366,6 +379,19 @@ void tegra_fb_update_monspecs(struct tegra_fb_info *fb_info,
 	mutex_unlock(&fb_info->info->lock);
 }
 
+void tegra_fb_transition(struct tegra_fb_info *tegra_fb, bool enable)
+{
+	if (!tegra_fb->fb_mem)
+		return;
+
+	tegra_fb->in_use = enable;
+	if (enable)
+		tegra_fb_flip_win(tegra_fb);
+	else
+		tegra_fb_unflip_win(tegra_fb);
+}
+EXPORT_SYMBOL(tegra_fb_transition);
+
 struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 					struct tegra_dc *dc,
 					struct tegra_fb_data *fb_data,
@@ -443,8 +469,10 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 
 	tegra_fb->info = info;
 
-	if (fb_mem)
+	if (fb_mem) {
+		tegra_fb->in_use = true;
 		tegra_fb_set_par(info);
+	}
 
 	if (register_framebuffer(info)) {
 		dev_err(&ndev->dev, "failed to register framebuffer\n");
