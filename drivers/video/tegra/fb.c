@@ -85,7 +85,6 @@ static int tegra_fb_set_par(struct fb_info *info)
 			var->blue.length = 8;
 			var->transp.offset = 24;
 			var->transp.length = 8;
-			tegra_fb->win->fmt = TEGRA_WIN_FMT_R8G8B8A8;
 			break;
 		case 16:
 			var->red.offset = 11;
@@ -94,17 +93,12 @@ static int tegra_fb_set_par(struct fb_info *info)
 			var->green.length = 6;
 			var->blue.offset = 0;
 			var->blue.length = 5;
-			tegra_fb->win->fmt = TEGRA_WIN_FMT_B5G6R5;
 			break;
 
 		default:
 			return -EINVAL;
 		}
 		info->fix.line_length = var->xres * var->bits_per_pixel / 8;
-		tegra_fb->win->stride = info->fix.line_length;
-		tegra_fb->win->stride_uv = 0;
-		tegra_fb->win->offset_u = 0;
-		tegra_fb->win->offset_v = 0;
 	}
 
 	if (var->pixclock) {
@@ -138,11 +132,6 @@ static int tegra_fb_set_par(struct fb_info *info)
 			mode.flags |= TEGRA_DC_MODE_FLAG_NEG_V_SYNC;
 
 		tegra_dc_set_mode(tegra_fb->win->dc, &mode);
-
-		tegra_fb->win->w.full = dfixed_const(info->mode->xres);
-		tegra_fb->win->h.full = dfixed_const(info->mode->yres);
-		tegra_fb->win->out_w = info->mode->xres;
-		tegra_fb->win->out_h = info->mode->yres;
 	}
 	return 0;
 }
@@ -196,30 +185,57 @@ static int tegra_fb_blank(int blank, struct fb_info *info)
 	}
 }
 
+static void tegra_fb_flip_win(struct tegra_fb_info *tegra_fb)
+{
+	struct tegra_dc_win *win = tegra_fb->win;
+	struct fb_info *info = tegra_fb->info;
+
+	win->x.full = dfixed_const(0);
+	win->y.full = dfixed_const(0);
+	win->w.full = dfixed_const(tegra_fb->xres);
+	win->h.full = dfixed_const(tegra_fb->yres);
+	/* TODO: set to output res dc */
+	win->out_x = 0;
+	win->out_y = 0;
+	win->out_w = tegra_fb->xres;
+	win->out_h = tegra_fb->yres;
+	win->z = 0;
+	win->phys_addr = info->fix.smem_start +
+		(info->var.yoffset * info->fix.line_length) +
+		(info->var.xoffset * (info->var.bits_per_pixel / 8));
+	win->virt_addr = info->screen_base;
+	win->offset_u = 0;
+	win->offset_v = 0;
+	win->stride = info->fix.line_length;
+	win->stride_uv = 0;
+
+	switch (info->var.bits_per_pixel) {
+	default:
+		WARN_ON(1);
+		/* fall through */
+	case 32:
+		tegra_fb->win->fmt = TEGRA_WIN_FMT_R8G8B8A8;
+		break;
+	case 16:
+		tegra_fb->win->fmt = TEGRA_WIN_FMT_B5G6R5;
+		break;
+	}
+	win->flags = TEGRA_WIN_FLAG_ENABLED;
+
+	tegra_dc_update_windows(&tegra_fb->win, 1);
+	tegra_dc_sync_windows(&tegra_fb->win, 1);
+}
+
 static int tegra_fb_pan_display(struct fb_var_screeninfo *var,
 				struct fb_info *info)
 {
 	struct tegra_fb_info *tegra_fb = info->par;
-	char __iomem *flush_start;
-	char __iomem *flush_end;
-	u32 addr;
 
-	if (!tegra_fb->win->cur_handle) {
-		flush_start = info->screen_base + (var->yoffset * info->fix.line_length);
-		flush_end = flush_start + (var->yres * info->fix.line_length);
+	info->var.xoffset = var->xoffset;
+	info->var.yoffset = var->yoffset;
 
-		info->var.xoffset = var->xoffset;
-		info->var.yoffset = var->yoffset;
-
-		addr = info->fix.smem_start + (var->yoffset * info->fix.line_length) +
-			(var->xoffset * (var->bits_per_pixel/8));
-
-		tegra_fb->win->phys_addr = addr;
-		/* TODO: update virt_addr */
-
-		tegra_dc_update_windows(&tegra_fb->win, 1);
-		tegra_dc_sync_windows(&tegra_fb->win, 1);
-	}
+	tegra_fb_flip_win(tegra_fb);
+	/* TODO: update virt_addr */
 
 	return 0;
 }
@@ -392,7 +408,6 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 			ret = -EBUSY;
 			goto err_free;
 		}
-		tegra_fb->valid = true;
 	}
 
 	info->fbops = &tegra_fb_ops;
@@ -426,23 +441,7 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 	info->var.vsync_len		= 0;
 	info->var.vmode			= FB_VMODE_NONINTERLACED;
 
-	win->x.full = dfixed_const(0);
-	win->y.full = dfixed_const(0);
-	win->w.full = dfixed_const(fb_data->xres);
-	win->h.full = dfixed_const(fb_data->yres);
-	/* TODO: set to output res dc */
-	win->out_x = 0;
-	win->out_y = 0;
-	win->out_w = fb_data->xres;
-	win->out_h = fb_data->yres;
-	win->z = 0;
-	win->phys_addr = fb_phys;
-	win->virt_addr = fb_base;
-	win->offset_u = 0;
-	win->offset_v = 0;
-	win->stride = fb_data->xres * fb_data->bits_per_pixel / 8;
-	win->stride_uv = 0;
-	win->flags = TEGRA_WIN_FLAG_ENABLED;
+	tegra_fb->info = info;
 
 	if (fb_mem)
 		tegra_fb_set_par(info);
@@ -453,14 +452,10 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 		goto err_iounmap_fb;
 	}
 
-	tegra_fb->info = info;
-
 	dev_info(&ndev->dev, "probed\n");
 
-	if (fb_data->flags & TEGRA_FB_FLIP_ON_PROBE) {
-		tegra_dc_update_windows(&tegra_fb->win, 1);
-		tegra_dc_sync_windows(&tegra_fb->win, 1);
-	}
+	if (fb_data->flags & TEGRA_FB_FLIP_ON_PROBE)
+		tegra_fb_flip_win(tegra_fb);
 
 	return tegra_fb;
 
