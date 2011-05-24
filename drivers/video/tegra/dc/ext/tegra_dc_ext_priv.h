@@ -46,6 +46,7 @@ struct tegra_dc_ext_win {
 	struct mutex		lock;
 
 	struct nvmap_handle_ref	*cur_handle;
+	bool enabled;
 
 	struct workqueue_struct	*flip_wq;
 };
@@ -65,6 +66,9 @@ struct tegra_dc_ext {
 		struct nvmap_handle_ref		*cur_handle;
 		struct mutex			lock;
 	} cursor;
+
+	struct mutex			enable_change_lock;
+	int				nr_win_ena;
 
 	bool				enabled;
 };
