@@ -75,6 +75,7 @@ static int i915_set_intensity(struct backlight_device *bd)
 	blc_pwm_ctl = (PWM_FREQUENCY << BACKLIGHT_MODULATION_FREQ_SHIFT) |
 		PWM_TO_CTL(pwm_val);
 	I915_WRITE(BLC_PWM_CTL, blc_pwm_ctl);
+	dev_priv->backlight_level = pwm_val;
 
 	return 0;
 }
