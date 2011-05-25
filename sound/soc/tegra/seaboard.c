@@ -331,7 +331,7 @@ static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
 		}
 		seaboard->gpio_requested |= GPIO_HP_MUTE;
 
-		gpio_direction_output(pdata->gpio_hp_mute, 0);
+		gpio_direction_output(pdata->gpio_hp_mute, 1);
 	}
 
 	ret = snd_soc_add_controls(codec, seaboard_controls,
