@@ -119,20 +119,13 @@ static unsigned long __cpuinit calibrate_delay_direct(void) {return 0;}
  */
 #define LPS_PREC 8
 
-DEFINE_PER_CPU(unsigned long, cpu_loops_per_jiffy) = { 0 };
-
 void __cpuinit calibrate_delay(void)
 {
 	unsigned long ticks, loopbit;
 	int lps_precision = LPS_PREC;
 	static bool printed;
-	int this_cpu = smp_processor_id();
 
-	if (per_cpu(cpu_loops_per_jiffy, this_cpu)) {
-		loops_per_jiffy = per_cpu(cpu_loops_per_jiffy, this_cpu);
-		pr_info("Calibrating delay loop (skipped) "
-				"already calibrated this CPU previously.. ");
-	} else if (preset_lpj) {
+	if (preset_lpj) {
 		loops_per_jiffy = preset_lpj;
 		if (!printed)
 			pr_info("Calibrating delay loop (skipped) "
@@ -180,7 +173,6 @@ void __cpuinit calibrate_delay(void)
 				loops_per_jiffy &= ~loopbit;
 		}
 	}
-	per_cpu(cpu_loops_per_jiffy, this_cpu) = loops_per_jiffy;
 	if (!printed)
 		pr_cont("%lu.%02lu BogoMIPS (lpj=%lu)\n",
 			loops_per_jiffy/(500000/HZ),
