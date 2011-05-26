@@ -175,7 +175,7 @@ static int nvhost_debug_show(struct seq_file *s, void *unused)
 		cbstat = readl(m->aperture + HOST1X_SYNC_CBSTAT(i));
 
 		seq_printf(s, "%d-%s (%d): ", i, m->channels[i].mod.name,
-			   m->channels[i].mod.refcount);
+			   atomic_read(&m->channels[i].mod.refcount));
 
 		if (dmactrl != 0x0 || !m->channels[i].cdma.push_buffer.mapped) {
 			seq_printf(s, "inactive\n\n");
