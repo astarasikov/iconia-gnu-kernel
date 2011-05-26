@@ -138,14 +138,18 @@ static int seaboard_hdmi_disable(void)
 	return seaboard_set_hdmi_power(false);
 }
 
-static void seaboard_hdmi_hotplug_init(void)
+static int seaboard_hdmi_hotplug_init(void)
 {
 	gpio_set_value(TEGRA_GPIO_HDMI_ENB, 1);
+
+	return 0;
 }
 
-static void seaboard_hdmi_postsuspend(void)
+static int seaboard_hdmi_postsuspend(void)
 {
 	gpio_set_value(TEGRA_GPIO_HDMI_ENB, 0);
+
+	return 0;
 }
 
 static struct resource seaboard_disp1_resources[] = {
