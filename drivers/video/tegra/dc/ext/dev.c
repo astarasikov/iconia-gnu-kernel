@@ -280,13 +280,14 @@ static void tegra_dc_ext_flip_worker(struct work_struct *work)
 	tegra_dc_sync_windows(wins, nr_win);
 
 	for (i = 0; i < DC_N_WINDOWS; i++) {
-		int index = data->win[i].attr.index;
+		struct tegra_dc_ext_flip_win *flip_win = &data->win[i];
+		int index = flip_win->attr.index;
 
 		if (index < 0)
 			continue;
 
 		tegra_dc_incr_syncpt_min(ext->dc, index,
-			data->win[index].syncpt_max);
+			flip_win->syncpt_max);
 	}
 
 	/* unpin and deref previous front buffers */
