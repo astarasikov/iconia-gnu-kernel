@@ -1050,6 +1050,10 @@ static void __init tegra_arthur_init(void)
 	seaboard_i2c_init();
 }
 
+static const char *seaboard_dt_board_compat[] = {
+	"nvidia,seaboard",
+	NULL
+};
 
 MACHINE_START(SEABOARD, "seaboard")
 	.boot_params    = 0x00000100,
@@ -1058,7 +1062,13 @@ MACHINE_START(SEABOARD, "seaboard")
 	.init_irq       = tegra_init_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_seaboard_init,
+	.dt_compat	= seaboard_dt_board_compat,
 MACHINE_END
+
+static const char *kaen_dt_board_compat[] = {
+	"nvidia,kaen",
+	NULL
+};
 
 MACHINE_START(KAEN, "kaen")
 	.boot_params    = 0x00000100,
@@ -1067,7 +1077,13 @@ MACHINE_START(KAEN, "kaen")
 	.init_irq       = tegra_init_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_kaen_init,
+	.dt_compat	= kaen_dt_board_compat,
 MACHINE_END
+
+static const char *aebl_dt_board_compat[] = {
+	"nvidia,aebl",
+	NULL
+};
 
 MACHINE_START(AEBL, "aebl")
 	.boot_params    = 0x00000100,
@@ -1076,7 +1092,13 @@ MACHINE_START(AEBL, "aebl")
 	.init_irq       = tegra_init_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_aebl_init,
+	.dt_compat	= aebl_dt_board_compat,
 MACHINE_END
+
+static const char *wario_dt_board_compat[] = {
+	"nvidia,wario",
+	NULL
+};
 
 MACHINE_START(WARIO, "wario")
 	.boot_params    = 0x00000100,
@@ -1085,7 +1107,13 @@ MACHINE_START(WARIO, "wario")
 	.init_irq       = tegra_init_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_wario_init,
+	.dt_compat	= wario_dt_board_compat,
 MACHINE_END
+
+static const char *arthur_dt_board_compat[] = {
+	"nvidia,arthur",
+	NULL
+};
 
 MACHINE_START(ARTHUR, "arthur")
 	.boot_params    = 0x00000100,
@@ -1094,4 +1122,5 @@ MACHINE_START(ARTHUR, "arthur")
 	.init_irq       = tegra_init_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_arthur_init,
+	.dt_compat	= arthur_dt_board_compat,
 MACHINE_END
