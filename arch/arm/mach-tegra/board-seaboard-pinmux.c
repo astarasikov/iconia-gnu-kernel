@@ -239,6 +239,11 @@ void __init seaboard_pinmux_init(void)
 	gpio_request(TEGRA_GPIO_WM8903_IRQ, "wm8903");
 	gpio_direction_input(TEGRA_GPIO_WM8903_IRQ);
 
+	/* Ensure the reset line stays high. */
+	gpio_request(TEGRA_GPIO_RESET, "reset");
+	gpio_direction_output(TEGRA_GPIO_RESET, 1);
+	tegra_gpio_enable(TEGRA_GPIO_RESET);
+
 	tegra_pinmux_config_table(seaboard_pinmux, ARRAY_SIZE(seaboard_pinmux));
 
 	tegra_drive_pinmux_config_table(seaboard_drive_pinmux,
