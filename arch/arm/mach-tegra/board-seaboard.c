@@ -42,9 +42,11 @@
 #include <mach/pinmux-t2.h>
 #include <mach/kbc.h>
 #include <mach/suspend.h>
+#include <mach/system.h>
 #include <mach/seaboard_audio.h>
 #include <mach/clk.h>
 
+#include <asm/cacheflush.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 
@@ -55,6 +57,8 @@
 #include "gpio-names.h"
 
 extern void tegra_throttling_enable(bool);
+
+static void (*legacy_arm_pm_restart)(char mode, const char *cmd);
 
 static struct plat_serial8250_port debug_uart_platform_data[] = {
 	{
@@ -878,6 +882,37 @@ static void __init tegra_seaboard_init(void)
 	seaboard_sensors_init();
 }
 
+/* Architecture-specific restart for Kaen and other boards, where a GPIO line
+ * is used to reset CPU and TPM together.
+ *
+ * Most of this function mimicks arm_machine_restart in process.c, except that
+ * that function turns off caching and then flushes the cache one more time,
+ * and we do not.  This is certainly less clean but unlikely to matter as the
+ * additional dirty cache lines do not contain critical data.
+ *
+ * On boards that don't implement the reset hardware we fall back to the old
+ * method.
+ */
+static void kaen_machine_restart(char mode, const char *cmd)
+{
+	/* Disable interrupts first */
+	local_irq_disable();
+	local_fiq_disable();
+
+	/* We must flush the L2 cache for preserved / kcrashmem */
+	outer_flush_all();
+
+	/* Clean and invalidate caches */
+	flush_cache_all();
+
+	/* Reboot by resetting CPU and TPM via GPIO */
+	printk(KERN_INFO "restart: issuing GPIO reset\n");
+	gpio_set_value(TEGRA_GPIO_RESET, 0);
+
+	printk(KERN_INFO "restart: trying legacy reboot\n");
+	legacy_arm_pm_restart(mode, cmd);
+}
+
 static void __init tegra_kaen_init(void)
 {
 	tegra_init_suspend(&seaboard_suspend);
@@ -909,6 +944,8 @@ static void __init tegra_kaen_init(void)
 	seaboard_i2c_init();
 
 	kaen_sensors_init();
+	legacy_arm_pm_restart = arm_pm_restart;
+	arm_pm_restart = kaen_machine_restart;
 }
 
 static void __init tegra_aebl_init(void)
