@@ -572,9 +572,17 @@ static int ulpi_phy_power_on(struct tegra_usb_phy *phy)
 	void __iomem *base = phy->regs;
 	struct tegra_ulpi_config *config = phy->config;
 
-	gpio_direction_output(config->reset_gpio, 0);
-	msleep(5);
-	gpio_direction_output(config->reset_gpio, 1);
+	/* When .bus_resume callback is invoked, ulpi_phy_power_on will be
+	 * called. We don't want resetting ULPI PHY to be done frequently.
+	 * So reset only once during initialization phase.
+	 * Resetting ULPI PHY chip may cause line status to be changed as
+	 * "disconnected" and cause trouble on later resume.
+	 */
+	if (!phy->ulpi_initialized) {
+		gpio_direction_output(config->reset_gpio, 0);
+		udelay(1);
+		gpio_direction_output(config->reset_gpio, 1);
+	}
 
 	clk_enable(phy->clk);
 	msleep(1);
@@ -605,23 +613,25 @@ static int ulpi_phy_power_on(struct tegra_usb_phy *phy)
 	val |= ULPI_DIR_TRIMMER_LOAD;
 	writel(val, base + ULPI_TIMING_CTRL_1);
 
-	/* Fix VbusInvalid due to floating VBUS */
-	ret = otg_io_write(phy->ulpi, 0x40, 0x08);
-	if (ret) {
-		pr_err("%s: ulpi write failed\n", __func__);
-		return ret;
+	if (!phy->ulpi_initialized) {
+		/* Fix VbusInvalid due to floating VBUS */
+		ret = otg_io_write(phy->ulpi, 0x40, 0x08);
+		if (ret) {
+			pr_warning("%s: ulpi write failed\n", __func__);
+			return ret;
+		}
+
+		ret = otg_io_write(phy->ulpi, 0x80, 0x0B);
+		if (ret) {
+			pr_warning("%s: ulpi write failed\n", __func__);
+			return ret;
+		}
+		phy->ulpi_initialized = true;
 	}
 
-	ret = otg_io_write(phy->ulpi, 0x80, 0x0B);
-	if (ret) {
-		pr_err("%s: ulpi write failed\n", __func__);
-		return ret;
-	}
-
-	val = readl(base + USB_PORTSC1);
-	val |= USB_PORTSC1_WKOC | USB_PORTSC1_WKDS | USB_PORTSC1_WKCN;
-	writel(val, base + USB_PORTSC1);
-
+	/* Bring PHY out of suspend mode for AHB clock to USB controller
+	 * to be enabled before accessing PORTSC register.
+	 */
 	val = readl(base + USB_SUSP_CTRL);
 	val |= USB_SUSP_CLR;
 	writel(val, base + USB_SUSP_CTRL);
@@ -630,7 +640,11 @@ static int ulpi_phy_power_on(struct tegra_usb_phy *phy)
 	val = readl(base + USB_SUSP_CTRL);
 	val &= ~USB_SUSP_CLR;
 	writel(val, base + USB_SUSP_CTRL);
+	udelay(1);
 
+	val = readl(base + USB_PORTSC1);
+	val |= USB_PORTSC1_WKOC | USB_PORTSC1_WKDS | USB_PORTSC1_WKCN;
+	writel(val, base + USB_PORTSC1);
 	return 0;
 }
 
@@ -638,16 +652,18 @@ static void ulpi_phy_power_off(struct tegra_usb_phy *phy)
 {
 	unsigned long val;
 	void __iomem *base = phy->regs;
-	struct tegra_ulpi_config *config = phy->config;
 
 	/* Clear WKCN/WKDS/WKOC wake-on events that can cause the USB
-	 * Controller to immediately bring the ULPI PHY out of low power
+	 * Controller to immediately bring the ULPI PHY out of low power.
+	 * Set PHCD bit for PHY to enter low power mode
+	 * to keep current line status as "connected" on D+, D-
+	 * instead of pulling the reset pin of PHY chip to save power.
 	 */
 	val = readl(base + USB_PORTSC1);
 	val &= ~(USB_PORTSC1_WKOC | USB_PORTSC1_WKDS | USB_PORTSC1_WKCN);
+	val |= USB_PORTSC1_PHCD;
 	writel(val, base + USB_PORTSC1);
 
-	gpio_direction_output(config->reset_gpio, 0);
 	clk_disable(phy->clk);
 }
 
@@ -668,6 +684,7 @@ struct tegra_usb_phy *tegra_usb_phy_open(int instance, void __iomem *regs,
 	phy->regs = regs;
 	phy->config = config;
 	phy->mode = phy_mode;
+	phy->ulpi_initialized = false;
 
 	if (!phy->config) {
 		if (phy_is_ulpi(phy)) {
