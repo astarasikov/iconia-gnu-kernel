@@ -71,6 +71,8 @@ static int harmony_backlight_notify(struct device *unused, int brightness)
 	return brightness;
 }
 
+static int harmony_disp1_check_fb(struct device *dev, struct fb_info *info);
+
 static struct platform_pwm_backlight_data harmony_backlight_data = {
 	.pwm_id		= 0,
 	.max_brightness	= 255,
@@ -79,6 +81,8 @@ static struct platform_pwm_backlight_data harmony_backlight_data = {
 	.init		= harmony_backlight_init,
 	.exit		= harmony_backlight_exit,
 	.notify		= harmony_backlight_notify,
+	/* Only toggle backlight on fb blank notifications for disp1 */
+	.check_fb	= harmony_disp1_check_fb,
 };
 
 static struct platform_device harmony_backlight_device = {
@@ -175,6 +179,11 @@ static struct nvhost_device harmony_disp1_device = {
 		.platform_data = &harmony_disp1_pdata,
 	},
 };
+
+static int harmony_disp1_check_fb(struct device *dev, struct fb_info *info)
+{
+	return info->device == &harmony_disp1_device.dev;
+}
 
 static struct nvmap_platform_carveout harmony_carveouts[] = {
 	[0] = {
