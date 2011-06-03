@@ -155,6 +155,7 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_LVDS_SHUTDOWN,	.enable = true  },
 	{ .gpio = TEGRA_GPIO_BACKLIGHT_VDD,	.enable = true  },
 	{ .gpio = TEGRA_GPIO_EN_VDD_PNL,	.enable = true  },
+	{ .gpio = TEGRA_GPIO_HDMI_HPD,          .enable = true  },
 };
 
 void harmony_pinmux_init(void)

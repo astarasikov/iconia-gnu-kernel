@@ -37,6 +37,7 @@
 #define TEGRA_GPIO_BACKLIGHT_PWM	TEGRA_GPIO_PB4
 #define TEGRA_GPIO_BACKLIGHT_VDD	TEGRA_GPIO_PW0
 #define TEGRA_GPIO_EN_VDD_PNL		TEGRA_GPIO_PC6
+#define TEGRA_GPIO_HDMI_HPD		TEGRA_GPIO_PN7
 
 void harmony_pinmux_init(void);
 int harmony_regulator_init(void);
