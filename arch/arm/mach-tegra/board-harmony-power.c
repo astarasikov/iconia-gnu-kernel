@@ -30,22 +30,51 @@
 #define PMC_CTRL		0x0
 #define PMC_CTRL_INTR_LOW	(1 << 17)
 
+static struct regulator_consumer_supply tps658621_sm0_supply[] = {
+	REGULATOR_SUPPLY("vdd_core", NULL),
+};
+static struct regulator_consumer_supply tps658621_sm1_supply[] = {
+	REGULATOR_SUPPLY("vdd_cpu", NULL),
+};
+static struct regulator_consumer_supply tps658621_sm2_supply[] = {
+	REGULATOR_SUPPLY("vdd_sm2", NULL),
+};
 static struct regulator_consumer_supply tps658621_ldo0_supply[] = {
 	REGULATOR_SUPPLY("pex_clk", NULL),
 };
-
-static struct regulator_init_data ldo0_data = {
-	.constraints = {
-		.min_uV = 1250 * 1000,
-		.max_uV = 3300 * 1000,
-		.valid_modes_mask = (REGULATOR_MODE_NORMAL |
-				     REGULATOR_MODE_STANDBY),
-		.valid_ops_mask = (REGULATOR_CHANGE_MODE |
-				   REGULATOR_CHANGE_STATUS |
-				   REGULATOR_CHANGE_VOLTAGE),
-	},
-	.num_consumer_supplies = ARRAY_SIZE(tps658621_ldo0_supply),
-	.consumer_supplies = tps658621_ldo0_supply,
+static struct regulator_consumer_supply tps658621_ldo1_supply[] = {
+	REGULATOR_SUPPLY("vdd_plla_p_c", NULL),
+	REGULATOR_SUPPLY("vdd_pllm", NULL),
+	REGULATOR_SUPPLY("vdd_pllu", NULL),
+	REGULATOR_SUPPLY("vdd_pllx", NULL),
+};
+static struct regulator_consumer_supply tps658621_ldo2_supply[] = {
+	REGULATOR_SUPPLY("vdd_rtc", NULL),
+};
+static struct regulator_consumer_supply tps658621_ldo3_supply[] = {
+	REGULATOR_SUPPLY("avdd_usb", NULL),
+	REGULATOR_SUPPLY("avdd_usb_pll", NULL),
+};
+static struct regulator_consumer_supply tps658621_ldo4_supply[] = {
+	REGULATOR_SUPPLY("avdd_osc", NULL),
+	REGULATOR_SUPPLY("vddio_sys", NULL),
+};
+static struct regulator_consumer_supply tps658621_ldo5_supply[] = {
+	REGULATOR_SUPPLY("vcore_mmc", NULL),
+};
+static struct regulator_consumer_supply tps658621_ldo6_supply[] = {
+	REGULATOR_SUPPLY("avdd_vdac", NULL),
+};
+static struct regulator_consumer_supply tps658621_ldo7_supply[] = {
+	REGULATOR_SUPPLY("avdd_hdmi", NULL),
+};
+static struct regulator_consumer_supply tps658621_ldo8_supply[] = {
+	REGULATOR_SUPPLY("avdd_hdmi_pll", NULL),
+};
+static struct regulator_consumer_supply tps658621_ldo9_supply[] = {
+	REGULATOR_SUPPLY("vdd_ddr_rx", NULL),
+	REGULATOR_SUPPLY("avdd_cam", NULL),
+	REGULATOR_SUPPLY("avdd_amp", NULL),
 };
 
 #define HARMONY_REGULATOR_INIT(_id, _minmv, _maxmv)			\
@@ -59,11 +88,14 @@ static struct regulator_init_data ldo0_data = {
 					   REGULATOR_CHANGE_STATUS |	\
 					   REGULATOR_CHANGE_VOLTAGE),	\
 		},							\
+		.num_consumer_supplies = ARRAY_SIZE(tps658621_##_id##_supply),\
+		.consumer_supplies = tps658621_##_id##_supply,		\
 	}
 
 HARMONY_REGULATOR_INIT(sm0, 725, 1500);
 HARMONY_REGULATOR_INIT(sm1, 725, 1500);
 HARMONY_REGULATOR_INIT(sm2, 3000, 4550);
+HARMONY_REGULATOR_INIT(ldo0, 1250, 3300);
 HARMONY_REGULATOR_INIT(ldo1, 725, 1500);
 HARMONY_REGULATOR_INIT(ldo2, 725, 1500);
 HARMONY_REGULATOR_INIT(ldo3, 1250, 3300);
