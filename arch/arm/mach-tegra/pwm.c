@@ -139,9 +139,7 @@ void pwm_disable(struct pwm_device *pwm)
 		writel(val & ~PWM_ENABLE, pwm->mmio_base);
 		clk_disable(pwm->clk);
 		pwm->clk_enb = 0;
-	} else
-		dev_warn(&pwm->pdev->dev, "%s called on disabled PWM\n",
-			 __func__);
+	}
 	mutex_unlock(&pwm_lock);
 }
 EXPORT_SYMBOL(pwm_disable);
