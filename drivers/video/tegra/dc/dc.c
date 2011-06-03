@@ -513,20 +513,18 @@ static void tegra_dc_set_scaling_filter(struct tegra_dc *dc)
 }
 
 static inline u32 compute_dda_inc(fixed20_12 in, unsigned out_int,
-				  bool filter, bool v, unsigned Bpp)
+				  bool v, unsigned Bpp)
 {
 	/*
-	 * - Filter on:  min(round((prescaled_size_in_pixels - 1) * 0x1000 /
-	 *			   (post_scaled_size_in_pixels - 1)), MAX)
-	 * - Filter off: min(round(prescaled_size_in_pixels * 0x1000 /
-	 *			   (post_scaled_size_in_pixels - 1) - 0.5), MAX)
+	 * min(round((prescaled_size_in_pixels - 1) * 0x1000 /
+	 *	     (post_scaled_size_in_pixels - 1)), MAX)
 	 * Where the value of MAX is as follows:
 	 * For V_DDA_INCREMENT: 15.0 (0xF000)
 	 * For H_DDA_INCREMENT:  4.0 (0x4000) for 4 Bytes/pix formats.
 	 *			 8.0 (0x8000) for 2 Bytes/pix formats.
 	 */
 
-	fixed20_12 tmp, out = dfixed_init(out_int);
+	fixed20_12 out = dfixed_init(out_int);
 	u32 dda_inc;
 	int max;
 
@@ -547,12 +545,7 @@ static inline u32 compute_dda_inc(fixed20_12 in, unsigned out_int,
 	}
 
 	out.full = max_t(u32, out.full - dfixed_const(1), dfixed_const(1));
-	if (filter)
-		in.full -= dfixed_const(1);
-	else {
-		tmp.full = dfixed_const_half(0);
-		in.full -= dfixed_div(tmp, out);
-	}
+	in.full -= dfixed_const(1);
 
 	dda_inc = dfixed_div(in, out);
 
@@ -647,10 +640,8 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 				H_PRESCALED_SIZE(dfixed_trunc(win->w) * Bpp),
 				DC_WIN_PRESCALED_SIZE);
 
-		h_dda = compute_dda_inc(win->w, win->out_w,
-					filter_h, false, Bpp);
-		v_dda = compute_dda_inc(win->h, win->out_h,
-					filter_v, true, Bpp);
+		h_dda = compute_dda_inc(win->w, win->out_w, false, Bpp);
+		v_dda = compute_dda_inc(win->h, win->out_h, true, Bpp);
 		tegra_dc_writel(dc, V_DDA_INC(v_dda) | H_DDA_INC(h_dda),
 				DC_WIN_DDA_INCREMENT);
 		h_dda = compute_initial_dda(win->x);
