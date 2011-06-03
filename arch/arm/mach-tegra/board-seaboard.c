@@ -608,10 +608,20 @@ static __initdata struct tegra_pingroup_config mxt_pinmux_config[] = {
 	{TEGRA_PINGROUP_LVP0,  TEGRA_MUX_RSVD4,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
 };
 
+static void register_ehci_device(struct platform_device *pdev)
+{
+	if (pdev->dev.platform_data)
+		platform_device_register(pdev);
+}
+
 static int seaboard_ehci_init(void)
 {
 	int gpio_status;
- 
+
+	/* If we ever have a derivative that doesn't use USB1, make the code
+	 * below conditional
+	 */
+	BUG_ON(!tegra_ehci1_device.dev.platform_data);
 	gpio_status = gpio_request(TEGRA_GPIO_USB1, "VBUS_USB1");
 	if (gpio_status < 0) {
 		pr_err("VBUS_USB1 request GPIO FAILED\n");
@@ -624,14 +634,11 @@ static int seaboard_ehci_init(void)
 		WARN_ON(1);
 	}
 	gpio_set_value(TEGRA_GPIO_USB1, 1);
- 
-	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
-	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
-	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
-	platform_device_register(&tegra_ehci1_device);
-	platform_device_register(&tegra_ehci2_device);
-	platform_device_register(&tegra_ehci3_device);
- 
+
+	register_ehci_device(&tegra_ehci1_device);
+	register_ehci_device(&tegra_ehci2_device);
+	register_ehci_device(&tegra_ehci3_device);
+
 	return 0;
 }
 
@@ -756,6 +763,23 @@ static void __init aebl_i2c_register_devices(void)
 	i2c_register_board_info(4, &ak8975_device, 1);
 }
 
+static void __init arthur_i2c_register_devices(void)
+{
+	gpio_request(TEGRA_GPIO_ISL29018_IRQ, "isl29018");
+	gpio_direction_input(TEGRA_GPIO_ISL29018_IRQ);
+
+	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
+	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
+
+	gpio_request(TEGRA_GPIO_CYTP_INT, "gpio_cytp_int");
+	gpio_direction_input(TEGRA_GPIO_CYTP_INT);
+
+	i2c_register_board_info(0, &isl29018_device, 1);
+	i2c_register_board_info(0, &cyapa_device, 1);
+
+	i2c_register_board_info(4, &nct1008_device, 1);
+}
+
 static void __init seaboard_common_init(void)
 {
 	seaboard_pinmux_init();
@@ -798,6 +822,10 @@ static void __init tegra_seaboard_init(void)
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTD_BASE;
 	debug_uart_platform_data[0].irq = INT_UARTD;
 
+	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
+	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
+
 	seaboard_common_init();
 
 	seaboard_emc_init();
@@ -839,6 +867,10 @@ static void __init tegra_kaen_init(void)
 		clk_enable(c);
 	}
 
+	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
+	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
+
 	seaboard_common_init();
 	kaen_emc_init();
 
@@ -858,6 +890,10 @@ static void __init tegra_aebl_init(void)
 	debug_uart_platform_data[0].irq = INT_UARTB;
 
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
+
+	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
+	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
 
 	seaboard_common_init();
 	aebl_emc_init();
@@ -881,6 +917,10 @@ static void __init tegra_wario_init(void)
 
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
+	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
+	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
+
 	seaboard_common_init();
 
 	/* wario has same memory config as seaboard */
@@ -896,6 +936,26 @@ static void __init tegra_wario_init(void)
 	}
 
 	wario_i2c_register_devices();
+	seaboard_i2c_init();
+}
+
+static void __init tegra_arthur_init(void)
+{
+	tegra_init_suspend(&seaboard_suspend);
+
+	/* Arthur uses UARTB for the debug port. */
+	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
+	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
+	debug_uart_platform_data[0].irq = INT_UARTB;
+
+	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
+
+	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
+
+	seaboard_common_init();
+
+	arthur_i2c_register_devices();
 	seaboard_i2c_init();
 }
 
@@ -934,4 +994,13 @@ MACHINE_START(WARIO, "wario")
 	.init_irq       = tegra_init_irq,
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_wario_init,
+MACHINE_END
+
+MACHINE_START(ARTHUR, "arthur")
+	.boot_params    = 0x00000100,
+	.map_io         = tegra_map_common_io,
+	.init_early     = tegra_init_early,
+	.init_irq       = tegra_init_irq,
+	.timer          = &tegra_timer,
+	.init_machine   = tegra_arthur_init,
 MACHINE_END
