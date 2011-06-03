@@ -105,6 +105,47 @@ static int harmony_panel_disable(void)
 	return 0;
 }
 
+static int harmony_set_hdmi_power(bool enable)
+{
+	static struct {
+		struct regulator *regulator;
+		const char *name;
+	} regs[] = {
+		{ .name = "avdd_hdmi" },
+		{ .name = "avdd_hdmi_pll" },
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(regs); i++) {
+		if (!regs[i].regulator) {
+			regs[i].regulator = regulator_get(NULL, regs[i].name);
+
+			if (IS_ERR(regs[i].regulator)) {
+				int ret = PTR_ERR(regs[i].regulator);
+				regs[i].regulator = NULL;
+				return ret;
+			}
+		}
+
+		if (enable)
+			regulator_enable(regs[i].regulator);
+		else
+			regulator_disable(regs[i].regulator);
+	}
+
+	return 0;
+}
+
+static int harmony_hdmi_enable(void)
+{
+	return harmony_set_hdmi_power(true);
+}
+
+static int harmony_hdmi_disable(void)
+{
+	return harmony_set_hdmi_power(false);
+}
+
 static struct resource harmony_disp1_resources[] = {
 	{
 		.name	= "irq",
@@ -122,6 +163,27 @@ static struct resource harmony_disp1_resources[] = {
 		.name	= "fbmem",
 		.start	= 0x1c012000,
 		.end	= 0x1c012000 + 0x258000 - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+static struct resource harmony_disp2_resources[] = {
+	{
+		.name	= "irq",
+		.start	= INT_DISPLAY_B_GENERAL,
+		.end	= INT_DISPLAY_B_GENERAL,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.name	= "regs",
+		.start	= TEGRA_DISPLAY2_BASE,
+		.end	= TEGRA_DISPLAY2_BASE + TEGRA_DISPLAY2_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "hdmi_regs",
+		.start	= TEGRA_HDMI_BASE,
+		.end	= TEGRA_HDMI_BASE + TEGRA_HDMI_SIZE - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -149,6 +211,13 @@ static struct tegra_fb_data harmony_fb_data = {
 	.bits_per_pixel	= 16,
 };
 
+static struct tegra_fb_data harmony_hdmi_fb_data = {
+	.win		= 0,
+	.xres		= 1280,
+	.yres		= 720,
+	.bits_per_pixel	= 16,
+};
+
 static struct tegra_dc_out harmony_disp1_out = {
 	.type		= TEGRA_DC_OUT_RGB,
 
@@ -164,10 +233,30 @@ static struct tegra_dc_out harmony_disp1_out = {
 	.disable	= harmony_panel_disable,
 };
 
+static struct tegra_dc_out harmony_disp2_out = {
+	.type		= TEGRA_DC_OUT_HDMI,
+	.flags		= TEGRA_DC_OUT_HOTPLUG_HIGH,
+
+	.dcc_bus	= 1,
+	.hotplug_gpio	= TEGRA_GPIO_HDMI_HPD,
+
+	.align		= TEGRA_DC_ALIGN_MSB,
+	.order		= TEGRA_DC_ORDER_RED_BLUE,
+
+	.enable		= harmony_hdmi_enable,
+	.disable	= harmony_hdmi_disable,
+};
+
 static struct tegra_dc_platform_data harmony_disp1_pdata = {
 	.flags		= TEGRA_DC_FLAG_ENABLED,
 	.default_out	= &harmony_disp1_out,
 	.fb		= &harmony_fb_data,
+};
+
+static struct tegra_dc_platform_data harmony_disp2_pdata = {
+	.flags		= 0,
+	.default_out	= &harmony_disp2_out,
+	.fb		= &harmony_hdmi_fb_data,
 };
 
 static struct nvhost_device harmony_disp1_device = {
@@ -184,6 +273,16 @@ static int harmony_disp1_check_fb(struct device *dev, struct fb_info *info)
 {
 	return info->device == &harmony_disp1_device.dev;
 }
+
+static struct nvhost_device harmony_disp2_device = {
+	.name		= "tegradc",
+	.id		= 1,
+	.resource	= harmony_disp2_resources,
+	.num_resources	= ARRAY_SIZE(harmony_disp2_resources),
+	.dev = {
+		.platform_data = &harmony_disp2_pdata,
+	},
+};
 
 static struct nvmap_platform_carveout harmony_carveouts[] = {
 	[0] = {
@@ -235,11 +334,17 @@ int __init harmony_panel_init(void)
 	gpio_request(TEGRA_GPIO_LVDS_SHUTDOWN, "lvds_shdn");
 	gpio_direction_output(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
 
+	gpio_request(TEGRA_GPIO_HDMI_HPD, "hdmi_hpd");
+	gpio_direction_input(TEGRA_GPIO_HDMI_HPD);
+
 	err = platform_add_devices(harmony_gfx_devices,
 				   ARRAY_SIZE(harmony_gfx_devices));
 
 	if (!err)
 		err = nvhost_device_register(&harmony_disp1_device);
+
+	if (!err)
+		err = nvhost_device_register(&harmony_disp2_device);
 
 	return err;
 }
