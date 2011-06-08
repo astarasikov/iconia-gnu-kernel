@@ -63,7 +63,7 @@ struct cyapa_platform_data {
 
 
 /*
- * Data structures for cyapa device ioclt read/write.
+ * Data structures for /dev/cyapa device ioclt read/write.
  */
 struct cyapa_misc_ioctl_data {
 	__u8 *buf;  /* pointer to a buffer for read/write data. */
@@ -104,7 +104,10 @@ struct cyapa_hardware_ver {
 #define CYAPA_IOC_W(nr, bytes) _IOC(IOC_IN, CYAPA_IOC_MAGIC, nr, bytes)
 #define CYAPA_IOC_RW(nr, bytes) _IOC(IOC_INOUT, CYAPA_IOC_MAGIC, nr, bytes)
 
-
+/*
+ * The following ioctl commands are only valid
+ * when firmware working in operational mode.
+ */
 #define CYAPA_GET_PRODUCT_ID  CYAPA_IOC_R(0x00, 16)
 #define CYAPA_GET_DRIVER_VER  CYAPA_IOC_R(0x01, 3)
 #define CYAPA_GET_FIRMWARE_VER  CYAPA_IOC_R(0x02, 2)
