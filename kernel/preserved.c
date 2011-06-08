@@ -16,6 +16,8 @@
 #include <linux/reboot.h>
 #include <linux/uaccess.h>
 
+#include <asm/cacheflush.h>
+
 struct preserved {
 	unsigned int	magic;
 	unsigned int	cursor;
@@ -361,6 +363,16 @@ static void kcrash_preserve(bool first_time)
 		preserved_ftr->ksize, preserved_ftr->usize);
 }
 
+static void flush_preserved(void)
+{
+#ifdef CONFIG_X86
+	/* flush_cache_all is a nop on x86 */
+	set_memory_uc((unsigned long)preserved, preserved_size / PAGE_SIZE);
+#else
+	flush_cache_all();
+#endif
+}
+
 void emergency_restart(void)	/* overriding the __weak one in kernel/sys.c */
 {
 	/*
@@ -374,6 +386,7 @@ void emergency_restart(void)	/* overriding the __weak one in kernel/sys.c */
 		 * perhaps appending to a kcrash from the previous boot.
 		 */
 		kcrash_preserve(true);
+		flush_preserved();
 	}
 	machine_emergency_restart();
 }
