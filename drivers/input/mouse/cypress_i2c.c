@@ -103,9 +103,7 @@
 #define CYAPA_MT_MAX_TOUCH  255
 #define CYAPA_MT_MAX_WIDTH  255
 
-/* max gesture index value for each fingers type is 31. 0~21.*/
 #define MAX_FINGERS	5
-/* parameter value for input_report_key(BTN_TOOL_WIDTH) */
 #define CYAPA_TOOL_WIDTH 50
 #define CYAPA_DEFAULT_TOUCH_PRESSURE 50
 #define CYAPA_MT_TOUCH_MAJOR  50
@@ -141,15 +139,15 @@
 /*
  * APA trackpad device states.
  * Used in register 0x00, bit1-0, DeviceStatus field.
-*/
+ */
 enum cyapa_devicestate {
 	CYAPA_DEV_NORMAL = 0x03,
-    /*
-     * After trackpad booted, and can report data, it should set this value.
-     * Other values stand for trackpad device is in abnormal state.
-     * It may need to be reset.
-     * Other values are defined later if needed.
-    */
+	/*
+	 * After trackpad booted, and can report data, it should set this value.
+	 * Other values stand for trackpad device is in abnormal state.
+	 * It may need to be reset.
+	 * Other values are defined later if needed.
+	 */
 };
 
 #define CYAPA_MAX_TOUCHES (MAX_FINGERS)
@@ -243,6 +241,7 @@ struct cyapa_i2c {
 	struct i2c_client	*client;
 	struct input_dev	*input;
 	struct delayed_work dwork;
+	/* synchronize accessing dwork data structure. */
 	spinlock_t lock;
 	int no_data_count;
 	int scan_ms;
@@ -303,18 +302,18 @@ void cyapa_dump_report_data(const char *func,
 
 	pr_info("%s: ------------------------------------\n", func);
 	pr_info("%s: report_data.button = 0x%02x\n",
-			func, report_data->button);
+		func, report_data->button);
 	pr_info("%s: report_data.avg_pressure = %d\n",
-			func, report_data->avg_pressure);
+		func, report_data->avg_pressure);
 	pr_info("%s: report_data.touch_fingers = %d\n",
-			func, report_data->touch_fingers);
+		func, report_data->touch_fingers);
 	for (i = 0; i < report_data->touch_fingers; i++) {
 		pr_info("%s: report_data.touches[%d].x = %d\n",
-				func, i, report_data->touches[i].x);
+			func, i, report_data->touches[i].x);
 		pr_info("%s: report_data.touches[%d].y = %d\n",
-				func, i, report_data->touches[i].y);
+			func, i, report_data->touches[i].y);
 		pr_info("%s: report_data.touches[%d].pressure = %d\n",
-				func, i, report_data->touches[i].pressure);
+			func, i, report_data->touches[i].pressure);
 	}
 	pr_info("%s: report_data.gesture_count = %d\n",
 			func, report_data->gesture_count);
@@ -363,11 +362,18 @@ static int cyapa_wait_for_i2c_bus_ready(struct cyapa_i2c *touch)
 	return 0;
 }
 
+/*
+ * cyapa_i2c_reg_read_byt - read one byte from i2c register map.
+ * @touch - private data structure of the trackpad driver.
+ * @reg - the offset value of the i2c register map from offset 0;
+ *
+ * This function returns negative errno, else a data byte
+ * received from the device.
+ */
 static s32 cyapa_i2c_reg_read_byte(struct cyapa_i2c *touch, u16 reg)
 {
 	int ret = 0;
 
-	/* avoid trackpad interrupt breaks I2C read operation. */
 	ret = cyapa_wait_for_i2c_bus_ready(touch);
 	if (ret < 0)
 		return ret;
@@ -380,11 +386,18 @@ static s32 cyapa_i2c_reg_read_byte(struct cyapa_i2c *touch, u16 reg)
 	return ret;
 }
 
+/*
+ * cyapa_i2c_reg_write_byte - write one byte to i2c register map.
+ * @touch - private data structure of the trackpad driver.
+ * @reg - the offset value of the i2c register map from offset 0;
+ * @val - the value should be written to the register map.
+ *
+ * This function returns negative errno, else zero on success.
+ */
 static s32 cyapa_i2c_reg_write_byte(struct cyapa_i2c *touch, u16 reg, u8 val)
 {
 	int ret = 0;
 
-	/* avoid trackpad interrupt breaks I2C write operation. */
 	ret = cyapa_wait_for_i2c_bus_ready(touch);
 	if (ret < 0)
 		return ret;
@@ -398,12 +411,22 @@ static s32 cyapa_i2c_reg_write_byte(struct cyapa_i2c *touch, u16 reg, u8 val)
 }
 
 /*
+ * cyapa_i2c_reg_read_block - read a block data from trackpad
+ *      i2c register map.
+ * @touch - private data structure of the trackpad driver.
+ * @reg - the offset value of the i2c register map from offset 0;
+ * @length - length of the block to be read in bytes.
+ * @values - pointer to the buffer that used to store register block
+ *           valuse read.
+ *
+ * Returns negative errno, else the number of bytes written.
+ *
  * Note:
  * In trackpad device, the memory block allocated for I2C register map
  * is 256 bytes, so the max read block for I2C bus is 256 bytes.
  */
 static s32 cyapa_i2c_reg_read_block(struct cyapa_i2c *touch, u16 reg,
-				int length, char *values)
+		int length, char *values)
 {
 	int retval = 0;
 	u8 buf[1];
@@ -443,12 +466,21 @@ error:
 }
 
 /*
+ * cyapa_i2c_reg_write_block - write a block data to trackpad
+ *      i2c register map.
+ * @touch - private data structure of the trackpad driver.
+ * @reg - the offset value of the i2c register map from offset 0;
+ * @length - length of the block to be written in bytes.
+ * @values - pointer to the block data buffur that will be written.
+ *
+ * Returns negative errno, else the number of bytes written.
+ *
  * Note:
  * In trackpad device, the memory block allocated for I2C register map
  * is 256 bytes, so the max write block for I2C bus is 256 bytes.
  */
 static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
-				int length, const char *values)
+		int length, const char *values)
 
 {
 	int retval = 0;
@@ -459,7 +491,6 @@ static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
 		return retval;
 
 	/*
-	 * depending on PSOC easy I2C read operations.
 	 * step1: write data to easy I2C in one command.
 	 */
 	buf[0] = (u8)reg;
@@ -583,7 +614,7 @@ static int cyapa_miscdev_rw_params_check(struct cyapa_i2c *touch,
 	 * application may read/write 0 length byte
 	 * to reset read/write pointer to offset.
 	 */
-	max_offset = (length == 0) ? offset: (length - 1 + offset);
+	max_offset = (length == 0) ? offset : (length - 1 + offset);
 
 	/* max registers contained in one register map in bytes is 256. */
 	if (cyapa_pos_validate(offset) && cyapa_pos_validate(max_offset))
@@ -609,7 +640,7 @@ static ssize_t cyapa_misc_read(struct file *file, char __user *usr_buf,
 		return ret;
 
 	ret = cyapa_i2c_reg_read_block(touch, (u16)reg_offset,
-					reg_len, reg_buf);
+				reg_len, reg_buf);
 	if (ret < 0) {
 		pr_err("cyapa trackpad I2C read FAILED.\n");
 		return ret;
@@ -1011,12 +1042,12 @@ static void cyapa_parse_gen2_data(struct cyapa_i2c *touch,
 {
 	int i;
 
-	/* bit2-middle button; bit1-right button; bit0-left buttom. */
+	/* bit2-middle button; bit1-right button; bit0-left button. */
 	report_data->button = reg_data->relative_flags & 0x07;
 
 	/* get relative delta X and delta Y. */
 	report_data->rel_deltaX = reg_data->deltax;
-	/* The Y directory of trackpad is the oppsite of Screen. */
+	/* The Y direction of trackpad is opposite of screen. */
 	report_data->rel_deltaY = -reg_data->deltay;
 
 	/* copy fingers touch data */
@@ -1070,7 +1101,7 @@ static int cyapa_handle_input_report_data(struct cyapa_i2c *touch,
 
 	/*
 	 * report mouse device data.
-	 * always track the first finger.
+	 * always track the first finger,
 	 * when detached multi-finger touched.
 	 */
 	input_report_key(input, BTN_TOUCH, (report_data->touch_fingers > 0));
@@ -1129,7 +1160,7 @@ static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
 	return cyapa_handle_input_report_data(touch, &report_data);
 }
 
-/* Control the Device polling rate / Work Handler sleep time */
+/* Control driver polling read rate and work handler sleep time */
 static unsigned long cyapa_i2c_adjust_delay(struct cyapa_i2c *touch,
 			bool have_data)
 {
@@ -1237,7 +1268,7 @@ static int cyapa_i2c_open(struct input_dev *input)
 		 * increased.
 		 */
 		cyapa_i2c_reschedule_work(touch,
-				msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
+			msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
 	}
 
 	return 0;
@@ -1249,14 +1280,8 @@ static void cyapa_i2c_close(struct input_dev *input)
 
 	touch->open_count--;
 
-	if (0 == touch->open_count) {
-		/*
-		 * Since the mouse, wheel, and kbd input_dev all use the same
-		 * open and close routines, only cancel the delayed work routine
-		 * when all there drivers are closed.
-		 */
+	if (0 == touch->open_count)
 		cancel_delayed_work_sync(&touch->dwork);
-	}
 }
 
 static struct cyapa_i2c *cyapa_i2c_touch_create(struct i2c_client *client)
