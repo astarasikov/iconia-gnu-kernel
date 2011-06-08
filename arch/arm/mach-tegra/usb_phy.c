@@ -104,7 +104,7 @@
 #define   UTMIP_HS_SYNC_START_DLY(x)	(((x) & 0x1f) << 1)
 
 #define UTMIP_TX_CFG0		0x820
-#define   UTMIP_FS_PREABMLE_J		(1 << 19)
+#define   UTMIP_FS_PREAMBLE_J		(1 << 19)
 #define   UTMIP_HS_DISCON_DISABLE	(1 << 8)
 
 #define UTMIP_MISC_CFG0		0x824
@@ -370,7 +370,7 @@ static int utmi_phy_power_on(struct tegra_usb_phy *phy)
 	}
 
 	val = readl(base + UTMIP_TX_CFG0);
-	val &= ~UTMIP_FS_PREABMLE_J;
+	val |= UTMIP_FS_PREAMBLE_J;
 	writel(val, base + UTMIP_TX_CFG0);
 
 	val = readl(base + UTMIP_HSRX_CFG0);
