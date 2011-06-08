@@ -24,6 +24,7 @@
 
 #include <mach/irqs.h>
 #include <mach/iomap.h>
+#include <linux/err.h>
 
 #include "board-harmony.h"
 
@@ -77,34 +78,36 @@ static struct regulator_consumer_supply tps658621_ldo9_supply[] = {
 	REGULATOR_SUPPLY("avdd_amp", NULL),
 };
 
-#define HARMONY_REGULATOR_INIT(_id, _minmv, _maxmv)			\
+#define REGULATOR_INIT(_id, _minmv, _maxmv, _always_on)			\
 	static struct regulator_init_data _id##_data = {		\
 		.constraints = {					\
 			.min_uV = (_minmv)*1000,			\
 			.max_uV = (_maxmv)*1000,			\
 			.valid_modes_mask = (REGULATOR_MODE_NORMAL |	\
-					     REGULATOR_MODE_STANDBY),	\
+					     REGULATOR_MODE_FAST),	\
 			.valid_ops_mask = (REGULATOR_CHANGE_MODE |	\
 					   REGULATOR_CHANGE_STATUS |	\
 					   REGULATOR_CHANGE_VOLTAGE),	\
+			.always_on = _always_on,			\
+			.apply_uV = (_minmv == _maxmv),			\
 		},							\
 		.num_consumer_supplies = ARRAY_SIZE(tps658621_##_id##_supply),\
 		.consumer_supplies = tps658621_##_id##_supply,		\
 	}
 
-HARMONY_REGULATOR_INIT(sm0, 725, 1500);
-HARMONY_REGULATOR_INIT(sm1, 725, 1500);
-HARMONY_REGULATOR_INIT(sm2, 3000, 4550);
-HARMONY_REGULATOR_INIT(ldo0, 1250, 3300);
-HARMONY_REGULATOR_INIT(ldo1, 725, 1500);
-HARMONY_REGULATOR_INIT(ldo2, 725, 1500);
-HARMONY_REGULATOR_INIT(ldo3, 1250, 3300);
-HARMONY_REGULATOR_INIT(ldo4, 1700, 2475);
-HARMONY_REGULATOR_INIT(ldo5, 1250, 3300);
-HARMONY_REGULATOR_INIT(ldo6, 1250, 3300);
-HARMONY_REGULATOR_INIT(ldo7, 1250, 3300);
-HARMONY_REGULATOR_INIT(ldo8, 1250, 3300);
-HARMONY_REGULATOR_INIT(ldo9, 1250, 3300);
+REGULATOR_INIT(sm0, 725, 1500, true);
+REGULATOR_INIT(sm1, 725, 1500, true);
+REGULATOR_INIT(sm2, 3000, 4550, true);
+REGULATOR_INIT(ldo0, 1250, 3300, false);
+REGULATOR_INIT(ldo1, 725, 1500, false);
+REGULATOR_INIT(ldo2, 725, 1500, false);
+REGULATOR_INIT(ldo3, 1250, 3300, false);
+REGULATOR_INIT(ldo4, 1700, 2475, false);
+REGULATOR_INIT(ldo5, 1250, 3300, false);
+REGULATOR_INIT(ldo6, 1250, 3300, false);
+REGULATOR_INIT(ldo7, 1250, 3300, false);
+REGULATOR_INIT(ldo8, 1250, 3300, false);
+REGULATOR_INIT(ldo9, 1250, 3300, false);
 
 #define TPS_REG(_id, _data)			\
 	{					\
@@ -156,6 +159,51 @@ int __init harmony_regulator_init(void)
 	writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
 
 	i2c_register_board_info(4, harmony_regulators, 1);
+
+	return 0;
+}
+
+static void reg_off(const char *reg)
+{
+	int rc;
+	struct regulator *regulator;
+
+	regulator = regulator_get(NULL, reg);
+
+	if (IS_ERR(regulator)) {
+		pr_err("%s: regulator_get returned %ld\n", __func__,
+		       PTR_ERR(regulator));
+		return;
+	}
+
+	rc = regulator_force_disable(regulator);
+	if (rc)
+		pr_err("%s: regulator_force_disable returned %d\n", __func__,
+			rc);
+	regulator_put(regulator);
+}
+
+static void harmony_power_off(void)
+{
+	reg_off("vdd_sm2");
+	reg_off("vdd_core");
+	reg_off("vdd_cpu");
+	local_irq_disable();
+	while (1) {
+		dsb();
+		__asm__ ("wfi");
+	}
+}
+
+int __init harmony_power_init(void)
+{
+	int err;
+
+	err = harmony_regulator_init();
+	if (err < 0)
+		pr_warning("Unable to initialize regulator\n");
+
+	pm_power_off = harmony_power_off;
 
 	return 0;
 }

@@ -498,8 +498,8 @@ static void __init tegra_harmony_init(void)
 	tegra_sdhci_device4.dev.platform_data = &sdhci_pdata4;
 
 	platform_add_devices(harmony_devices, ARRAY_SIZE(harmony_devices));
+	harmony_power_init();
 	harmony_i2c_init();
-	harmony_regulator_init();
 }
 
 MACHINE_START(HARMONY, "harmony")

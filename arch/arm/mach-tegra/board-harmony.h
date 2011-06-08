@@ -35,6 +35,6 @@
 #define TEGRA_GPIO_POWERKEY		TEGRA_GPIO_PV2
 
 void harmony_pinmux_init(void);
-int harmony_regulator_init(void);
+int harmony_power_init(void);
 
 #endif
