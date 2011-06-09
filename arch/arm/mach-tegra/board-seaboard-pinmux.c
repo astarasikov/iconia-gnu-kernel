@@ -14,8 +14,10 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/io.h>
 #include <linux/gpio.h>
 
+#include <mach/iomap.h>
 #include <mach/pinmux.h>
 #include <mach/pinmux-t2.h>
 
@@ -250,4 +252,49 @@ void __init seaboard_pinmux_init(void)
 					ARRAY_SIZE(seaboard_drive_pinmux));
 
 	tegra_gpio_config(gpio_table, ARRAY_SIZE(gpio_table));
+}
+
+#define STRAP_OPT 0x008
+#define GMI_AD0 (1 << 4)
+#define GMI_AD1 (1 << 5)
+#define RAM_ID_MASK (GMI_AD0 | GMI_AD1)
+#define RAM_CODE_SHIFT 4
+
+void __init fixup_pinmux_for_26Mhz(void)
+{
+	const struct tegra_pingroup_config pingroup_CDEV2_MUX_OSC[] = {
+		{TEGRA_PINGROUP_CDEV2, TEGRA_MUX_OSC,
+		 TEGRA_PUPD_NORMAL, TEGRA_TRI_NORMAL}
+	};
+	tegra_pinmux_config_table(pingroup_CDEV2_MUX_OSC,
+				  ARRAY_SIZE(pingroup_CDEV2_MUX_OSC));
+}
+
+void __init kaen_pinmux_init(void)
+{
+	/* TODO: Refactor this entire board revision specialization when
+	 * Flattened Device Tree and apbio interfaces are ready.
+	 */
+
+	void __iomem *apb_misc = IO_ADDRESS(TEGRA_APB_MISC_BASE);
+	int ram_id;
+	u32 reg;
+
+	seaboard_pinmux_init();
+
+	/*
+	 * For Kaen DVT2 (and not DVT1) there is a single pinmux register
+	 * change to be made which accomodates a 26Mhz reference oscillator.
+	 * If DVT2, then overwrite the value that was just written in the call
+	 * to seaboard_pinmux_init().
+	 *
+	 * Detect that 26Mhz oscillator is present for Kaen based on ram_id.
+	 *   ram_id = {0, 1} for DVT2, 26Mhz oscillator
+	 *   ram_id = {2, 3} for DVT1, 12Mhz oscillator (same as seaboard)
+	 */
+	reg = readl(apb_misc + STRAP_OPT);
+	ram_id = (reg & RAM_ID_MASK) >> RAM_CODE_SHIFT;
+
+	if ((ram_id == 0) || (ram_id == 1))
+		fixup_pinmux_for_26Mhz();
 }

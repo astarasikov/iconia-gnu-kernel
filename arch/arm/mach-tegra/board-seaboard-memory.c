@@ -694,14 +694,14 @@ static const struct tegra_emc_table kaen_emc_tables_Samsung_380Mhz[] = {
 
 struct tegra_board_emc_table kaen_emc[] = {
 	{
-		.table		= kaen_emc_tables_Samsung_333Mhz,
-		.table_size	= ARRAY_SIZE(kaen_emc_tables_Samsung_333Mhz),
-		.name		= "Samsung 333MHz",
+		.table		= kaen_emc_tables_Samsung_380Mhz,
+		.table_size	= ARRAY_SIZE(kaen_emc_tables_Samsung_380Mhz),
+		.name		= "Samsung 380MHz",
 	},
 	{
-		.table		= kaen_emc_tables_Nanya_333Mhz,
-		.table_size	= ARRAY_SIZE(kaen_emc_tables_Nanya_333Mhz),
-		.name		= "Nanya 333MHz",
+		.table		= kaen_emc_tables_Nanya_380Mhz,
+		.table_size	= ARRAY_SIZE(kaen_emc_tables_Nanya_380Mhz),
+		.name		= "Nanya 380MHz",
 	},
 	{
 		.table		= kaen_emc_tables_Samsung_380Mhz,
