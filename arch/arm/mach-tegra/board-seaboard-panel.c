@@ -197,7 +197,7 @@ static struct resource seaboard_disp2_resources[] = {
 
 static struct tegra_dc_mode seaboard_panel_modes[] = {
 	{
-		.pclk = 62200000,
+		.pclk = 70600000,
 		.h_ref_to_sync = 11,
 		.v_ref_to_sync = 1,
 		.h_sync_width = 58,
