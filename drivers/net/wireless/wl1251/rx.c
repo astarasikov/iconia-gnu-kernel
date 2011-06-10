@@ -80,7 +80,7 @@ static void wl1251_rx_status(struct wl1251 *wl,
 
 	status->freq = ieee80211_channel_to_frequency(desc->channel);
 
-	status->flag |= RX_FLAG_TSFT;
+	status->flag |= RX_FLAG_MACTIME_MPDU;
 
 	if (desc->flags & RX_DESC_ENCRYPTION_MASK) {
 		status->flag |= RX_FLAG_IV_STRIPPED | RX_FLAG_MMIC_STRIPPED;

@@ -6043,6 +6043,14 @@ prep_mac80211_status(struct wlc_info *wlc, d11rxhdr_t *rxh, struct sk_buff *p,
 	/* fill in TSF and flag its presence */
 	rx_status->mactime = wlc_recover_tsf64(wlc, wlc_rxh);
 	rx_status->flag |= RX_FLAG_MACTIME_MPDU;
+#if 0
+	/* Clearly, this is bogus -- reading the TSF now is wrong */
+	wlc_read_tsf(wlc, &tsf_l, &tsf_h);	/* mactime */
+	rx_status->mactime = tsf_h;
+	rx_status->mactime <<= 32;
+	rx_status->mactime |= tsf_l;
+	rx_status->flag |= RX_FLAG_MACTIME_MPDU; /* clearly wrong */
+#endif
 
 	channel = WLC_CHAN_CHANNEL(rxh->RxChan);
 
