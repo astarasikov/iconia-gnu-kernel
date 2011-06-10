@@ -25,8 +25,10 @@
 #include <linux/dma-mapping.h>
 #include <linux/fsl_devices.h>
 #include <linux/pda_power.h>
+#include <linux/input.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
+#include <linux/gpio_keys.h>
 #include <linux/i2c.h>
 #include <linux/i2c-tegra.h>
 #include <linux/platform_data/tegra_usb.h>
@@ -221,6 +223,30 @@ static struct platform_device harmony_audio_device = {
 	},
 };
 
+static struct gpio_keys_button harmony_gpio_keys_buttons[] = {
+	{
+		.code		= KEY_POWER,
+		.gpio		= TEGRA_GPIO_POWERKEY,
+		.active_low	= 1,
+		.desc		= "Power",
+		.type		= EV_KEY,
+		.wakeup		= 1,
+	},
+};
+
+static struct gpio_keys_platform_data harmony_gpio_keys = {
+	.buttons	= harmony_gpio_keys_buttons,
+	.nbuttons	= ARRAY_SIZE(harmony_gpio_keys_buttons),
+};
+
+static struct platform_device harmony_gpio_keys_device = {
+	.name		= "gpio-keys",
+	.id		= -1,
+	.dev		= {
+		.platform_data = &harmony_gpio_keys,
+	}
+};
+
 /* PDA power */
 static struct pda_power_pdata pda_power_pdata = {
 };
@@ -317,6 +343,7 @@ static struct platform_device *harmony_devices[] __initdata = {
 	&tegra_sdhci_device1,
 	&tegra_sdhci_device2,
 	&tegra_sdhci_device4,
+	&harmony_gpio_keys_device,
 	&tegra_ehci3_device,
 	&tegra_i2s_device1,
 	&tegra_das_device,
