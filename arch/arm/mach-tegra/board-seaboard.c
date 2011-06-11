@@ -1036,6 +1036,17 @@ static void __init tegra_arthur_init(void)
 	err = gpio_direction_output(TEGRA_GPIO_PU4, 1);
 	WARN_ON(err);
 
+	/* Set up the GPIO and pingroup controlling the camera's power. */
+	tegra_gpio_enable(TEGRA_GPIO_PV4);
+	err = gpio_request(TEGRA_GPIO_PV4, "cam_3v3_pwr_en");
+	WARN_ON(err);
+	err = gpio_direction_output(TEGRA_GPIO_PV4, 1);
+	WARN_ON(err);
+	tegra_pinmux_set_tristate(TEGRA_PINGROUP_GPV, TEGRA_TRI_NORMAL);
+	/* Export this GPIO so power can be controlled from userspace. */
+	err = gpio_export(TEGRA_GPIO_PV4, false);
+	WARN_ON(err);
+
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
 	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
