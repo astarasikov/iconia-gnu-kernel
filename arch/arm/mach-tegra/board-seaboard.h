@@ -88,6 +88,7 @@ static inline int kaen_sensors_init(void) { return 0; }
 static inline void kaen_emc_init(void) { return; }
 #endif
 
+void aebl_pinmux_init(void);
 #ifdef CONFIG_MACH_AEBL
 int aebl_sensors_init(void);
 void aebl_emc_init(void);
