@@ -720,6 +720,12 @@ static void __init kaen_common_init(void)
 	__seaboard_common_init();
 }
 
+static void __init aebl_common_init(void)
+{
+	aebl_pinmux_init();
+	__seaboard_common_init();
+}
+
 static struct tegra_suspend_platform_data seaboard_suspend = {
 	.cpu_timer = 5000,
 	.cpu_off_timer = 5000,
@@ -856,7 +862,7 @@ static void __init tegra_aebl_init(void)
 	/* setting skew makes WIFI stable when sdmmc1 runs 48MHz. */
 	tegra_set_clock_readskew("sdmmc1", 8);
 
-	seaboard_common_init();
+	aebl_common_init();
 	aebl_emc_init();
 
 	aebl_i2c_register_devices();

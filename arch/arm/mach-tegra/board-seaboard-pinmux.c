@@ -298,3 +298,9 @@ void __init kaen_pinmux_init(void)
 	if ((ram_id == 0) || (ram_id == 1))
 		fixup_pinmux_for_26Mhz();
 }
+
+void __init aebl_pinmux_init(void)
+{
+	seaboard_pinmux_init();
+	fixup_pinmux_for_26Mhz();
+}
