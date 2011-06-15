@@ -935,6 +935,11 @@ static void __init tegra_kaen_init(void)
 
 	__init_debug_uart_B();
 
+	/* Enable RF for 3G modem */
+	tegra_gpio_enable(TEGRA_GPIO_W_DISABLE);
+	gpio_request(TEGRA_GPIO_W_DISABLE, "w_disable");
+	gpio_direction_output(TEGRA_GPIO_W_DISABLE, 1);
+
 	audio_pdata.gpio_hp_mute = TEGRA_GPIO_KAEN_HP_MUTE;
 	tegra_gpio_enable(TEGRA_GPIO_KAEN_HP_MUTE);
 
