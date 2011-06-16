@@ -1,0 +1,8 @@
+/dts-v1/;
+
+/include/ "tegra250.dtsi"
+
+/ {
+        model = "Google Kaen";
+        compatible = "google,kaen", "nvidia,tegra250";
+};
