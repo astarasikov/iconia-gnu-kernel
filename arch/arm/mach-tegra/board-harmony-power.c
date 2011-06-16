@@ -95,8 +95,8 @@ static struct regulator_consumer_supply tps658621_ldo9_supply[] = {
 		.consumer_supplies = tps658621_##_id##_supply,		\
 	}
 
-REGULATOR_INIT(sm0, 725, 1500, true);
-REGULATOR_INIT(sm1, 725, 1500, true);
+REGULATOR_INIT(sm0, 950, 1300, true);
+REGULATOR_INIT(sm1, 750, 1125, true);
 REGULATOR_INIT(sm2, 3000, 4550, true);
 REGULATOR_INIT(ldo0, 1250, 3300, false);
 REGULATOR_INIT(ldo1, 725, 1500, false);
