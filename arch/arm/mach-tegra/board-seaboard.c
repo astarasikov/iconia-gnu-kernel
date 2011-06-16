@@ -885,7 +885,7 @@ MACHINE_START(SEABOARD, "seaboard")
 MACHINE_END
 
 static const char *kaen_dt_board_compat[] = {
-	"nvidia,kaen",
+	"google,kaen",
 	NULL
 };
 
