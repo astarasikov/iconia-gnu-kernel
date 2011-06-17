@@ -638,19 +638,20 @@ error:
 static int cyapa_misc_open(struct inode *inode, struct file *file)
 {
 	int count;
+	unsigned long flags;
 	struct cyapa_i2c *touch = global_touch;
 
 	if (touch == NULL)
 		return -ENODEV;
 	file->private_data = (void *)touch;
 
-	spin_lock(&touch->miscdev_spinlock);
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
 	if (touch->misc_open_count) {
-		spin_unlock(&touch->miscdev_spinlock);
+		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 		return -EBUSY;
 	}
 	count = ++touch->misc_open_count;
-	spin_unlock(&touch->miscdev_spinlock);
+	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 
 	return 0;
 }
@@ -658,11 +659,12 @@ static int cyapa_misc_open(struct inode *inode, struct file *file)
 static int cyapa_misc_close(struct inode *inode, struct file *file)
 {
 	int count;
+	unsigned long flags;
 	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
 
-	spin_lock(&touch->miscdev_spinlock);
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
 	count = --touch->misc_open_count;
-	spin_unlock(&touch->miscdev_spinlock);
+	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 
 	return 0;
 }
@@ -1789,17 +1791,18 @@ static void cyapa_i2c_work_handler(struct work_struct *work)
 	struct cyapa_i2c *touch =
 		container_of(work, struct cyapa_i2c, dwork.work);
 	unsigned long delay;
+	unsigned long flags;
 
 	/*
 	 * use spinlock to avoid confict accessing
 	 * when firmware switching into bootloader mode.
 	 */
-	spin_lock(&touch->miscdev_spinlock);
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
 	if (touch->fw_work_mode == CYAPA_BOOTLOAD_MODE) {
-		spin_unlock(&touch->miscdev_spinlock);
+		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 		cyapa_update_firmware_dispatch(touch);
 	} else {
-		spin_unlock(&touch->miscdev_spinlock);
+		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 
 		have_data = cyapa_i2c_get_input(touch);
 		/*
@@ -1880,12 +1883,16 @@ static int cyapa_i2c_open(struct input_dev *input)
 
 static void cyapa_i2c_close(struct input_dev *input)
 {
+	unsigned long flags;
 	struct cyapa_i2c *touch = input_get_drvdata(input);
 
 	touch->open_count--;
 
-	if (0 == touch->open_count)
+	if (0 == touch->open_count) {
+		spin_lock_irqsave(&touch->lock, flags);
 		cancel_delayed_work_sync(&touch->dwork);
+		spin_unlock_irqrestore(&touch->lock, flags);
+	}
 }
 
 static struct cyapa_i2c *cyapa_i2c_touch_create(struct i2c_client *client)
