@@ -505,7 +505,7 @@ static int cyapa_wait_for_i2c_bus_ready(struct cyapa_i2c *touch)
  */
 static s32 cyapa_i2c_reg_write_byte(struct cyapa_i2c *touch, u16 reg, u8 val)
 {
-	int ret = 0;
+	int ret;
 
 	ret = cyapa_wait_for_i2c_bus_ready(touch);
 	if (ret < 0)
@@ -537,41 +537,41 @@ static s32 cyapa_i2c_reg_write_byte(struct cyapa_i2c *touch, u16 reg, u8 val)
 static s32 cyapa_i2c_reg_read_block(struct cyapa_i2c *touch, u16 reg,
 		int length, char *values)
 {
-	int retval = 0;
+	int ret;
 	u8 buf[1];
 
-	retval = cyapa_wait_for_i2c_bus_ready(touch);
-	if (retval < 0)
-		return retval;
+	ret = cyapa_wait_for_i2c_bus_ready(touch);
+	if (ret < 0)
+		return ret;
 
 	/*
 	 * step1: set read pointer of easy I2C.
 	 */
 	buf[0] = (u8)reg;
-	retval = i2c_master_send(touch->client, buf, 1);
-	if (retval < 0)
+	ret = i2c_master_send(touch->client, buf, 1);
+	if (ret < 0)
 		goto error;
 
 	/* step2: read data. */
-	retval = i2c_master_recv(touch->client, values, length);
-	if (retval < 0) {
-		pr_debug("i2c_master_recv error, %d\n", retval);
+	ret = i2c_master_recv(touch->client, values, length);
+	if (ret < 0) {
+		pr_debug("i2c_master_recv error, %d\n", ret);
 		goto error;
 	}
 
-	if (retval != length)
+	if (ret != length)
 		pr_warning("warning I2C block read bytes" \
 			"[%d] not equal to requested bytes [%d].\n",
-			retval, length);
+			ret, length);
 
 	/* DEBUG: dump read block data */
-	cyapa_dump_data_block(__func__, (u8)reg, retval, values);
+	cyapa_dump_data_block(__func__, (u8)reg, ret, values);
 
 error:
 	up(&touch->reg_io_sem);
 	cyapa_enable_irq(touch);
 
-	return retval;
+	return ret;
 }
 
 /*
@@ -592,14 +592,14 @@ static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
 		int length, const char *values)
 
 {
-	int retval = 0;
+	int ret;
 	u8 buf[CYAPA_REG_MAP_SIZE + 1];
 
 	cyapa_dump_data_block(__func__, reg, length, (void *)values);
 
-	retval = cyapa_wait_for_i2c_bus_ready(touch);
-	if (retval < 0)
-		return retval;
+	ret = cyapa_wait_for_i2c_bus_ready(touch);
+	if (ret < 0)
+		return ret;
 
 	/*
 	 * step1: write data to easy I2C in one command.
@@ -608,21 +608,21 @@ static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
 	/* copy data shoud be write to I2C slave device. */
 	memcpy((void *)&buf[1], (const void *)values, length);
 
-	retval = i2c_master_send(touch->client, buf, length+1);
-	if (retval < 0)
+	ret = i2c_master_send(touch->client, buf, length+1);
+	if (ret < 0)
 		goto error;
 
 	/* one additional written byte is register offset. */
-	if (retval != (length + 1))
+	if (ret != (length + 1))
 		pr_warning("warning I2C block write bytes" \
 			"[%d] not equal to requested bytes [%d].\n",
-			retval, length);
+			ret, length);
 
 error:
 	up(&touch->reg_io_sem);
 	cyapa_enable_irq(touch);
 
-	return (retval < 0) ? retval : (retval - 1);
+	return (ret < 0) ? ret : (ret - 1);
 }
 
 
@@ -742,7 +742,7 @@ static int cyapa_miscdev_rw_params_check(struct cyapa_i2c *touch,
 static ssize_t cyapa_misc_read(struct file *file, char __user *usr_buf,
 		size_t count, loff_t *offset)
 {
-	int ret = 0;
+	int ret;
 	int reg_len = (int)count;
 	unsigned long reg_offset = *offset;
 	char reg_buf[CYAPA_REG_MAP_SIZE];
@@ -777,7 +777,7 @@ static ssize_t cyapa_misc_read(struct file *file, char __user *usr_buf,
 static ssize_t cyapa_misc_write(struct file *file, const char __user *usr_buf,
 		size_t count, loff_t *offset)
 {
-	int ret = 0;
+	int ret;
 	unsigned long reg_offset = *offset;
 	char reg_buf[CYAPA_REG_MAP_SIZE];
 	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
@@ -867,9 +867,9 @@ int cyapa_get_trackpad_run_mode(struct cyapa_i2c *touch,
 static int cyapa_send_mode_switch_cmd(struct cyapa_i2c *touch,
 		struct cyapa_trackpad_run_mode *run_mode)
 {
-	int ret = 0;
+	int ret;
 	unsigned long flags;
-	unsigned short reset_offset = 0;
+	unsigned short reset_offset;
 
 	if (touch->pdata->gen == CYAPA_GEN3)
 		reset_offset = CYAPA_GEN3_OFFSET_SOFT_RESET;
@@ -976,7 +976,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa_i2c *touch,
 static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		unsigned long arg)
 {
-	int ret = 0;
+	int ret;
 	int ioctl_len;
 	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
 	struct cyapa_misc_ioctl_data ioctl_data;
@@ -1263,7 +1263,7 @@ static int cyapa_get_and_verify_firmware(struct cyapa_i2c *touch,
 	unsigned char *query_data, unsigned short offset, int length)
 {
 	int loop = 20;
-	int ret_read_size = 0;
+	int ret_read_size;
 	char unique_str[] = "CYTRA";
 
 	while (loop--) {
@@ -1362,7 +1362,7 @@ static int cyapa_get_query_data(struct cyapa_i2c *touch)
 	unsigned long flags;
 	char query_data[40];
 	int query_bytes;
-	int ret_read_size = 0;
+	int ret_read_size;
 	int i;
 
 	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
@@ -1724,8 +1724,8 @@ static int cyapa_handle_input_report_data(struct cyapa_i2c *touch,
 
 static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
 {
-	int ret_read_size = -1;
-	int read_length = 0;
+	int ret_read_size;
+	int read_length;
 	union cyapa_reg_data reg_data;
 	struct cyapa_reg_data_gen2 *gen2_data;
 	struct cyapa_reg_data_gen3 *gen3_data;
@@ -1856,13 +1856,13 @@ static irqreturn_t cyapa_i2c_irq(int irq, void *dev_id)
 static int cyapa_i2c_open(struct input_dev *input)
 {
 	struct cyapa_i2c *touch = input_get_drvdata(input);
-	int retval;
+	int ret;
 
 	if (0 == touch->open_count) {
-		retval = cyapa_i2c_reset_config(touch);
-		if (retval < 0) {
-			pr_err("reset i2c trackpad error code, %d.\n", retval);
-			return retval;
+		ret = cyapa_i2c_reset_config(touch);
+		if (ret < 0) {
+			pr_err("reset i2c trackpad error code, %d.\n", ret);
+			return ret;
 		}
 	}
 	touch->open_count++;
@@ -1925,12 +1925,12 @@ static struct cyapa_i2c *cyapa_i2c_touch_create(struct i2c_client *client)
 
 static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 {
-	int retval = 0;
+	int ret;
 	struct input_dev *input = NULL;
 
 	input = touch->input = input_allocate_device();
 	if (!touch->input) {
-		pr_err("Allocate memory for Input device failed, %d\n", retval);
+		pr_err("Allocate memory for Input device failed\n");
 		return -ENOMEM;
 	}
 
@@ -1961,12 +1961,13 @@ static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 	input_set_abs_params(input, ABS_MT_POSITION_X, 0, touch->max_abs_x, 0, 0);
 	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, touch->max_abs_y, 0, 0);
 	input_set_abs_params(input, ABS_MT_PRESSURE, 0, 255, 0, 0);
-	if (touch->pdata->gen > CYAPA_GEN2)
-		retval = input_mt_init_slots(input, MAX_MT_SLOTS);
-	else
+	if (touch->pdata->gen > CYAPA_GEN2) {
+		ret = input_mt_init_slots(input, MAX_MT_SLOTS);
+		if (ret < 0)
+			return ret;
+
+	} else
 		input_set_events_per_packet(input, 60);
-	if (retval < 0)
-		return retval;
 
 	__set_bit(EV_KEY, input->evbit);
 	__set_bit(BTN_TOUCH, input->keybit);
@@ -1978,13 +1979,13 @@ static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 	__set_bit(BTN_LEFT, input->keybit);
 
 	/* Register the device in input subsystem */
-	retval = input_register_device(touch->input);
-	if (retval) {
-		pr_err("Input device register failed, %d\n", retval);
+	ret = input_register_device(touch->input);
+	if (ret) {
+		pr_err("Input device register failed, %d\n", ret);
 		input_free_device(input);
 	}
 
-	return retval;
+	return ret;
 }
 
 static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch)
@@ -2048,7 +2049,7 @@ static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch)
 static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 			       const struct i2c_device_id *dev_id)
 {
-	int retval = 0;
+	int ret;
 	struct cyapa_i2c *touch;
 	unsigned long flags;
 
@@ -2063,9 +2064,9 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 
 	/* First, initialize pdata */
 	if (touch->pdata->init) {
-		retval = touch->pdata->init();
-		if (retval) {
-			pr_err("board initialize failed: %d\n", retval);
+		ret = touch->pdata->init();
+		if (ret) {
+			pr_err("board initialize failed: %d\n", ret);
 			goto err_mem_free;
 		}
 	}
@@ -2076,10 +2077,10 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 	 * so driver must send commands to make firmware
 	 * switch to operational mode.
 	 */
-	retval = cyapa_check_exit_bootloader(touch);
-	if (retval < 0)
+	ret = cyapa_check_exit_bootloader(touch);
+	if (ret < 0)
 		pr_warning("cyapa exit bootloader mode failed, %d,"
-			"continue.\n", retval);
+			"continue.\n", ret);
 
 	/*
 	 * set irq number for interrupt mode.
@@ -2104,14 +2105,14 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 	}
 
 	set_irq_type(touch->irq, IRQF_TRIGGER_FALLING);
-	retval = request_irq(touch->irq,
+	ret = request_irq(touch->irq,
 			cyapa_i2c_irq,
 			0,
 			CYAPA_I2C_NAME,
 			touch);
-	if (retval) {
+	if (ret) {
 		pr_warning("IRQ request failed: %d," \
-			"falling back to polling mode.\n", retval);
+			"falling back to polling mode.\n", ret);
 
 		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
 		touch->down_to_polling_mode = true;
@@ -2136,8 +2137,8 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 	cyapa_i2c_reconfig(touch, true);
 
 	/* create an input_dev instance for trackpad device. */
-	retval = cyapa_create_input_dev(touch);
-	if (retval) {
+	ret = cyapa_create_input_dev(touch);
+	if (ret) {
 		free_irq(touch->irq, touch);
 		pr_err("create input_dev instance failed.\n");
 		goto err_mem_free;
@@ -2145,9 +2146,9 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, touch);
 
-	retval = sysfs_create_group(&client->dev.kobj, &cyapa_sysfs_group);
-	if (retval)
-		pr_warn("error creating sysfs entries.\n");
+	ret = sysfs_create_group(&client->dev.kobj, &cyapa_sysfs_group);
+	if (ret)
+		pr_warning("error creating sysfs entries.\n");
 
 	return 0;
 
@@ -2163,7 +2164,7 @@ err_mem_free:
 	kfree(touch);
 	global_touch = NULL;
 
-	return retval;
+	return ret;
 }
 
 static int __devexit cyapa_i2c_remove(struct i2c_client *client)
@@ -2218,7 +2219,7 @@ static int cyapa_i2c_resume(struct device *dev)
 	}
 
 	cyapa_i2c_reschedule_work(touch,
-			msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
+		msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
 
 	return 0;
 }
