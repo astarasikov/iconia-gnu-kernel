@@ -98,6 +98,45 @@
 #define OP_DATA_LEFT_BTN   0x01
 #define OP_DATA_BTN_MASK (OP_DATA_MIDDLE_BTN | OP_DATA_RIGHT_BTN | OP_DATA_LEFT_BTN)
 
+/*
+ * bit 7: Busy
+ * bit 6 - 5: Reserved
+ * bit 4: Booloader running
+ * bit 3 - 1: Reserved
+ * bit 0: Checksum valid
+ */
+#define REG_BL_STATUS        0x01
+#define BL_STATUS_BUSY       0x80
+#define BL_STATUS_RUNNING    0x10
+#define BL_STATUS_DATA_VALID 0x08
+#define BL_STATUS_CSUM_VALID 0x01
+/*
+ * bit 7: Invalid
+ * bit 6: Invalid security key
+ * bit 5: Bootloading
+ * bit 4: Command checksum
+ * bit 3: Flash protection error
+ * bit 2: Flash checksum error
+ * bit 1 - 0: Reserved
+ */
+#define REG_BL_ERROR         0x02
+#define BL_ERROR_INVALID     0x80
+#define BL_ERROR_INVALID_KEY 0x40
+#define BL_ERROR_BOOTLOADING 0x20
+#define BL_ERROR_CMD_CSUM    0x10
+#define BL_ERROR_FLASH_PROT  0x08
+#define BL_ERROR_FLASH_CSUM  0x04
+
+#define REG_BL_KEY1 0x0D
+#define REG_BL_KEY2 0x0E
+#define REG_BL_KEY3 0x0F
+#define BL_KEY1 0xC0
+#define BL_KEY2 0xC1
+#define BL_KEY3 0xC2
+
+#define BL_HEAD_BYTES  16  /* bytes of bootloader head registers. */
+
+/* Macro for register map group offset. */
 #define CYAPA_REG_MAP_SIZE  256
 
 #define PRODUCT_ID_SIZE  16
@@ -241,6 +280,18 @@ struct cyapa_i2c {
 	/* synchronize accessing and updating file->f_pos. */
 	struct mutex misc_mutex;
 	int misc_open_count;
+	/*
+	 * 0 - interrupt is disable for I2C bus I/O.
+	 * 1 - interrupt is enabled for I2C bus I/O.
+	 */
+	int irq_enabled;
+	/*
+	 * indicate interrupt supported or not by trackpad device
+	 * when it's working under firmware bootloader mode.
+	 * 0 - interrupt is not supported.
+	 * 1 - interrupt is supported.
+	 */
+	int bl_irq_enable;
 	enum cyapa_work_mode fw_work_mode;
 
 	struct i2c_client	*client;
@@ -275,11 +326,19 @@ struct cyapa_i2c {
 	int physical_size_y;
 };
 
+static unsigned char bl_switch_active[] = {0x00, 0xFF, 0x38,
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+static unsigned char bl_switch_idle[] = {0x00, 0xFF, 0x3B,
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+static unsigned char bl_app_launch[] = {0x00, 0xFF, 0xA5,
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+
 /* global pointer to trackpad touch data structure. */
 static struct cyapa_i2c *global_touch;
 
 static int cyapa_get_query_data(struct cyapa_i2c *touch);
 static int cyapa_i2c_reconfig(struct cyapa_i2c *touch, int boot);
+static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch);
 static void cyapa_get_reg_offset(struct cyapa_i2c *touch);
 static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch);
 static int cyapa_create_input_dev(struct cyapa_i2c *touch);
@@ -473,6 +532,8 @@ static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
 {
 	int retval = 0;
 	u8 buf[CYAPA_REG_MAP_SIZE + 1];
+
+	cyapa_dump_data_block(__func__, reg, length, (void *)values);
 
 	retval = cyapa_wait_for_i2c_bus_ready(touch);
 	if (retval < 0)
@@ -678,6 +739,66 @@ static ssize_t cyapa_misc_write(struct file *file, const char __user *usr_buf,
 	return ret;
 }
 
+int cyapa_get_trackpad_run_mode(struct cyapa_i2c *touch,
+		struct cyapa_trackpad_run_mode *run_mode)
+{
+	int ret;
+	char status[BL_HEAD_BYTES];
+	int tries = 5;
+
+	/* reset to unknown status. */
+	run_mode->run_mode = CYAPA_BOOTLOADER_INVALID_STATE;
+	run_mode->bootloader_state = CYAPA_BOOTLOADER_INVALID_STATE;
+
+	do {
+		/* get trackpad status. */
+		ret = cyapa_i2c_reg_read_block(touch, 0, BL_HEAD_BYTES, status);
+		if ((ret != BL_HEAD_BYTES) && (tries > 0)) {
+			/*
+			 * maybe, firmware is switching its states,
+			 * wait for a moment.
+			 */
+			msleep(300);
+			continue;
+		}
+
+		/* verify run mode and status. */
+		if ((status[REG_OP_STATUS] == OP_STATUS_MASK) &&
+			(status[REG_OP_DATA1] & OP_DATA_VALID) &&
+			!((status[REG_BL_STATUS] & BL_STATUS_RUNNING) &&
+				(status[REG_BL_KEY1] == BL_KEY1) &&
+				(status[REG_BL_KEY2] == BL_KEY2) &&
+				(status[REG_BL_KEY3] == BL_KEY3))) {
+			run_mode->run_mode = CYAPA_OPERATIONAL_MODE;
+			return 0;
+		}
+
+		if ((status[REG_BL_STATUS] & BL_STATUS_BUSY) && (tries > 0)) {
+			msleep(300);
+			continue;
+		}
+
+		if (status[REG_BL_STATUS] & BL_STATUS_RUNNING) {
+			run_mode->run_mode = CYAPA_BOOTLOADER_MODE;
+			if (status[REG_BL_ERROR] & BL_ERROR_BOOTLOADING)
+				run_mode->bootloader_state =
+					CYAPA_BOOTLOADER_ACTIVE_STATE;
+			else
+				run_mode->bootloader_state =
+					CYAPA_BOOTLOADER_IDLE_STATE;
+
+			return 0;
+		}
+	} while (tries-- > 0);
+
+	if (tries < 0) {
+		/* firmware may be in an unknown state. */
+		pr_err("cyapa unknown trackpad firmware state.\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
 static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		unsigned long arg)
 {
@@ -1399,7 +1520,14 @@ static void cyapa_i2c_reschedule_work(struct cyapa_i2c *touch,
 	 * change the scheduled time that's why we have to cancel it first.
 	 */
 	__cancel_delayed_work(&touch->dwork);
-	schedule_delayed_work(&touch->dwork, delay);
+	if (touch->bl_irq_enable) {
+		/*
+		 * check bl_irq_enable value to avoid mistriggered interrupt
+		 * when switching from operational mode
+		 * to bootloader mode.
+		 */
+		schedule_delayed_work(&touch->dwork, delay);
+	}
 
 	spin_unlock_irqrestore(&touch->lock, flags);
 }
@@ -1461,13 +1589,13 @@ static struct cyapa_i2c *cyapa_i2c_touch_create(struct i2c_client *client)
 
 	touch->pdata = (struct cyapa_platform_data *)client->dev.platform_data;
 
-	touch->scan_ms = touch->pdata->report_rate
-		? (1000 / touch->pdata->report_rate) : 0;
+	touch->scan_ms = touch->pdata->report_rate ?
+		(1000 / touch->pdata->report_rate) : 0;
 	touch->open_count = 0;
 	touch->client = client;
 	touch->down_to_polling_mode = false;
 	global_touch = touch;
-	touch->fw_work_mode = CYAPA_STREAM_MODE;
+	touch->fw_work_mode = CYAPA_BOOTLOAD_MODE;
 	touch->misc_open_count = 0;
 	sema_init(&touch->reg_io_sem, 1);
 	spin_lock_init(&touch->miscdev_spinlock);
@@ -1543,11 +1671,70 @@ static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 	return retval;
 }
 
+static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch)
+{
+	int ret;
+	int tries = 15;
+	unsigned long flags;
+	struct cyapa_trackpad_run_mode run_mode;
+
+	do {
+		if ((cyapa_get_trackpad_run_mode(touch, &run_mode) < 0) &&
+			(tries > 0)) {
+			msleep(300);
+			continue;
+		}
+
+		if (run_mode.run_mode == CYAPA_OPERATIONAL_MODE) {
+			spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+			touch->fw_work_mode = CYAPA_STREAM_MODE;
+			spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+			break;
+		}
+
+		if ((run_mode.run_mode == CYAPA_BOOTLOADER_MODE) &&
+			(run_mode.bootloader_state ==
+				CYAPA_BOOTLOADER_ACTIVE_STATE)) {
+			/* bootloader active state. */
+			ret = cyapa_i2c_reg_write_block(touch, 0,
+				sizeof(bl_switch_idle), bl_switch_idle);
+
+			if (ret != sizeof(bl_switch_idle))
+				continue;
+
+			/* wait bootloader switching to idle state. */
+			msleep(300);
+			continue;
+		}
+
+		if ((run_mode.run_mode == CYAPA_BOOTLOADER_MODE) &&
+			(run_mode.bootloader_state ==
+				CYAPA_BOOTLOADER_IDLE_STATE)) {
+			/* send command switch to operational mode. */
+			ret = cyapa_i2c_reg_write_block(touch, 0,
+				sizeof(bl_app_launch), bl_app_launch);
+
+			if (ret != sizeof(bl_app_launch))
+				continue;
+
+			/* wait firmware ready. */
+			msleep(300);
+			continue;
+		}
+	} while (tries--);
+
+	if (tries < 0)
+		return -EIO;
+
+	return 0;
+}
+
 static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 			       const struct i2c_device_id *dev_id)
 {
 	int retval = 0;
 	struct cyapa_i2c *touch;
+	unsigned long flags;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		return -EIO;
@@ -1566,6 +1753,17 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 			goto err_mem_free;
 		}
 	}
+
+	/*
+	 * when firmware waiting in bootloader mode,
+	 * the trackpad is unusable.
+	 * so driver must send commands to make firmware
+	 * switch to operational mode.
+	 */
+	retval = cyapa_check_exit_bootloader(touch);
+	if (retval < 0)
+		pr_warning("cyapa exit bootloader mode failed, %d,"
+			"continue.\n", retval);
 
 	/*
 	 * set irq number for interrupt mode.
@@ -1599,7 +1797,17 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 		pr_warning("IRQ request failed: %d," \
 			"falling back to polling mode.\n", retval);
 
+		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
 		touch->down_to_polling_mode = true;
+		touch->bl_irq_enable = 0;
+		touch->irq_enabled = 0;
+		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	} else {
+		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+		touch->down_to_polling_mode = false;
+		touch->bl_irq_enable = 1;
+		touch->irq_enabled = 1;
+		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 	}
 
 	/*
