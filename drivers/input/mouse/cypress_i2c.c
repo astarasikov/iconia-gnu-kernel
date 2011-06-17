@@ -2179,8 +2179,10 @@ static int __devexit cyapa_i2c_remove(struct i2c_client *client)
 	return 0;
 }
 
-static int cyapa_i2c_suspend(struct i2c_client *client, pm_message_t mesg)
+#ifdef CONFIG_PM
+static int cyapa_i2c_suspend(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
 	struct cyapa_i2c *touch = i2c_get_clientdata(client);
 
 	cancel_delayed_work_sync(&touch->dwork);
@@ -2188,9 +2190,10 @@ static int cyapa_i2c_suspend(struct i2c_client *client, pm_message_t mesg)
 	return 0;
 }
 
-static int cyapa_i2c_resume(struct i2c_client *client)
+static int cyapa_i2c_resume(struct device *dev)
 {
 	int ret;
+	struct i2c_client *client = to_i2c_client(dev);
 	struct cyapa_i2c *touch = i2c_get_clientdata(client);
 
 	if (touch->pdata->wakeup) {
@@ -2213,6 +2216,12 @@ static int cyapa_i2c_resume(struct i2c_client *client)
 	return 0;
 }
 
+static const struct dev_pm_ops cyapa_pm_ops = {
+	.suspend = cyapa_i2c_suspend,
+	.resume = cyapa_i2c_resume,
+};
+#endif
+
 static const struct i2c_device_id cypress_i2c_id_table[] = {
 	{ CYAPA_I2C_NAME, 0 },
 	{ },
@@ -2223,14 +2232,13 @@ static struct i2c_driver cypress_i2c_driver = {
 	.driver = {
 		.name = CYAPA_I2C_NAME,
 		.owner = THIS_MODULE,
+#ifdef CONFIG_PM
+		.pm = &cyapa_pm_ops,
+#endif
 	},
 
 	.probe = cyapa_i2c_probe,
 	.remove = __devexit_p(cyapa_i2c_remove),
-#ifdef CONFIG_PM
-	.suspend = cyapa_i2c_suspend,
-	.resume = cyapa_i2c_resume,
-#endif
 	.id_table = cypress_i2c_id_table,
 };
 
