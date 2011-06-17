@@ -2173,6 +2173,8 @@ static int __devexit cyapa_i2c_remove(struct i2c_client *client)
 
 	sysfs_remove_group(&client->dev.kobj, &cyapa_sysfs_group);
 
+	cancel_delayed_work_sync(&touch->dwork);
+
 	if (touch->down_to_polling_mode == false)
 		free_irq(client->irq, touch);
 
