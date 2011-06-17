@@ -42,64 +42,6 @@
 #define CYAPA_MINOR_VER		9
 #define CYAPA_REVISION_VER	8
 
-/* macro definication for gestures. */
-/* --------------------------------------------------------------- */
-/* |-          bit 7 - 5         -|-           bit 4 -0         -| */
-/* |------------------------------|----------------------------- | */
-/* |-        finger number       -|-        gesture id          -| */
-/* --------------------------------------------------------------- */
-#define GESTURE_FINGERS(x) (((x) << 5) & 0xE0)
-#define GESTURE_INDEX(x) ((x) & 0x1F)
-#define GESTURE_ID_CODE(finger, index) \
-	(GESTURE_FINGERS(finger) | GESTURE_INDEX(index))
-#define GESTURE_DECODE_FINGERS(x)	(((x) >> 5) & 0x07)
-#define GESTURE_DECODE_INDEX(x)	((x) & 0x1F)
-
-#define GESTURE_NONE	0x00
-/* 0-finger gestures. */
-#define GESTURE_PALM_REJECTION	GESTURE_ID_CODE(0, 1)
-/* 1-finger gestures. */
-#define GESTURE_SINGLE_TAP	GESTURE_ID_CODE(1, 0)
-#define GESTURE_DOUBLE_TAP	GESTURE_ID_CODE(1, 1)
-/*
- * one finger click and hold for more than defined time,
- * then to do something.
-*/
-#define GESTURE_TAP_AND_HOLD	GESTURE_ID_CODE(1, 2)
-#define GESTURE_EDGE_MOTION	GESTURE_ID_CODE(1, 3)
-#define GESTURE_FLICK		GESTURE_ID_CODE(1, 4)
-/* GESTURE_DRAG : double click and hold, then move for drag.*/
-#define GESTURE_DRAG		GESTURE_ID_CODE(1, 5)
-/* Depending on PSOC user module, it will give four different ID when scroll.*/
-#define GESTURE_SCROLL_UP	GESTURE_ID_CODE(1, 6)
-#define GESTURE_SCROLL_DOWN	GESTURE_ID_CODE(1, 7)
-#define GESTURE_SCROLL_LEFT	GESTURE_ID_CODE(1, 8)
-#define GESTURE_SCROLL_RIGHT	GESTURE_ID_CODE(1, 9)
-
-/* 2-finger gestures */
-#define GESTURE_2F_ZOOM_IN	GESTURE_ID_CODE(2, 0)
-#define GESTURE_2F_ZOOM_OUT	GESTURE_ID_CODE(2, 1)
-#define GESTURE_2F_SCROLL_UP	GESTURE_ID_CODE(2, 2)
-#define GESTURE_2F_SCROLL_DOWN	GESTURE_ID_CODE(2, 3)
-#define GESTURE_2F_SCROLL_LEFT	GESTURE_ID_CODE(2, 4)
-#define GESTURE_2F_SCROLL_RIGHT	GESTURE_ID_CODE(2, 5)
-#define GESTURE_2F_ROTATE	GESTURE_ID_CODE(2, 6)
-#define GESTURE_2F_PINCH	GESTURE_ID_CODE(2, 7)
-/* Activates the Right Click action */
-#define GESTURE_2F_TAP		GESTURE_ID_CODE(2, 8)
-/* Single-Finger click and hold while a second finger is moving for dragging. */
-#define GESTURE_2F_DRAG		GESTURE_ID_CODE(2, 9)
-#define GESTURE_2F_FLICK	GESTURE_ID_CODE(2, 10)
-
-/* 3-finger gestures */
-#define GESTURE_3F_FLICK	GESTURE_ID_CODE(3, 0)
-
-/* 4-finger gestures */
-#define GESTURE_4F_FLICK	GESTURE_ID_CODE(4, 0)
-
-/* 5-finger gestures */
-#define GESTURE_5F_FLICK	GESTURE_ID_CODE(5, 0)
-
 #define CYAPA_MT_MAX_TOUCH  255
 #define CYAPA_MT_MAX_WIDTH  255
 
@@ -120,8 +62,6 @@
 
 /* report data start reg offset address. */
 #define DATA_REG_START_OFFSET  0x0000
-/* relative data report data size. */
-#define CYAPA_REL_REG_DATA_SIZE  5
 
 /* Device Sleep Modes */
 #define DEV_POWER_REG  0x0009
@@ -152,27 +92,6 @@ enum cyapa_devicestate {
 
 #define CYAPA_MAX_TOUCHES (MAX_FINGERS)
 #define CYAPA_ONE_TIME_GESTURES  (1)
-struct cyapa_touch_gen1 {
-	u8 rel_xy;
-	u8 rel_x;
-	u8 rel_y;
-};
-
-struct cyapa_reg_data_gen1 {
-	u8 tap_motion;
-	s8 deltax;
-	s8 deltay;
-	u8 reserved1;
-	u8 reserved2;
-
-	struct cyapa_touch_gen1 touch1;
-	u8 touch_fingers;
-	u8 feature_config;
-	u8 avg_pressure;  /* average of all touched fingers. */
-	u8 gesture_status;
-	struct cyapa_touch_gen1 touches[CYAPA_MAX_TOUCHES-1];
-};
-
 struct cyapa_touch_gen2 {
 	u8 xy;
 	u8 x;
@@ -207,7 +126,6 @@ struct cyapa_reg_data_gen2 {
 };
 
 union cyapa_reg_data {
-	struct cyapa_reg_data_gen1 gen1_data;
 	struct cyapa_reg_data_gen2 gen2_data;
 };
 
@@ -222,7 +140,6 @@ struct cyapa_report_data {
 	int touch_fingers;
 	struct cyapa_touch touches[CYAPA_MAX_TOUCHES];
 
-	/* in gen1 and gen2, only 1 gesture will be reported at a time. */
 	int gesture_count;
 	struct cyapa_gesture gestures[CYAPA_ONE_TIME_GESTURES];
 };
@@ -241,7 +158,7 @@ struct cyapa_i2c {
 	struct i2c_client	*client;
 	struct input_dev	*input;
 	struct delayed_work dwork;
-	/* synchronize accessing dwork data structure. */
+	/* synchronize access to dwork. */
 	spinlock_t lock;
 	int no_data_count;
 	int scan_ms;
@@ -254,8 +171,6 @@ struct cyapa_i2c {
 	unsigned short control_base_offset;
 	unsigned short command_base_offset;
 	unsigned short query_base_offset;
-
-	int prev_touch_fingers;
 
 	/* read from query data region. */
 	char product_id[16];
@@ -363,33 +278,9 @@ static int cyapa_wait_for_i2c_bus_ready(struct cyapa_i2c *touch)
 }
 
 /*
- * cyapa_i2c_reg_read_byt - read one byte from i2c register map.
- * @touch - private data structure of the trackpad driver.
- * @reg - the offset value of the i2c register map from offset 0;
- *
- * This function returns negative errno, else a data byte
- * received from the device.
- */
-static s32 cyapa_i2c_reg_read_byte(struct cyapa_i2c *touch, u16 reg)
-{
-	int ret = 0;
-
-	ret = cyapa_wait_for_i2c_bus_ready(touch);
-	if (ret < 0)
-		return ret;
-
-	ret = i2c_smbus_read_byte_data(touch->client, (u8)reg);
-
-	up(&touch->reg_io_sem);
-	cyapa_enable_irq(touch);
-
-	return ret;
-}
-
-/*
  * cyapa_i2c_reg_write_byte - write one byte to i2c register map.
  * @touch - private data structure of the trackpad driver.
- * @reg - the offset value of the i2c register map from offset 0;
+ * @reg - the offset value of the i2c register map from offset 0.
  * @val - the value should be written to the register map.
  *
  * This function returns negative errno, else zero on success.
@@ -414,7 +305,7 @@ static s32 cyapa_i2c_reg_write_byte(struct cyapa_i2c *touch, u16 reg, u8 val)
  * cyapa_i2c_reg_read_block - read a block data from trackpad
  *      i2c register map.
  * @touch - private data structure of the trackpad driver.
- * @reg - the offset value of the i2c register map from offset 0;
+ * @reg - the offset value of the i2c register map from offset 0.
  * @length - length of the block to be read in bytes.
  * @values - pointer to the buffer that used to store register block
  *           valuse read.
@@ -469,7 +360,7 @@ error:
  * cyapa_i2c_reg_write_block - write a block data to trackpad
  *      i2c register map.
  * @touch - private data structure of the trackpad driver.
- * @reg - the offset value of the i2c register map from offset 0;
+ * @reg - the offset value of the i2c register map from offset 0.
  * @length - length of the block to be written in bytes.
  * @values - pointer to the block data buffur that will be written.
  *
@@ -894,56 +785,25 @@ static void cyapa_get_query_data(struct cyapa_i2c *touch)
 
 static int cyapa_i2c_reconfig(struct cyapa_i2c *touch)
 {
-	int regval = 0;
-	int retval = 0;
+	/* trackpad gen2 firmware. default is interrupt mode. */
+	cyapa_get_reg_offset(touch);
+	cyapa_get_query_data(touch);
 
-	if (touch->pdata->gen == CYAPA_GEN1) {
-		/* trackpad gen1 firmware. */
-		regval = cyapa_i2c_reg_read_byte(touch, DEV_POWER_REG);
+	pr_info("Cypress Trackpad Information:\n");
+	pr_info("\t\t\tProduct ID:  %s\n",
+		touch->product_id);
+	pr_info("\t\t\tFirmware Version:  %d.%d\n",
+		touch->fw_maj_ver, touch->fw_min_ver);
+	pr_info("\t\t\tHardware Version:  %d.%d\n",
+		touch->hw_maj_ver, touch->hw_min_ver);
+	pr_info("\t\t\tDriver Version:  %d.%d.%d\n",
+		CYAPA_MAJOR_VER, CYAPA_MINOR_VER, CYAPA_REVISION_VER);
+	pr_info("\t\t\tMax ABS X,Y:   %d,%d\n",
+		touch->max_abs_x, touch->max_abs_y);
+	pr_info("\t\t\tPhysical Size X,Y:   %d,%d\n",
+		touch->physical_size_x, touch->physical_size_y);
 
-		if ((touch->down_to_polling_mode == true)
-			&& ((regval & INTERRUPT_MODE_MASK)
-				== INTERRUPT_MODE_MASK)) {
-			/* reset trackpad to polling mode. */
-			regval &= (~INTERRUPT_MODE_MASK);
-			retval = cyapa_i2c_reg_write_byte(touch, DEV_POWER_REG,
-						(u8)(regval & 0xff));
-			/*
-			 * Whether reset interrupt mode bit success or failed.
-			 * because platform doesn't support interrupt mode,
-			 * so driver will just use polling mode.
-			 */
-		} else if ((touch->down_to_polling_mode == false)
-			&& ((regval & INTERRUPT_MODE_MASK)
-				!= INTERRUPT_MODE_MASK)) {
-			/* reset trackpad to interrupt mode. */
-			regval |= INTERRUPT_MODE_MASK;
-			retval = cyapa_i2c_reg_write_byte(touch, DEV_POWER_REG,
-						(u8)(regval & 0xff));
-			if (retval)
-				touch->down_to_polling_mode = true;
-		}
-	} else {
-		/* trackpad gen2 firmware. default is interrupt mode. */
-		cyapa_get_reg_offset(touch);
-		cyapa_get_query_data(touch);
-
-		pr_info("Cypress Trackpad Information:\n");
-		pr_info("\t\t\tProduction ID:  %s\n",
-			touch->product_id);
-		pr_info("\t\t\tFirmware version:  %d.%d\n",
-			touch->fw_maj_ver, touch->fw_min_ver);
-		pr_info("\t\t\tHardware version:  %d.%d\n",
-			touch->hw_maj_ver, touch->hw_min_ver);
-		pr_info("\t\t\tDriver Version:  %d.%d.%d\n",
-			CYAPA_MAJOR_VER, CYAPA_MINOR_VER, CYAPA_REVISION_VER);
-		pr_info("\t\t\tMax ABS X,Y:   %d,%d\n",
-			touch->max_abs_x, touch->max_abs_y);
-		pr_info("\t\t\tPhysical Size X,Y:   %d,%d\n",
-			touch->physical_size_x, touch->physical_size_y);
-	}
-
-	return retval;
+	return 0;
 }
 
 static int cyapa_i2c_reset_config(struct cyapa_i2c *touch)
@@ -954,21 +814,17 @@ static int cyapa_i2c_reset_config(struct cyapa_i2c *touch)
 static int cyapa_verify_data_device(struct cyapa_i2c *touch,
 				union cyapa_reg_data *reg_data)
 {
-	struct cyapa_reg_data_gen1 *data_gen1 = NULL;
 	struct cyapa_reg_data_gen2 *data_gen2 = NULL;
 
-	if (touch->pdata->gen == CYAPA_GEN1) {
-		data_gen1 = &reg_data->gen1_data;
-		if ((data_gen1->tap_motion & VALID_DATA_BIT_MASK) != VALID_DATA_BIT_MASK)
-			return -EINVAL;
-	} else {
-		data_gen2 = &reg_data->gen2_data;
-		if ((data_gen2->device_status & INT_SRC_BIT_MASK) != INT_SRC_BIT_MASK)
-			return -EINVAL;
+	if (touch->pdata->gen != CYAPA_GEN2)
+		return -EINVAL;
 
-		if ((data_gen2->device_status & DEV_STATUS_MASK) != CYAPA_DEV_NORMAL)
-			return -EBUSY;
-	}
+	data_gen2 = &reg_data->gen2_data;
+	if ((data_gen2->device_status & INT_SRC_BIT_MASK) != INT_SRC_BIT_MASK)
+		return -EINVAL;
+
+	if ((data_gen2->device_status & DEV_STATUS_MASK) != CYAPA_DEV_NORMAL)
+		return -EBUSY;
 
 	return 0;
 }
@@ -979,61 +835,6 @@ static inline void cyapa_report_fingers(struct input_dev *input, int fingers)
 	input_report_key(input, BTN_TOOL_DOUBLETAP, (fingers == 2));
 	input_report_key(input, BTN_TOOL_TRIPLETAP, (fingers == 3));
 	input_report_key(input, BTN_TOOL_QUADTAP, (fingers > 3));
-}
-
-static void cyapa_parse_gen1_data(struct cyapa_i2c *touch,
-		struct cyapa_reg_data_gen1 *reg_data,
-		struct cyapa_report_data *report_data)
-{
-	int i;
-	int index = 0;
-
-	/* parse gestures and button data */
-	report_data->button = reg_data->tap_motion & 0x01;
-
-	/* get relative delta X and delta Y. */
-	report_data->rel_deltaX = reg_data->deltax;
-	/* The Y directory of trackpad is the oppsite of Screen. */
-	report_data->rel_deltaY = -reg_data->deltay;
-
-	if (reg_data->tap_motion & 0x02) {
-		report_data->gestures[index++].id
-			= GESTURE_SINGLE_TAP;
-	}
-
-	if (reg_data->tap_motion & 0x04) {
-		report_data->gestures[index++].id
-			= GESTURE_DOUBLE_TAP;
-	}
-
-	report_data->gesture_count = index;
-
-	/* pase fingers touch data */
-	report_data->touch_fingers
-		= ((reg_data->touch_fingers > CYAPA_MAX_TOUCHES) ?
-			(CYAPA_MAX_TOUCHES) : (reg_data->touch_fingers));
-	report_data->avg_pressure = reg_data->avg_pressure;
-	report_data->touches[0].x =
-		((reg_data->touch1.rel_xy & 0xF0) << 4)
-			| reg_data->touch1.rel_x;
-	report_data->touches[0].y =
-		((reg_data->touch1.rel_xy & 0x0F) << 8)
-			| reg_data->touch1.rel_y;
-	report_data->touches[0].pressure = CYAPA_DEFAULT_TOUCH_PRESSURE;
-
-	for (i = 0; i < (CYAPA_MAX_TOUCHES-1); i++) {
-		report_data->touches[i+1].x =
-				((reg_data->touches[i].rel_xy & 0xF0) << 4)
-				| reg_data->touches[i].rel_x;
-		report_data->touches[i+1].y =
-				((reg_data->touches[i].rel_xy & 0x0F) << 8)
-				| reg_data->touches[i].rel_y;
-		report_data->touches[i+1].pressure =
-			CYAPA_DEFAULT_TOUCH_PRESSURE;
-	}
-
-	/* DEBUG: dump parsed report data */
-	cyapa_dump_report_data(__func__, report_data);
 }
 
 static void cyapa_parse_gen2_data(struct cyapa_i2c *touch,
@@ -1128,20 +929,12 @@ static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
 	int ret_read_size = -1;
 	int read_length = 0;
 	union cyapa_reg_data reg_data;
-	struct cyapa_reg_data_gen1 *gen1_data;
 	struct cyapa_reg_data_gen2 *gen2_data;
 	struct cyapa_report_data report_data;
 
-	memset(&reg_data, 0, sizeof(union cyapa_reg_data));
-
 	/* read register data from trackpad. */
-	gen1_data = &reg_data.gen1_data;
 	gen2_data = &reg_data.gen2_data;
-	read_length = CYAPA_REL_REG_DATA_SIZE;
-	if (touch->pdata->gen == CYAPA_GEN1)
-		read_length = (int)sizeof(struct cyapa_reg_data_gen1);
-	else
-		read_length = (int)sizeof(struct cyapa_reg_data_gen2);
+	read_length = sizeof(struct cyapa_reg_data_gen2);
 
 	ret_read_size = cyapa_i2c_reg_read_block(touch,
 					DATA_REG_START_OFFSET,
@@ -1154,11 +947,7 @@ static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
 		return 0;
 
 	/* process and parse raw data read from Trackpad. */
-	memset(&report_data, 0, sizeof(struct cyapa_report_data));
-	if (touch->pdata->gen == CYAPA_GEN1)
-		cyapa_parse_gen1_data(touch, gen1_data, &report_data);
-	else
-		cyapa_parse_gen2_data(touch, gen2_data, &report_data);
+	cyapa_parse_gen2_data(touch, gen2_data, &report_data);
 
 	/* report data to input subsystem. */
 	return cyapa_handle_input_report_data(touch, &report_data);
