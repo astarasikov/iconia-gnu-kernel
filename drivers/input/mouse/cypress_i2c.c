@@ -1144,11 +1144,99 @@ static void cyapa_update_firmware_dispatch(struct cyapa_i2c *touch)
 }
 
 /*
- ***************************************************************
- * Cypress i2c trackpad input device driver.
- ***************************************************************
+ *******************************************************************
+ * below routines export interfaces to sysfs file system.
+ * so user can get firmware/driver/hardware information using cat command.
+ * e.g.: use below command to get firmware version
+ *      cat /sys/devices/platfrom/tegra-i2c.0/i2c-0/0-0067/firmware_version
+ *******************************************************************
  */
+ssize_t cyapa_show_fm_ver(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct cyapa_i2c *touch = i2c_get_clientdata(client);
 
+	ret = cyapa_get_query_data(touch);
+	if (ret < 0)
+		return ret;
+
+	return sprintf(buf, "%d.%d\n", touch->fw_maj_ver, touch->fw_min_ver);
+}
+
+ssize_t cyapa_show_driver_ver(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d.%d.%d\n",
+		CYAPA_MAJOR_VER, CYAPA_MINOR_VER, CYAPA_REVISION_VER);
+}
+
+ssize_t cyapa_show_hw_ver(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+
+	ret = cyapa_get_query_data(touch);
+	if (ret < 0)
+		return ret;
+
+	return sprintf(buf, "%d.%d\n", touch->hw_maj_ver, touch->hw_min_ver);
+}
+
+ssize_t cyapa_show_product_id(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int ret;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+
+	ret = cyapa_get_query_data(touch);
+	if (ret < 0)
+		return ret;
+
+	return sprintf(buf, "%s\n", touch->product_id);
+}
+
+ssize_t cyapa_show_protocol_version(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+
+	if (cyapa_determine_firmware_gen(touch) < 0)
+		return -EINVAL;
+	cyapa_get_reg_offset(touch);
+
+	return sprintf(buf, "%d\n", touch->pdata->gen);
+}
+
+static DEVICE_ATTR(firmware_version, S_IRUGO, cyapa_show_fm_ver, NULL);
+static DEVICE_ATTR(driver_version, S_IRUGO, cyapa_show_driver_ver, NULL);
+static DEVICE_ATTR(hardware_version, S_IRUGO, cyapa_show_hw_ver, NULL);
+static DEVICE_ATTR(product_id, S_IRUGO, cyapa_show_product_id, NULL);
+static DEVICE_ATTR(protocol_version, S_IRUGO, cyapa_show_protocol_version, NULL);
+
+static struct attribute *cyapa_sysfs_entries[] = {
+	&dev_attr_firmware_version.attr,
+	&dev_attr_driver_version.attr,
+	&dev_attr_hardware_version.attr,
+	&dev_attr_product_id.attr,
+	&dev_attr_protocol_version.attr,
+	NULL,
+};
+
+static struct attribute_group cyapa_sysfs_group = {
+	.attrs = cyapa_sysfs_entries,
+};
+
+/*
+ **************************************************************
+ * Cypress i2c trackpad input device driver.
+ **************************************************************
+*/
 static void cyapa_get_reg_offset(struct cyapa_i2c *touch)
 {
 	if (touch->pdata->gen == CYAPA_GEN2) {
@@ -2050,6 +2138,10 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, touch);
 
+	retval = sysfs_create_group(&client->dev.kobj, &cyapa_sysfs_group);
+	if (retval)
+		pr_warn("error creating sysfs entries.\n");
+
 	return 0;
 
 err_mem_free:
@@ -2070,6 +2162,8 @@ err_mem_free:
 static int __devexit cyapa_i2c_remove(struct i2c_client *client)
 {
 	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+
+	sysfs_remove_group(&client->dev.kobj, &cyapa_sysfs_group);
 
 	if (touch->down_to_polling_mode == false)
 		free_irq(client->irq, touch);
