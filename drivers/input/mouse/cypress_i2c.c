@@ -26,6 +26,7 @@
 #include <linux/uaccess.h>
 #include <linux/miscdevice.h>
 #include <linux/fs.h>
+#include <linux/input/mt.h>
 
 #include <linux/cyapa.h>
 
@@ -49,6 +50,14 @@
 #define CYAPA_TOOL_WIDTH 50
 #define CYAPA_DEFAULT_TOUCH_PRESSURE 50
 #define CYAPA_MT_TOUCH_MAJOR  50
+/*
+ * In the special case, where a finger is removed and makes contact
+ * between two packets, there will be two touches for that finger,
+ * with different tracking_ids.
+ * Thus, the maximum number of slots must be twice the maximum number
+ * of fingers.
+ */
+#define MAX_MT_SLOTS  (2 * MAX_FINGERS)
 
 /* When in IRQ mode read the device every THREAD_IRQ_SLEEP_SECS */
 #define CYAPA_THREAD_IRQ_SLEEP_SECS	2
@@ -63,16 +72,31 @@
 /* report data start reg offset address. */
 #define DATA_REG_START_OFFSET  0x0000
 
-/* Device Sleep Modes */
-#define DEV_POWER_REG  0x0009
-#define INTERRUPT_MODE_MASK  0x01
-#define PWR_LEVEL_MASK  0x06
-#define PWR_BITS_SHIFT 1
-#define GET_PWR_LEVEL(reg) (((reg)&PWR_LEVEL_MASK)>>PWR_BITS_SHIFT)
+/*
+ * bit 7: Valid interrupt source
+ * bit 6 - 4: Reserved
+ * bit 3 - 2: Power status
+ * bit 1 - 0: Device status
+ */
+#define REG_OP_STATUS     0x00
+#define OP_STATUS_SRC     0x80
+#define OP_STATUS_POWER   0x0C
+#define OP_STATUS_DEV     0x03
+#define OP_STATUS_MASK (OP_STATUS_SRC | OP_STATUS_POWER | OP_STATUS_DEV)
 
-#define INT_SRC_BIT_MASK 0x80
-#define VALID_DATA_BIT_MASK 0x08
-#define DEV_STATUS_MASK 0x03
+/*
+ * bit 7 - 4: Number of touched finger
+ * bit 3: Valid data
+ * bit 2: Middle Physical Button
+ * bit 1: Right Physical Button
+ * bit 0: Left physical Button
+ */
+#define REG_OP_DATA1       0x01
+#define OP_DATA_VALID      0x08
+#define OP_DATA_MIDDLE_BTN 0x04
+#define OP_DATA_RIGHT_BTN  0x02
+#define OP_DATA_LEFT_BTN   0x01
+#define OP_DATA_BTN_MASK (OP_DATA_MIDDLE_BTN | OP_DATA_RIGHT_BTN | OP_DATA_LEFT_BTN)
 
 #define CYAPA_REG_MAP_SIZE  256
 
@@ -103,6 +127,7 @@ struct cyapa_touch {
 	int x;
 	int y;
 	int pressure;
+	int tracking_id;
 };
 
 struct cyapa_gesture {
@@ -125,8 +150,46 @@ struct cyapa_reg_data_gen2 {
 	struct cyapa_gesture gesture[CYAPA_ONE_TIME_GESTURES];
 };
 
+struct cyapa_touch_gen3 {
+	/*
+	 * high bits or x/y position value
+	 * bit 7 - 4: high 4 bits of x position value
+	 * bit 3 - 0: high 4 bits of y position value
+	 */
+	u8 xy;
+	u8 x;  /* low 8 bits of x position value. */
+	u8 y;  /* low 8 bits of y position value. */
+	u8 pressure;
+	/*
+	 * The range of tracking_id is 0 - 15,
+	 * it is incremented every time a finger makes contact
+	 * with the trackpad.
+	 */
+	u8 tracking_id;
+};
+
+struct cyapa_reg_data_gen3 {
+	/*
+	 * bit 0 - 1: device status
+	 * bit 3 - 2: power mode
+	 * bit 6 - 4: reserved
+	 * bit 7: interrupt valid bit
+	 */
+	u8 device_status;
+	/*
+	 * bit 7 - 4: number of fingers currently touching pad
+	 * bit 3: valid data check bit
+	 * bit 2: middle mechanism button state if exists
+	 * bit 1: right mechanism button state if exists
+	 * bit 0: left mechanism button state if exists
+	 */
+	u8 finger_btn;
+	struct cyapa_touch_gen3 touches[CYAPA_MAX_TOUCHES];
+};
+
 union cyapa_reg_data {
 	struct cyapa_reg_data_gen2 gen2_data;
+	struct cyapa_reg_data_gen3 gen3_data;
 };
 
 struct cyapa_report_data {
@@ -142,6 +205,13 @@ struct cyapa_report_data {
 
 	int gesture_count;
 	struct cyapa_gesture gestures[CYAPA_ONE_TIME_GESTURES];
+};
+
+
+struct cyapa_mt_slot {
+	struct cyapa_touch contact;
+	bool touch_state;  /* true: is touched, false: not touched. */
+	bool slot_updated;
 };
 
 /* The main device structure */
@@ -171,6 +241,8 @@ struct cyapa_i2c {
 	unsigned short control_base_offset;
 	unsigned short command_base_offset;
 	unsigned short query_base_offset;
+
+	struct cyapa_mt_slot mt_slots[MAX_MT_SLOTS];
 
 	/* read from query data region. */
 	char product_id[16];
@@ -229,6 +301,9 @@ void cyapa_dump_report_data(const char *func,
 			func, i, report_data->touches[i].y);
 		pr_info("%s: report_data.touches[%d].pressure = %d\n",
 			func, i, report_data->touches[i].pressure);
+		if (report_data->touches[i].tracking_id != -1)
+			pr_info("%s: report_data.touches[%d].tracking_id = %d\n",
+				func, i, report_data->touches[i].tracking_id);
 	}
 	pr_info("%s: report_data.gesture_count = %d\n",
 			func, report_data->gesture_count);
@@ -814,16 +889,19 @@ static int cyapa_i2c_reset_config(struct cyapa_i2c *touch)
 static int cyapa_verify_data_device(struct cyapa_i2c *touch,
 				union cyapa_reg_data *reg_data)
 {
-	struct cyapa_reg_data_gen2 *data_gen2 = NULL;
+	unsigned char device_status;
+	unsigned char flag;
+	unsigned char *reg = (unsigned char *)reg_data;
 
-	if (touch->pdata->gen != CYAPA_GEN2)
+	device_status = reg[REG_OP_STATUS];
+	flag = reg[REG_OP_DATA1];
+	if ((device_status & OP_STATUS_SRC) != OP_STATUS_SRC)
 		return -EINVAL;
 
-	data_gen2 = &reg_data->gen2_data;
-	if ((data_gen2->device_status & INT_SRC_BIT_MASK) != INT_SRC_BIT_MASK)
+	if ((flag & OP_DATA_VALID) != OP_DATA_VALID)
 		return -EINVAL;
 
-	if ((data_gen2->device_status & DEV_STATUS_MASK) != CYAPA_DEV_NORMAL)
+	if ((device_status & OP_STATUS_DEV) != CYAPA_DEV_NORMAL)
 		return -EBUSY;
 
 	return 0;
@@ -844,7 +922,7 @@ static void cyapa_parse_gen2_data(struct cyapa_i2c *touch,
 	int i;
 
 	/* bit2-middle button; bit1-right button; bit0-left button. */
-	report_data->button = reg_data->relative_flags & 0x07;
+	report_data->button = reg_data->relative_flags & OP_DATA_BTN_MASK;
 
 	/* get relative delta X and delta Y. */
 	report_data->rel_deltaX = reg_data->deltax;
@@ -853,9 +931,8 @@ static void cyapa_parse_gen2_data(struct cyapa_i2c *touch,
 
 	/* copy fingers touch data */
 	report_data->avg_pressure = reg_data->avg_pressure;
-	report_data->touch_fingers
-		= ((reg_data->touch_fingers > CYAPA_MAX_TOUCHES) ?
-			(CYAPA_MAX_TOUCHES) : (reg_data->touch_fingers));
+	report_data->touch_fingers =
+		min(CYAPA_MAX_TOUCHES, (int)reg_data->touch_fingers);
 	for (i = 0; i < report_data->touch_fingers; i++) {
 		report_data->touches[i].x =
 			((reg_data->touches[i].xy & 0xF0) << 4)
@@ -864,6 +941,7 @@ static void cyapa_parse_gen2_data(struct cyapa_i2c *touch,
 			((reg_data->touches[i].xy & 0x0F) << 8)
 				| reg_data->touches[i].y;
 		report_data->touches[i].pressure = reg_data->touches[i].pressure;
+		report_data->touches[i].tracking_id = -1;
 	}
 
 	/* parse gestures */
@@ -880,7 +958,111 @@ static void cyapa_parse_gen2_data(struct cyapa_i2c *touch,
 	cyapa_dump_report_data(__func__, report_data);
 }
 
-static int cyapa_handle_input_report_data(struct cyapa_i2c *touch,
+static void cyapa_parse_gen3_data(struct cyapa_i2c *touch,
+		struct cyapa_reg_data_gen3 *reg_data,
+		struct cyapa_report_data *report_data)
+{
+	int i;
+	int fingers;
+
+	/* only report left button. */
+	report_data->button = reg_data->finger_btn & OP_DATA_BTN_MASK;
+	report_data->avg_pressure = 0;
+	/* parse number of touching fingers. */
+	fingers = (reg_data->finger_btn >> 4) & 0x0F;
+	report_data->touch_fingers = min(CYAPA_MAX_TOUCHES, fingers);
+
+	/* parse data for each touched finger. */
+	for (i = 0; i < report_data->touch_fingers; i++) {
+		report_data->touches[i].x =
+			((reg_data->touches[i].xy & 0xF0) << 4) |
+				reg_data->touches[i].x;
+		report_data->touches[i].y =
+			((reg_data->touches[i].xy & 0x0F) << 8) |
+				reg_data->touches[i].y;
+		report_data->touches[i].pressure =
+			reg_data->touches[i].pressure;
+		report_data->touches[i].tracking_id =
+			reg_data->touches[i].tracking_id;
+	}
+	report_data->gesture_count = 0;
+
+	/* DEBUG: dump parsed report data */
+	cyapa_dump_report_data(__func__, report_data);
+}
+
+
+static int cyapa_find_mt_slot(struct cyapa_i2c *touch,
+		struct cyapa_touch *contact)
+{
+	int i;
+	int empty_slot = -1;
+
+	for (i = 0; i < MAX_MT_SLOTS; i++) {
+		if ((touch->mt_slots[i].contact.tracking_id == contact->tracking_id) &&
+			touch->mt_slots[i].touch_state)
+			return i;
+
+		if (!touch->mt_slots[i].touch_state && empty_slot == -1)
+			empty_slot = i;
+	}
+
+	return empty_slot;
+}
+
+static void cyapa_update_mt_slots(struct cyapa_i2c *touch,
+		struct cyapa_report_data *report_data)
+{
+	int i;
+	int slotnum;
+
+	for (i = 0; i < report_data->touch_fingers; i++) {
+		slotnum = cyapa_find_mt_slot(touch, &report_data->touches[i]);
+		if (slotnum < 0)
+			continue;
+
+		memcpy(&touch->mt_slots[slotnum].contact,
+				&report_data->touches[i],
+				sizeof(struct cyapa_touch));
+		touch->mt_slots[slotnum].slot_updated = true;
+		touch->mt_slots[slotnum].touch_state = true;
+	}
+}
+
+static void cyapa_send_mtb_event(struct cyapa_i2c *touch,
+		struct cyapa_report_data *report_data)
+{
+	int i;
+	struct cyapa_mt_slot *slot;
+	struct input_dev *input = touch->input;
+
+	cyapa_update_mt_slots(touch, report_data);
+
+	for (i = 0; i < MAX_MT_SLOTS; i++) {
+		slot = &touch->mt_slots[i];
+		if (!slot->slot_updated == true)
+			slot->touch_state = false;
+
+		input_mt_slot(input, i);
+		input_mt_report_slot_state(input, MT_TOOL_FINGER, slot->touch_state);
+		if (slot->touch_state) {
+			input_report_abs(input, ABS_MT_POSITION_X, slot->contact.x);
+			input_report_abs(input, ABS_MT_POSITION_Y, slot->contact.y);
+			input_report_abs(input, ABS_MT_PRESSURE, slot->contact.pressure);
+		}
+		slot->slot_updated = false;
+	}
+
+	input_mt_report_pointer_emulation(input, true);
+	input_report_key(input, BTN_LEFT, report_data->button);
+	input_sync(input);
+}
+
+/*
+ * for compatible with gen2 and previous firmware
+ * that do not support MT-B protocol
+ */
+static void cyapa_send_mta_event(struct cyapa_i2c *touch,
 		struct cyapa_report_data *report_data)
 {
 	int i;
@@ -920,6 +1102,15 @@ static int cyapa_handle_input_report_data(struct cyapa_i2c *touch,
 	input_report_key(input, BTN_LEFT, report_data->button);
 
 	input_sync(input);
+}
+
+static int cyapa_handle_input_report_data(struct cyapa_i2c *touch,
+		struct cyapa_report_data *report_data)
+{
+	if (touch->pdata->gen > CYAPA_GEN2)
+		cyapa_send_mtb_event(touch, report_data);
+	else
+		cyapa_send_mta_event(touch, report_data);
 
 	return report_data->touch_fingers | report_data->button;
 }
@@ -930,11 +1121,16 @@ static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
 	int read_length = 0;
 	union cyapa_reg_data reg_data;
 	struct cyapa_reg_data_gen2 *gen2_data;
+	struct cyapa_reg_data_gen3 *gen3_data;
 	struct cyapa_report_data report_data;
 
 	/* read register data from trackpad. */
 	gen2_data = &reg_data.gen2_data;
-	read_length = sizeof(struct cyapa_reg_data_gen2);
+	gen3_data = &reg_data.gen3_data;
+	if (touch->pdata->gen == CYAPA_GEN2)
+		read_length = (int)sizeof(struct cyapa_reg_data_gen2);
+	else
+		read_length = (int)sizeof(struct cyapa_reg_data_gen3);
 
 	ret_read_size = cyapa_i2c_reg_read_block(touch,
 					DATA_REG_START_OFFSET,
@@ -947,7 +1143,10 @@ static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
 		return 0;
 
 	/* process and parse raw data read from Trackpad. */
-	cyapa_parse_gen2_data(touch, gen2_data, &report_data);
+	if (touch->pdata->gen == CYAPA_GEN2)
+		cyapa_parse_gen2_data(touch, gen2_data, &report_data);
+	else
+		cyapa_parse_gen3_data(touch, gen3_data, &report_data);
 
 	/* report data to input subsystem. */
 	return cyapa_handle_input_report_data(touch, &report_data);
@@ -955,7 +1154,7 @@ static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
 
 /* Control driver polling read rate and work handler sleep time */
 static unsigned long cyapa_i2c_adjust_delay(struct cyapa_i2c *touch,
-			bool have_data)
+		bool have_data)
 {
 	unsigned long delay, nodata_count_thres;
 
@@ -1139,18 +1338,16 @@ static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 	input_set_abs_params(input, ABS_PRESSURE, 0, 255, 0, 0);
 	input_set_abs_params(input, ABS_TOOL_WIDTH, 0, 255, 0, 0);
 
-	/* finger touch area */
-	input_set_abs_params(input, ABS_MT_TOUCH_MAJOR, 0, CYAPA_MT_MAX_TOUCH, 0, 0);
-	/* finger approach area. not suport yet, resreved for future devices. */
-	input_set_abs_params(input, ABS_MT_WIDTH_MAJOR, 0, CYAPA_MT_MAX_WIDTH, 0, 0);
-	input_set_abs_params(input, ABS_MT_WIDTH_MINOR, 0, CYAPA_MT_MAX_WIDTH, 0, 0);
-	/* finger orientation. not support yet, reserved for future devices. */
-	input_set_abs_params(input, ABS_MT_ORIENTATION, 0, 1, 0, 0);
 	/* finger position */
-	input_set_abs_params(input, ABS_MT_POSITION_X,
-		0, touch->max_abs_x, 0, 0);
-	input_set_abs_params(input, ABS_MT_POSITION_Y,
-		0, touch->max_abs_y, 0, 0);
+	input_set_abs_params(input, ABS_MT_POSITION_X, 0, touch->max_abs_x, 0, 0);
+	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, touch->max_abs_y, 0, 0);
+	input_set_abs_params(input, ABS_MT_PRESSURE, 0, 255, 0, 0);
+	if (touch->pdata->gen > CYAPA_GEN2)
+		retval = input_mt_init_slots(input, MAX_MT_SLOTS);
+	else
+		input_set_events_per_packet(input, 60);
+	if (retval < 0)
+		return retval;
 
 	__set_bit(EV_KEY, input->evbit);
 	__set_bit(BTN_TOUCH, input->keybit);
@@ -1160,8 +1357,6 @@ static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 	__set_bit(BTN_TOOL_QUADTAP, input->keybit);
 
 	__set_bit(BTN_LEFT, input->keybit);
-
-	input_set_events_per_packet(input, 60);
 
 	/* Register the device in input subsystem */
 	retval = input_register_device(touch->input);
@@ -1250,6 +1445,8 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 err_mem_free:
 	/* release previous allocated input_dev instances. */
 	if (touch->input) {
+		if (touch->input->mt)
+			input_mt_destroy_slots(touch->input);
 		input_free_device(touch->input);
 		touch->input = NULL;
 	}
@@ -1267,8 +1464,11 @@ static int __devexit cyapa_i2c_remove(struct i2c_client *client)
 	if (touch->down_to_polling_mode == false)
 		free_irq(client->irq, touch);
 
-	if (touch->input)
+	if (touch->input) {
+		if (touch->input->mt)
+			input_mt_destroy_slots(touch->input);
 		input_unregister_device(touch->input);
+	}
 	kfree(touch);
 	global_touch = NULL;
 

@@ -29,6 +29,7 @@ enum cyapa_work_mode {
 enum cyapa_gen {
 	CYAPA_GEN1 = 0x01,   /* only one finger supported. */
 	CYAPA_GEN2 = 0x02,  /* max five fingers supported. */
+	CYAPA_GEN3 = 0x03,  /* support MT-protocol with tracking ID. */
 };
 
 /*
