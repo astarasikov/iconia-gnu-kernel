@@ -32,6 +32,8 @@
 #include <linux/power/bq20z75.h>
 #include <linux/cyapa.h>
 #include <linux/rfkill-gpio.h>
+#include <linux/leds.h>
+#include <linux/leds_pwm.h>
 
 #include <sound/wm8903.h>
 
@@ -1033,6 +1035,33 @@ static void __init tegra_wario_init(void)
 	seaboard_i2c_init();
 }
 
+static struct led_pwm arthur_pwm_leds[] = {
+	{
+		.name		= "tegra::kbd_backlight",
+		.pwm_id		= 1,
+		.max_brightness	= 255,
+		.pwm_period_ns	= 1000000,
+	},
+};
+
+static struct led_pwm_platform_data arthur_pwm_data = {
+	.leds		= arthur_pwm_leds,
+	.num_leds	= ARRAY_SIZE(arthur_pwm_leds),
+};
+
+static struct platform_device arthur_leds_pwm = {
+	.name	= "leds_pwm",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &arthur_pwm_data,
+	},
+};
+
+static struct platform_device *arthur_devices[] __initdata = {
+	&tegra_pwfm1_device,
+	&arthur_leds_pwm,
+};
+
 static void __init tegra_arthur_init(void)
 {
 	int err;
@@ -1042,11 +1071,8 @@ static void __init tegra_arthur_init(void)
 
 	__init_debug_uart_B();
 
-	/* Turn on the keyboard backlight.  TODO: actually use the PWM. */
-	tegra_gpio_enable(TEGRA_GPIO_PU4);
-	err = gpio_request(TEGRA_GPIO_PU4, "kb_bl_pwm");
-	WARN_ON(err);
-	err = gpio_direction_output(TEGRA_GPIO_PU4, 1);
+	/* Register arthur specific platform devices. */
+	err = platform_add_devices(arthur_devices, ARRAY_SIZE(arthur_devices));
 	WARN_ON(err);
 
 	/* Set up the GPIO and pingroup controlling the camera's power. */
