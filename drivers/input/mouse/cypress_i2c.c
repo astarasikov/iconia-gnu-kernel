@@ -39,9 +39,9 @@
  * Cypress I2C APA trackpad driver version is defined as below:
  * CYAPA_MAJOR_VER.CYAPA_MINOR_VER.CYAPA_REVISION_VER
  */
-#define CYAPA_MAJOR_VER		0
-#define CYAPA_MINOR_VER		9
-#define CYAPA_REVISION_VER	8
+#define CYAPA_MAJOR_VER	1
+#define CYAPA_MINOR_VER	0
+#define CYAPA_REVISION_VER	0
 
 #define CYAPA_MT_MAX_TOUCH  255
 #define CYAPA_MT_MAX_WIDTH  255
