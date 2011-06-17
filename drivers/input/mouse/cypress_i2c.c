@@ -1112,11 +1112,15 @@ static int cyapa_handle_input_report_data(struct cyapa_i2c *touch,
 	input_report_abs(input, ABS_Y, report_data->touches[0].y);
 	input_report_abs(input, ABS_PRESSURE, report_data->touches[0].pressure);
 
-	input_report_key(input, BTN_LEFT, report_data->button & 0x01);
+	/*
+	 * Workaround for firmware button reporting issue.
+	 * Report any reported button as BTN_LEFT.
+	 */
+	input_report_key(input, BTN_LEFT, report_data->button);
 
 	input_sync(input);
 
-	return report_data->touch_fingers | (report_data->button & 0x01);
+	return report_data->touch_fingers | report_data->button;
 }
 
 static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
