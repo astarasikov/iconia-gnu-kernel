@@ -89,6 +89,10 @@ struct cyapa_hardware_ver {
 	__u8 minor_ver;
 };
 
+struct cyapa_protocol_ver {
+	__u8 protocol_gen;
+};
+
 struct cyapa_trackpad_run_mode {
 	__u8 run_mode;
 	__u8 bootloader_state;
@@ -134,8 +138,9 @@ struct cyapa_trackpad_run_mode {
 #define CYAPA_GET_DRIVER_VER  CYAPA_IOC_R(0x01, 3)
 #define CYAPA_GET_FIRMWARE_VER  CYAPA_IOC_R(0x02, 2)
 #define CYAPA_GET_HARDWARE_VER  CYAPA_IOC_R(0x03, 2)
+#define CYAPA_GET_PROTOCOL_VER  CYAPA_IOC_R(0x04, 1)
 
-#define CYAPA_SET_BOOTLOADER_MODE  CYAPA_IOC(0x40)
-#define CYAPA_SET_STREAM_MODE  CYAPA_IOC(0x41)
+#define CYAPA_GET_TRACKPAD_RUN_MODE CYAPA_IOC_R(0x40, 2)
+#define CYAYA_SEND_MODE_SWITCH_CMD CYAPA_IOC(0x50)
 
 #endif  /* #ifndef _CYAPA_H */
