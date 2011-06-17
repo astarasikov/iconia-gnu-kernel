@@ -100,6 +100,24 @@
 
 #define CYAPA_REG_MAP_SIZE  256
 
+#define PRODUCT_ID_SIZE  16
+#define GEN2_QUERY_DATA_SIZE  38
+#define GEN3_QUERY_DATA_SIZE  27
+#define REG_PROTOCOL_GEN_QUERY_OFFSET  20
+
+#define GEN2_REG_OFFSET_DATA_BASE     0x0000
+#define GEN2_REG_OFFSET_CONTROL_BASE  0x0029
+#define GEN2_REG_OFFSET_COMMAND_BASE  0x0049
+#define GEN2_REG_OFFSET_QUERY_BASE    0x004B
+#define GEN3_REG_OFFSET_DATA_BASE     0x0000
+#define GEN3_REG_OFFSET_CONTROL_BASE  0x0000
+#define GEN3_REG_OFFSET_COMMAND_BASE  0x0028
+#define GEN3_REG_OFFSET_QUERY_BASE    0x002A
+
+#define CYAPA_GEN2_OFFSET_SOFT_RESET  GEN2_REG_OFFSET_COMMAND_BASE
+#define CYAPA_GEN3_OFFSET_SOFT_RESET  GEN3_REG_OFFSET_COMMAND_BASE
+
+
 /*
  * APA trackpad device states.
  * Used in register 0x00, bit1-0, DeviceStatus field.
@@ -260,7 +278,11 @@ struct cyapa_i2c {
 /* global pointer to trackpad touch data structure. */
 static struct cyapa_i2c *global_touch;
 
-static void cyapa_get_query_data(struct cyapa_i2c *touch);
+static int cyapa_get_query_data(struct cyapa_i2c *touch);
+static int cyapa_i2c_reconfig(struct cyapa_i2c *touch, int boot);
+static void cyapa_get_reg_offset(struct cyapa_i2c *touch);
+static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch);
+static int cyapa_create_input_dev(struct cyapa_i2c *touch);
 
 
 #if DBG_CYAPA_READ_BLOCK_DATA
@@ -785,38 +807,151 @@ static void cyapa_update_firmware_dispatch(struct cyapa_i2c *touch)
  ***************************************************************
  */
 
-#define REG_OFFSET_DATA_BASE     0x0000
-#define REG_OFFSET_CONTROL_BASE  0x0029
-#define REG_OFFSET_COMMAND_BASE  0x0049
-#define REG_OFFSET_QUERY_BASE   0x004B
 static void cyapa_get_reg_offset(struct cyapa_i2c *touch)
 {
-	touch->data_base_offset = REG_OFFSET_DATA_BASE;
-	touch->control_base_offset = REG_OFFSET_CONTROL_BASE;
-	touch->command_base_offset = REG_OFFSET_COMMAND_BASE;
-	touch->query_base_offset = REG_OFFSET_QUERY_BASE;
-
-	/* this function will be updated later depending firmware support. */
+	if (touch->pdata->gen == CYAPA_GEN2) {
+		touch->data_base_offset = GEN2_REG_OFFSET_DATA_BASE;
+		touch->control_base_offset = GEN2_REG_OFFSET_CONTROL_BASE;
+		touch->command_base_offset = GEN2_REG_OFFSET_COMMAND_BASE;
+		touch->query_base_offset = GEN2_REG_OFFSET_QUERY_BASE;
+	} else {
+		touch->data_base_offset = GEN3_REG_OFFSET_DATA_BASE;
+		touch->control_base_offset = GEN3_REG_OFFSET_CONTROL_BASE;
+		touch->command_base_offset = GEN3_REG_OFFSET_COMMAND_BASE;
+		touch->query_base_offset = GEN3_REG_OFFSET_QUERY_BASE;
+	}
 }
 
-static void cyapa_get_query_data(struct cyapa_i2c *touch)
+/*
+ * this function read product id from trackpad device
+ * and use it to verify trackpad firmware protocol
+ * is consistent with platform data setting or not.
+ */
+static int cyapa_get_and_verify_firmware(struct cyapa_i2c *touch,
+	unsigned char *query_data, unsigned short offset, int length)
 {
+	int loop = 20;
+	int ret_read_size = 0;
+	char unique_str[] = "CYTRA";
+
+	while (loop--) {
+		ret_read_size = cyapa_i2c_reg_read_block(touch,
+				offset,
+				length,
+				(char *)query_data);
+		if (ret_read_size == length)
+			break;
+
+		/*
+		 * When trackpad boots for first time after firmware update,
+		 * it needs to calibrate all sensors, which takes nearly
+		 * 2 seconds. During this calibration period,
+		 * the trackpad will not reply to the block read command.
+		 * This delay ONLY occurs immediately after firmware update.
+		 */
+		msleep(250);
+	}
+	if (loop < 0)
+		return -EIO;  /* i2c bus operation error. */
+
+	if (strncmp(query_data, unique_str, strlen(unique_str)) == 0)
+		return 1;  /* read and verify firmware successfully. */
+	else
+		return 0;  /* unknown firmware query data. */
+}
+
+static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch)
+{
+	int ret;
+	unsigned long flags;
+	unsigned short offset;
+	unsigned char query_data[40];
+
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+	if (touch->fw_work_mode != CYAPA_STREAM_MODE) {
+		/* firmware works in bootloader mode. */
+		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		return -EBUSY;
+	}
+	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+
+	/* determine firmware protocol consistent with driver setting. */
+	if (touch->pdata->gen == CYAPA_GEN2)
+		offset = GEN2_REG_OFFSET_QUERY_BASE;
+	else
+		offset = GEN3_REG_OFFSET_QUERY_BASE;
+	memset(query_data, 0, sizeof(query_data));
+	ret = cyapa_get_and_verify_firmware(touch, query_data, offset, PRODUCT_ID_SIZE);
+	if (ret == 1) {
+		/*
+		 * current firmware protocol is consistent with the generation
+		 * set in platform data.
+		 */
+		return 0;
+	}
+
+	if (touch->pdata->gen == CYAPA_GEN2) {
+		/* guess its gen3 firmware protocol. */
+		offset = GEN3_REG_OFFSET_QUERY_BASE;
+		memset(query_data, 0, sizeof(query_data));
+		ret = cyapa_get_and_verify_firmware(touch,
+					query_data, offset, GEN3_QUERY_DATA_SIZE);
+		if (ret == 1) {
+			/* gen3 firmware protocol is verified successfully. */
+			touch->pdata->gen = query_data[REG_PROTOCOL_GEN_QUERY_OFFSET] & 0x0F;
+		}
+	} else {
+		/* guess its gen2 firmware protocol. */
+		offset = GEN2_REG_OFFSET_QUERY_BASE;
+		memset(query_data, 0, sizeof(query_data));
+		ret = cyapa_get_and_verify_firmware(touch,
+					query_data, offset, PRODUCT_ID_SIZE);
+		if (ret == 1) {
+			/* gen2 firmware protocol is verified successfully. */
+			touch->pdata->gen = CYAPA_GEN2;
+		}
+	}
+
+	/*
+	 * when i2c bus I/O failed, ret < 0,
+	 * it's unable to guess firmware protocol,
+	 * so keep the default gen setting in platform data.
+	 *
+	 * when not gen2, gen3 or later protocol firmware, ret == 0,
+	 * this trackpad driver may unable to support this device,
+	 * so, here also keep the default value set in platform data.
+	 */
+
+	return ret == 1 ? 0 : -1;
+}
+
+static int cyapa_get_query_data(struct cyapa_i2c *touch)
+{
+	unsigned long flags;
 	char query_data[40];
+	int query_bytes;
 	int ret_read_size = 0;
 	int i;
 
-	/* only the firmware with GEN2 protocol support MT protocol.*/
-	if (touch->pdata->gen != CYAPA_GEN2) {
-		return;
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+	if (touch->fw_work_mode != CYAPA_STREAM_MODE) {
+		/* firmware works in bootloader mode. */
+		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		return -EBUSY;
 	}
+	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 
-	memset(query_data, 0, 40);
+	/* query data is supported only in GEN2 or later firmware protocol. */
+	if (touch->pdata->gen == CYAPA_GEN2)
+		query_bytes = GEN2_QUERY_DATA_SIZE;
+	else
+		query_bytes = GEN3_QUERY_DATA_SIZE;
 	ret_read_size = cyapa_i2c_reg_read_block(touch,
 				touch->query_base_offset,
-				38,
+				query_bytes,
 				query_data);
 	if (ret_read_size < 0)
-		return;
+		return ret_read_size;
 
 	touch->product_id[0] = query_data[0];
 	touch->product_id[1] = query_data[1];
@@ -840,43 +975,83 @@ static void cyapa_get_query_data(struct cyapa_i2c *touch)
 	touch->hw_maj_ver = query_data[17];
 	touch->hw_min_ver = query_data[18];
 
-	for (i = 0; i < 13; i++)
-		touch->capability[i] = query_data[19+i];
+	if (touch->pdata->gen == CYAPA_GEN2) {
+		for (i = 0; i < 13; i++)
+			touch->capability[i] = query_data[19+i];
 
-	touch->max_abs_x =
-		(((query_data[32] & 0xF0) << 4) | query_data[33]);
-	touch->max_abs_y =
-		(((query_data[32] & 0x0F) << 8) | query_data[34]);
+		touch->max_abs_x =
+			(((query_data[32] & 0xF0) << 4) | query_data[33]);
+		touch->max_abs_y =
+			(((query_data[32] & 0x0F) << 8) | query_data[34]);
 
-	touch->physical_size_x =
-		(((query_data[35] & 0xF0) << 4) | query_data[36]);
-	touch->physical_size_y =
-		(((query_data[35] & 0x0F) << 8) | query_data[37]);
-	if (!touch->physical_size_x || !touch->physical_size_y) {
-		touch->physical_size_x = 105;
-		touch->physical_size_y = 60;
+		touch->physical_size_x =
+			(((query_data[35] & 0xF0) << 4) | query_data[36]);
+		touch->physical_size_y =
+			(((query_data[35] & 0x0F) << 8) | query_data[37]);
+	} else {
+		touch->max_abs_x =
+			(((query_data[21] & 0xF0) << 4) | query_data[22]);
+		touch->max_abs_y =
+			(((query_data[21] & 0x0F) << 8) | query_data[23]);
+
+		touch->physical_size_x =
+			(((query_data[24] & 0xF0) << 4) | query_data[25]);
+		touch->physical_size_y =
+			(((query_data[24] & 0x0F) << 8) | query_data[26]);
 	}
+
+	return 0;
 }
 
-static int cyapa_i2c_reconfig(struct cyapa_i2c *touch)
+static int cyapa_i2c_reconfig(struct cyapa_i2c *touch, int boot)
 {
-	/* trackpad gen2 firmware. default is interrupt mode. */
-	cyapa_get_reg_offset(touch);
-	cyapa_get_query_data(touch);
+	int ret;
+	unsigned long flags;
 
-	pr_info("Cypress Trackpad Information:\n");
-	pr_info("\t\t\tProduct ID:  %s\n",
-		touch->product_id);
-	pr_info("\t\t\tFirmware Version:  %d.%d\n",
-		touch->fw_maj_ver, touch->fw_min_ver);
-	pr_info("\t\t\tHardware Version:  %d.%d\n",
-		touch->hw_maj_ver, touch->hw_min_ver);
-	pr_info("\t\t\tDriver Version:  %d.%d.%d\n",
-		CYAPA_MAJOR_VER, CYAPA_MINOR_VER, CYAPA_REVISION_VER);
-	pr_info("\t\t\tMax ABS X,Y:   %d,%d\n",
-		touch->max_abs_x, touch->max_abs_y);
-	pr_info("\t\t\tPhysical Size X,Y:   %d,%d\n",
-		touch->physical_size_x, touch->physical_size_y);
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+	if (touch->fw_work_mode != CYAPA_STREAM_MODE) {
+		/* firmware works in bootloader mode. */
+		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		return -EINVAL;
+	}
+	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+
+	/*
+	 * only support trackpad firmware gen2 or later protocol.
+	 */
+	if (cyapa_determine_firmware_gen(touch) < 0)
+		return -EINVAL;
+	if (touch->pdata->gen < CYAPA_GEN2) {
+		pr_info("cyapa driver unsupported firmware protocol version.\n");
+		return -EINVAL;
+	}
+
+	cyapa_get_reg_offset(touch);
+	ret = cyapa_get_query_data(touch);
+	if (ret < 0) {
+		pr_err("Failed to get trackpad query data, %d.\n", ret);
+		return ret;
+	}
+
+	if (boot) {
+		/* output in one time, avoid multi-lines output be separated. */
+		pr_info("Cypress Trackpad Information:\n" \
+			"    Product ID:  %s\n" \
+			"    Protocol Generation:  %d\n" \
+			"    Firmware Version:  %d.%d\n" \
+			"    Hardware Version:  %d.%d\n" \
+			"    Driver Version:  %d.%d.%d\n" \
+			"    Max ABS X,Y:   %d,%d\n" \
+			"    Physical Size X,Y:   %d,%d\n",
+			touch->product_id,
+			touch->pdata->gen,
+			touch->fw_maj_ver, touch->fw_min_ver,
+			touch->hw_maj_ver, touch->hw_min_ver,
+			CYAPA_MAJOR_VER, CYAPA_MINOR_VER, CYAPA_REVISION_VER,
+			touch->max_abs_x, touch->max_abs_y,
+			touch->physical_size_x, touch->physical_size_y
+			);
+	}
 
 	return 0;
 }
@@ -1427,8 +1602,14 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 		touch->down_to_polling_mode = true;
 	}
 
-	/* reconfig trackpad depending on platform setting. */
-	cyapa_i2c_reconfig(touch);
+	/*
+	 * reconfig trackpad depending on platform setting.
+	 *
+	 * always pass through after reconfig returned to given a chance
+	 * that user can update trackpad firmware through cyapa interface
+	 * when current firmware protocol is not supported.
+	 */
+	cyapa_i2c_reconfig(touch, true);
 
 	/* create an input_dev instance for trackpad device. */
 	retval = cyapa_create_input_dev(touch);
