@@ -1382,3 +1382,11 @@ config PADATA
 	bool
 
 source "kernel/Kconfig.locks"
+
+config BOOTSTAGE
+	bool "Enable microsecond timer for boot"
+	help
+	  This enables to record the timing of different stages during boot.
+	  The timing in the kernel can be recorded by invoking bootstage_mark().
+	  The timing in the user space can be recorded by writing the stage name
+	  to /sys/kernel/debug/bootstage/mark.
