@@ -21,7 +21,8 @@ void __attribute__((weak)) bust_spinlocks(int yes)
 		++oops_in_progress;
 	} else {
 #ifdef CONFIG_VT
-		unblank_screen();
+		if (panic_timeout >= 0)
+			unblank_screen();
 #endif
 		console_unblank();
 		if (--oops_in_progress == 0)
