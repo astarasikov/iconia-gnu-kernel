@@ -50,6 +50,7 @@ static struct regulator_consumer_supply tps658621_ldo1_supply[] = {
 };
 static struct regulator_consumer_supply tps658621_ldo2_supply[] = {
 	REGULATOR_SUPPLY("vdd_rtc", NULL),
+	REGULATOR_SUPPLY("vdd_aon", NULL),
 };
 static struct regulator_consumer_supply tps658621_ldo3_supply[] = {
 	REGULATOR_SUPPLY("avdd_usb", NULL),
@@ -148,7 +149,7 @@ static struct regulator_init_data sm1_data = REGULATOR_INIT(sm1, 750, 1275, true
 static struct regulator_init_data sm2_data = REGULATOR_INIT(sm2, 3000, 4550, true);
 static struct regulator_init_data ldo0_data = REGULATOR_INIT(ldo0, 1250, 3300, false);
 static struct regulator_init_data ldo1_data = REGULATOR_INIT(ldo1, 1100, 1100, true);
-static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2, 900, 1200, false);
+static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2, 900, 1300, false);
 static struct regulator_init_data ldo3_data = REGULATOR_INIT(ldo3, 3300, 3300, true);
 static struct regulator_init_data ldo4_data = REGULATOR_INIT(ldo4, 1800, 1800, true);
 static struct regulator_init_data ldo5_data = REGULATOR_INIT(ldo5, 2850, 3300, true);
