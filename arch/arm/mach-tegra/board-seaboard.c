@@ -789,6 +789,8 @@ static void __init arthur_i2c_register_devices(void)
 
 	i2c_register_board_info(0, &cyapa_device, 1);
 
+	i2c_register_board_info(2, &bq20z75_device, 1);
+
 	i2c_register_board_info(3, &isl29018_device, 1);
 
 	i2c_register_board_info(4, &nct1008_device, 1);
