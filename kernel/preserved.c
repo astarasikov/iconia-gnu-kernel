@@ -367,7 +367,7 @@ static void flush_preserved(void)
 {
 #ifdef CONFIG_X86
 	/* flush_cache_all is a nop on x86 */
-	set_memory_uc((unsigned long)preserved, preserved_size / PAGE_SIZE);
+	wbinvd();
 #else
 	flush_cache_all();
 #endif
