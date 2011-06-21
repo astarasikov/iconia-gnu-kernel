@@ -979,6 +979,11 @@ static void __init tegra_aebl_init(void)
 
 	__init_debug_uart_B();
 
+	/* Enable RF for 3G modem */
+	tegra_gpio_enable(TEGRA_GPIO_W_DISABLE);
+	gpio_request(TEGRA_GPIO_W_DISABLE, "w_disable");
+	gpio_direction_output(TEGRA_GPIO_W_DISABLE, 1);
+
 	tegra_gpio_enable(TEGRA_GPIO_BATT_DETECT);
 	bq20z75_pdata.battery_detect = TEGRA_GPIO_BATT_DETECT;
 	/* battery present is low */
