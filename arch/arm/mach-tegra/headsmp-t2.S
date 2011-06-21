@@ -108,7 +108,7 @@ __restart_plls:
 	/* FIXME: need to record actual power transition here */
 	mov	r0, #0
 	b	__cortex_a9_l2x0_restart
-ENDPROC(__restart_pllx)
+ENDPROC(__restart_plls)
 /*
  *	__enable_coresite_access
  *
