@@ -22,7 +22,6 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  */
-
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
@@ -1345,12 +1344,16 @@ static void alc_auto_init_amp(struct hda_codec *codec, int type)
 			set_eapd(codec, 0x0f, 1);
 			set_eapd(codec, 0x10, 1);
 			break;
+		case 0x10ec0272:
+			/* eapd on here creates audible pop for alex system */
+			if (codec->subsystem_id == 0x144dc0a7)
+				break;
+			/* fall through */
 		case 0x10ec0262:
 		case 0x10ec0267:
 		case 0x10ec0268:
 		case 0x10ec0269:
 		case 0x10ec0270:
-		case 0x10ec0272:
 		case 0x10ec0660:
 		case 0x10ec0662:
 		case 0x10ec0663:
@@ -18010,11 +18013,6 @@ static struct hda_verb alc662_init_verbs[] = {
 	/* Input mixer */
 	{0x22, AC_VERB_SET_AMP_GAIN_MUTE, AMP_IN_UNMUTE(0)},
 	{0x23, AC_VERB_SET_AMP_GAIN_MUTE, AMP_IN_UNMUTE(0)},
-
-	/* always trun on EAPD */
-	{0x14, AC_VERB_SET_EAPD_BTLENABLE, 2},
-	{0x15, AC_VERB_SET_EAPD_BTLENABLE, 2},
-
 	{ }
 };
 
@@ -19592,6 +19590,39 @@ static void alc272_fixup_mario(struct hda_codec *codec,
 		       "hda_codec: failed to override amp caps for NID 0x2\n");
 }
 
+#ifdef CONFIG_SND_HDA_POWER_SAVE
+static int alc272_alex_suspend(struct hda_codec *codec, pm_message_t state)
+{
+	struct alc_spec *spec = codec->spec;
+
+	set_eapd(codec, 0x14, 0);
+	set_eapd(codec, 0x15, 0);
+	msleep(300);
+
+	alc_shutup(codec);
+	if (spec && spec->power_hook)
+		spec->power_hook(codec);
+	snd_printdd("hda_codec: alex suspend completed\n");
+	return 0;
+}
+#endif /* CONFIG_SND_HDA_POWER_SAVE */
+#ifdef SND_HDA_NEEDS_RESUME
+static int alc272_alex_resume(struct hda_codec *codec)
+{
+	codec->patch_ops.init(codec);
+	snd_hda_codec_resume_amp(codec);
+	snd_hda_codec_resume_cache(codec);
+	if (codec->patch_ops.check_power_status)
+		codec->patch_ops.check_power_status(codec, 0x01);
+
+	msleep(25);
+	set_eapd(codec, 0x14, 1);
+	set_eapd(codec, 0x15, 1);
+	snd_printdd("hda_codec: alex resume completed\n");
+	return 0;
+}
+#endif /* SND_HDA_NEEDS_RESUME */
+
 static void alc272_fixup_alex(struct hda_codec *codec,
 			       const struct alc_fixup *fix, int pre_init) {
 	if (snd_hda_override_amp_caps(codec, 0x2, HDA_OUTPUT,
@@ -19601,6 +19632,13 @@ static void alc272_fixup_alex(struct hda_codec *codec,
 				      (0 << AC_AMPCAP_MUTE_SHIFT)))
 		printk(KERN_WARNING
 		       "hda_codec: failed to override amp caps for NID 0x2\n");
+
+#ifdef CONFIG_SND_HDA_POWER_SAVE
+	codec->patch_ops.suspend = alc272_alex_suspend;
+#endif
+#ifdef SND_HDA_NEEDS_RESUME
+	codec->patch_ops.resume = alc272_alex_resume;
+#endif
 }
 
 enum {
