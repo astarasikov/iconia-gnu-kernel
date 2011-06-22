@@ -1345,18 +1345,12 @@ static void alc_auto_init_amp(struct hda_codec *codec, int type)
 			set_eapd(codec, 0x0f, 1);
 			set_eapd(codec, 0x10, 1);
 			break;
-		case 0x10ec0272:
-			/* delay de-assert of eapd to allow biasing of amp
-			   inputs to settle avoiding an audible 'pop'
-			 */
-			if (codec->subsystem_id == 0x144dc0a7)
-				msleep(25);
-			/* fall through */
 		case 0x10ec0262:
 		case 0x10ec0267:
 		case 0x10ec0268:
 		case 0x10ec0269:
 		case 0x10ec0270:
+		case 0x10ec0272:
 		case 0x10ec0660:
 		case 0x10ec0662:
 		case 0x10ec0663:
