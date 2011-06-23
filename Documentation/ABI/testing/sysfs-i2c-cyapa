@@ -1,0 +1,58 @@
+What:		/sys/bus/i2c/devices/<busnum>-<devaddr>/product_id
+Date:		June 2011
+Contact:	Dudley Du <dudl@cypress.com>
+Description:	Query product ID from trackpad.
+		The format of product id is "CYTRA-XXXXXX-XX\n",
+		where X is a decimal digit (0 to 9).
+		The max length of product id string is
+		17 bytes including '\0'.
+
+		Reading: returns the product id string of trackpad device.
+
+
+What:		/sys/bus/i2c/devices/<busnum>-<devaddr>/driver_version
+Date:		June 2011
+Contact:	Dudley Du <dudl@cypress.com>
+Description:	Query driver version.
+		The format of driver version is "XXX.XXX\n",
+		where X is a decimal digit (0 to 9).
+		The max length of driver version string is
+		9 bytes including '\0'.
+
+		Reading: returns the driver version string of cyapa driver.
+
+
+What:		/sys/bus/i2c/devices/<busnum>-<devaddr>/firmware_version
+Date:		June 2011
+Contact:	Dudley Du <dudl@cypress.com>
+Description:	Query firmware version from trackpad.
+		The format of firmware version is "XXX.XXX\n",
+		where X is a decimal digit (0 to 9).
+		The max length of firmware version string is
+		9 bytes including '\0'.
+
+		Reading: returns the firmware version string of trackpad device.
+
+
+What:		/sys/bus/i2c/devices/<busnum>-<devaddr>/hardware_version
+Date:		June 2011
+Contact:	Dudley Du <dudl@cypress.com>
+Description:	Query hardware version from trackpad.
+		The format of hardware version is "XXX.XXX\n",
+		where X is a decimal digit (0 to 9).
+		The max length of hardware version string is
+		9 bytes including '\0'.
+
+		Reading: returns the hardware version string of trackpad device.
+
+
+What:		/sys/bus/i2c/devices/<busnum>-<devaddr>/protocol_version
+Date:		June 2011
+Contact:	Dudley Du <dudl@cypress.com>
+Description:	Query i2c register map protocol version from trackpad.
+		The format of protocol version is "XXX\n",
+		where X is a decimal digit (0 to 9).
+		The max length of protocol version string is
+		5 bytes including '\0'.
+
+		Reading: returns the protocol version string of trackpad device.
