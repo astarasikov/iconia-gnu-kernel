@@ -225,3 +225,52 @@ static int __init bootstage_init(void)
 }
 
 postcore_initcall(bootstage_init);
+
+static int __init post_core_initcall(void)
+{
+	bootstage_mark("core_initcall");
+	return 0;
+}
+core_initcall_sync(post_core_initcall);
+
+static int __init post_postcore_initcall(void)
+{
+	bootstage_mark("postcore_initcall");
+	return 0;
+}
+postcore_initcall_sync(post_postcore_initcall);
+
+static int __init post_arch_initcall(void)
+{
+	bootstage_mark("arch_initcall");
+	return 0;
+}
+arch_initcall_sync(post_arch_initcall);
+
+static int __init post_subsys_initcall(void)
+{
+	bootstage_mark("subsys_initcall");
+	return 0;
+}
+subsys_initcall_sync(post_subsys_initcall);
+
+static int __init post_fs_initcall(void)
+{
+	bootstage_mark("fs_initcall");
+	return 0;
+}
+fs_initcall_sync(post_fs_initcall);
+
+static int __init post_device_initcall(void)
+{
+	bootstage_mark("device_initcall");
+	return 0;
+}
+device_initcall_sync(post_device_initcall);
+
+static int __init post_late_initcall(void)
+{
+	bootstage_mark("late_initcall");
+	return 0;
+}
+late_initcall_sync(post_late_initcall);

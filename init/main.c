@@ -75,6 +75,8 @@
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
 
+#include <linux/bootstage.h>
+
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/smp.h>
 #endif
@@ -574,6 +576,7 @@ asmlinkage void __init start_kernel(void)
 	page_address_init();
 	printk(KERN_NOTICE "%s", linux_banner);
 	setup_arch(&command_line);
+	bootstage_mark_early("bootstage_start");
 	mm_init_owner(&init_mm, &init_task);
 	setup_command_line(command_line);
 	setup_nr_cpu_ids();
@@ -708,6 +711,7 @@ asmlinkage void __init start_kernel(void)
 	sfi_init_late();
 
 	ftrace_init();
+	bootstage_mark("before_rest_init");
 
 	/* Do the rest non-__init'ed, we're now alive */
 	rest_init();
@@ -803,6 +807,7 @@ static void __init do_basic_setup(void)
 	driver_init();
 	init_irq_proc();
 	do_ctors();
+	bootstage_mark("before_initcalls");
 	do_initcalls();
 }
 
@@ -896,6 +901,7 @@ static int __init kernel_init(void * unused)
 	sched_init_smp();
 
 	do_basic_setup();
+	bootstage_mark("after_basic_setup");
 
 	/* Open the /dev/console on the rootfs, this should never fail */
 	if (sys_open((const char __user *) "/dev/console", O_RDWR, 0) < 0)
@@ -922,6 +928,7 @@ static int __init kernel_init(void * unused)
 	 * initmem segments and start the user-mode stuff..
 	 */
 
+	bootstage_mark("before_init_post");
 	init_post();
 	return 0;
 }
