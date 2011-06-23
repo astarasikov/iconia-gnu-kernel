@@ -459,7 +459,7 @@ static struct seaboard_audio_platform_data audio_pdata = {
 };
 
 static struct platform_device audio_device = {
-	.name = "tegra-snd-seaboard",
+	.name = "tegra-snd-seaboard", /* must match DRV_NAME in seaboard.c */
 	.id   = 0,
 	.dev  = {
 		.platform_data = &audio_pdata,
@@ -469,6 +469,28 @@ static struct platform_device audio_device = {
 static struct platform_device spdif_dit_device = {
 	.name   = "spdif-dit",
 	.id     = -1,
+};
+
+static struct led_pwm arthur_pwm_leds[] = {
+	{
+		.name		= "tegra::kbd_backlight",
+		.pwm_id		= 1,
+		.max_brightness	= 255,
+		.pwm_period_ns	= 1000000,
+	},
+};
+
+static struct led_pwm_platform_data arthur_pwm_data = {
+	.leds		= arthur_pwm_leds,
+	.num_leds	= ARRAY_SIZE(arthur_pwm_leds),
+};
+
+static struct platform_device arthur_leds_pwm = {
+	.name	= "leds_pwm",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &arthur_pwm_data,
+	},
 };
 
 static struct platform_device *seaboard_devices[] __initdata = {
@@ -489,6 +511,11 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&tegra_spdif_device,
 	&spdif_dit_device,
 	&bt_rfkill_device,
+};
+
+static struct platform_device *arthur_devices[] __initdata = {
+	&tegra_pwfm1_device,
+	&arthur_leds_pwm,
 };
 
 static struct nct1008_platform_data nct1008_pdata = {
@@ -517,7 +544,6 @@ static struct wm8903_platform_data wm8903_pdata = {
 		WM8903_GPIO_NO_CONFIG,
 	},
 };
-
 
 static struct i2c_board_info __initdata wm8903_device = {
 	I2C_BOARD_INFO("wm8903", 0x1a),
@@ -1039,33 +1065,6 @@ static void __init tegra_wario_init(void)
 	wario_i2c_register_devices();
 	seaboard_i2c_init();
 }
-
-static struct led_pwm arthur_pwm_leds[] = {
-	{
-		.name		= "tegra::kbd_backlight",
-		.pwm_id		= 1,
-		.max_brightness	= 255,
-		.pwm_period_ns	= 1000000,
-	},
-};
-
-static struct led_pwm_platform_data arthur_pwm_data = {
-	.leds		= arthur_pwm_leds,
-	.num_leds	= ARRAY_SIZE(arthur_pwm_leds),
-};
-
-static struct platform_device arthur_leds_pwm = {
-	.name	= "leds_pwm",
-	.id	= -1,
-	.dev	= {
-		.platform_data = &arthur_pwm_data,
-	},
-};
-
-static struct platform_device *arthur_devices[] __initdata = {
-	&tegra_pwfm1_device,
-	&arthur_leds_pwm,
-};
 
 static void __init tegra_arthur_init(void)
 {

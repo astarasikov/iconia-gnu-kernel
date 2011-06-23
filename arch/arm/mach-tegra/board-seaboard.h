@@ -1,7 +1,7 @@
 /*
  * arch/arm/mach-tegra/board-seaboard.h
  *
- * Copyright (C) 2010 Google, Inc.
+ * Copyright (C) 2011 Google, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -43,7 +43,7 @@
 #define TEGRA_GPIO_ISL29018_IRQ		TEGRA_GPIO_PZ2
 #define TEGRA_GPIO_MPU3050_IRQ		TEGRA_GPIO_PZ4
 #define TEGRA_GPIO_AC_ONLINE		TEGRA_GPIO_PV3
-#define TEGRA_GPIO_BATT_DETECT          TEGRA_GPIO_PP2
+#define TEGRA_GPIO_BATT_DETECT		TEGRA_GPIO_PP2
 #define TEGRA_GPIO_WLAN_POWER		TEGRA_GPIO_PK6
 #define TEGRA_GPIO_HP_DET		TEGRA_GPIO_PX1
 #define TEGRA_GPIO_DISABLE_CHARGER	TEGRA_GPIO_PX2
