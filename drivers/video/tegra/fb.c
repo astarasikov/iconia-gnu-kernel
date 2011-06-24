@@ -320,7 +320,8 @@ static struct fb_ops tegra_fb_ops = {
 
 void tegra_fb_update_monspecs(struct tegra_fb_info *fb_info,
 			      struct fb_monspecs *specs,
-			      bool (*mode_filter)(struct fb_videomode *mode))
+			      bool (*mode_filter)(const struct tegra_dc *dc,
+						  struct fb_videomode *mode))
 {
 	struct fb_event event;
 	struct fb_modelist *m;
@@ -345,14 +346,10 @@ void tegra_fb_update_monspecs(struct tegra_fb_info *fb_info,
 	       sizeof(fb_info->info->monspecs));
 
 	for (i = 0; i < specs->modedb_len; i++) {
-		if (mode_filter) {
-			if (mode_filter(&specs->modedb[i]))
-				fb_add_videomode(&specs->modedb[i],
-						 &fb_info->info->modelist);
-		} else {
+		if (!mode_filter ||
+		    mode_filter(fb_info->win->dc, &specs->modedb[i]))
 			fb_add_videomode(&specs->modedb[i],
 					 &fb_info->info->modelist);
-		}
 	}
 
 	if (list_empty(&fb_info->info->modelist)) {

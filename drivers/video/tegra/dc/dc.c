@@ -41,6 +41,8 @@
 #include "dc_reg.h"
 #include "dc_priv.h"
 
+static void _tegra_dc_disable(struct tegra_dc *dc);
+
 static int no_vsync;
 
 module_param_named(no_vsync, no_vsync, int, S_IRUGO | S_IWUSR);
@@ -804,12 +806,11 @@ void tegra_dc_setup_clk(struct tegra_dc *dc, struct clk *clk)
 		struct clk *pll_d_clk =
 			clk_get_sys(NULL, "pll_d");
 
-		if (dc->mode.pclk > 70000000)
-			rate = 594000000;
-		else if (dc->mode.pclk >= 27000000)
-			rate = 216000000;
-		else
-			rate = 252000000;
+		/*
+		 * TODO: We can't currently set arbitrary rates for pll_d, so
+		 * this will only work for certain values
+		 */
+		rate = dc->mode.pclk * 4;
 
 		if (rate != clk_get_rate(pll_d_clk))
 			clk_set_rate(pll_d_clk, rate);
@@ -1140,7 +1141,7 @@ static u32 get_syncpt(struct tegra_dc *dc, int idx)
 	return syncpt_id;
 }
 
-static void tegra_dc_init(struct tegra_dc *dc)
+static int tegra_dc_init(struct tegra_dc *dc)
 {
 	int i;
 
@@ -1206,11 +1207,16 @@ static void tegra_dc_init(struct tegra_dc *dc)
 	}
 
 	if (dc->mode.pclk)
-		tegra_dc_program_mode(dc, &dc->mode);
+		if (tegra_dc_program_mode(dc, &dc->mode))
+			return -EINVAL;
+
+	return 0;
 }
 
 static bool _tegra_dc_enable(struct tegra_dc *dc)
 {
+	int failed_init;
+
 	if (dc->mode.pclk == 0)
 		return false;
 
@@ -1228,13 +1234,18 @@ static bool _tegra_dc_enable(struct tegra_dc *dc)
 
 	enable_irq(dc->irq);
 
-	tegra_dc_init(dc);
+	failed_init = tegra_dc_init(dc);
 
 	if (dc->out_ops && dc->out_ops->enable)
 		dc->out_ops->enable(dc);
 
 	/* force a full blending update */
 	dc->blend.z[0] = -1;
+
+	if (failed_init) {
+		_tegra_dc_disable(dc);
+		return false;
+	}
 
 	tegra_dc_ext_enable(dc->ext);
 

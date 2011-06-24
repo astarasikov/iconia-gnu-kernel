@@ -66,83 +66,6 @@ struct tegra_dc_hdmi_data {
 	bool				dvi;
 };
 
-const struct fb_videomode tegra_dc_hdmi_supported_modes[] = {
-	/* 1280x720p 60hz: EIA/CEA-861-B Format 4 */
-	{
-		.xres =		1280,
-		.yres =		720,
-		.pixclock =	KHZ2PICOS(74250),
-		.hsync_len =	40,	/* h_sync_width */
-		.vsync_len =	5,	/* v_sync_width */
-		.left_margin =	220,	/* h_back_porch */
-		.upper_margin =	20,	/* v_back_porch */
-		.right_margin =	110,	/* h_front_porch */
-		.lower_margin =	5,	/* v_front_porch */
-		.vmode =	FB_VMODE_NONINTERLACED,
-		.sync = FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	},
-
-	/* 720x480p 59.94hz: EIA/CEA-861-B Formats 2 & 3 */
-	{
-		.xres =		720,
-		.yres =		480,
-		.pixclock =	KHZ2PICOS(27000),
-		.hsync_len =	62,	/* h_sync_width */
-		.vsync_len =	6,	/* v_sync_width */
-		.left_margin =	60,	/* h_back_porch */
-		.upper_margin =	30,	/* v_back_porch */
-		.right_margin =	16,	/* h_front_porch */
-		.lower_margin =	9,	/* v_front_porch */
-		.vmode =	FB_VMODE_NONINTERLACED,
-		.sync = 0,
-	},
-
-	/* 640x480p 60hz: EIA/CEA-861-B Format 1 */
-	{
-		.xres =		640,
-		.yres =		480,
-		.pixclock =	KHZ2PICOS(25200),
-		.hsync_len =	96,	/* h_sync_width */
-		.vsync_len =	2,	/* v_sync_width */
-		.left_margin =	48,	/* h_back_porch */
-		.upper_margin =	33,	/* v_back_porch */
-		.right_margin =	16,	/* h_front_porch */
-		.lower_margin =	10,	/* v_front_porch */
-		.vmode =	FB_VMODE_NONINTERLACED,
-		.sync = 0,
-	},
-
-	/* 720x576p 50hz EIA/CEA-861-B Formats 17 & 18 */
-	{
-		.xres =		720,
-		.yres =		576,
-		.pixclock =	KHZ2PICOS(27000),
-		.hsync_len =	64,	/* h_sync_width */
-		.vsync_len =	5,	/* v_sync_width */
-		.left_margin =	68,	/* h_back_porch */
-		.upper_margin =	39,	/* v_back_porch */
-		.right_margin =	12,	/* h_front_porch */
-		.lower_margin =	5,	/* v_front_porch */
-		.vmode =	FB_VMODE_NONINTERLACED,
-		.sync = 0,
-	},
-
-	/* 1920x1080p 59.94/60hz EIA/CEA-861-B Format 16 */
-	{
-		.xres =		1920,
-		.yres =		1080,
-		.pixclock =	KHZ2PICOS(148500),
-		.hsync_len =	44,	/* h_sync_width */
-		.vsync_len =	5,	/* v_sync_width */
-		.left_margin =	148,	/* h_back_porch */
-		.upper_margin =	36,	/* v_back_porch */
-		.right_margin =	88,	/* h_front_porch */
-		.lower_margin =	4,	/* v_front_porch */
-		.vmode =	FB_VMODE_NONINTERLACED,
-		.sync = FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	},
-};
-
 /* table of electrical settings, must be in acending order. */
 struct tdms_config {
 	int pclk;
@@ -452,32 +375,33 @@ static void hdmi_dumpregs(struct tegra_dc_hdmi_data *hdmi)
 }
 #endif
 
-#define PIXCLOCK_TOLERANCE	200
-
-static bool tegra_dc_hdmi_mode_equal(const struct fb_videomode *mode1,
-					const struct fb_videomode *mode2)
+static bool tegra_dc_hdmi_mode_filter(const struct tegra_dc *dc,
+				      struct fb_videomode *mode)
 {
-	return mode1->xres	== mode2->xres &&
-		mode1->yres	== mode2->yres &&
-		mode1->vmode	== mode2->vmode;
-}
+	if (mode->vmode & FB_VMODE_INTERLACED)
+		return false;
 
-static bool tegra_dc_hdmi_mode_filter(struct fb_videomode *mode)
-{
-	int i;
-	int clocks;
+	/* ignore modes with a 0 pixel clock */
+	if (!mode->pixclock)
+		return false;
 
-	for (i = 0; i < ARRAY_SIZE(tegra_dc_hdmi_supported_modes); i++) {
-		if (tegra_dc_hdmi_mode_equal(&tegra_dc_hdmi_supported_modes[i],
-					     mode)) {
-			memcpy(mode, &tegra_dc_hdmi_supported_modes[i], sizeof(*mode));
-			mode->flag = FB_MODE_IS_DETAILED;
-			clocks = (mode->left_margin + mode->xres + mode->right_margin + mode->hsync_len) *
-				(mode->upper_margin + mode->yres + mode->lower_margin + mode->vsync_len);
-			mode->refresh = (PICOS2KHZ(mode->pixclock) * 1000) / clocks;
-			return true;
-		}
+	/* TODO: it would be nice to detect how the clock rate will be rounded
+	 * and then update mode->pixclock with that rate. */
+
+	/* check some of DC's constraints */
+	if (mode->hsync_len > 1 && mode->vsync_len > 1 &&
+		mode->lower_margin + mode->vsync_len + mode->upper_margin > 1 &&
+		mode->xres >= 16 && mode->yres >= 16) {
+
+		dev_vdbg(&dc->ndev->dev, "MODE:%ux%u pclk(%lu)\n",
+			mode->xres, mode->yres,
+			PICOS2KHZ(mode->pixclock) * 1000);
+		return true;
+
 	}
+
+	dev_vdbg(&dc->ndev->dev, "rejecting MODE:%ux%u pclk(%lu)\n",
+		mode->xres, mode->yres, PICOS2KHZ(mode->pixclock) * 1000);
 
 	return false;
 }
