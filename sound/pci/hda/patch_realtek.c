@@ -1143,6 +1143,7 @@ static void alc_automute_speaker(struct hda_codec *codec, int pinctl)
 	mute = spec->jack_present ? HDA_AMP_MUTE : 0;
 	/* Toggle internal speakers muting */
 
+	nid = spec->autocfg.hp_pins[0];
 	if (!nid)
 		return;
 	spec->jack_present = snd_hda_jack_detect(codec, nid);
