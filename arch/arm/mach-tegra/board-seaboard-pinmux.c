@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2010 NVIDIA Corporation
+ * Copyright (C) 2011 Google, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -21,6 +22,7 @@
 #include <mach/pinmux.h>
 #include <mach/pinmux-t2.h>
 
+#include <asm/mach-types.h>
 #include "gpio-names.h"
 #include "board-seaboard.h"
 
@@ -222,25 +224,47 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_WP_STATUS,		.enable = true },
 };
 
-void __init seaboard_pinmux_init(void)
+static void __init sound_codec_gpio_init(int gpio, const char *name)
 {
 	/*
 	 * PINGROUP_SPIC contains two pins:
 	 * + PX2, DISABLE_CHRGR (output)
-	 * + PX3, WM8903 codec IRQ (input)
+	 * + PX3, wm8903 codec IRQ (input)
+	 * + PX3, max98095 codec IRQ (input)
 	 *
-	 * The pinmux module can only configure TRISTATE vs. NORMAL on a
-	 * per-group rather than per-pin basis. The group must be NORMAL
-	 * since at least one pin is an output. However, we must ensure that
-	 * the WM8903 IRQ is never driven, since the WM8903 itself is driving
-	 * it, and we don't want multiple drivers. To ensure this, configure
-	 * PX3 as a GPIO here, and set is as an input, before the pinmux table
-	 * is written, which is when the pins will be un-tristated.
+	 * The pinmux module can only configure TRISTATE vs. NORMAL on
+	 * a per-group rather than per-pin basis. The group must be
+	 * NORMAL since at least one pin is an output.
+	 *
+	 * However, we must ensure that the codec IRQ is never driven,
+	 * since the codec itself is driving it, and we don't want
+	 * multiple drivers.
+	 *
+	 *To ensure this, configure PX3 as a GPIO here, and set is as
+	 * an input, before the pinmux table is written, which is when
+	 * the pins will be un-tristated.
 	 */
-	tegra_gpio_enable(TEGRA_GPIO_WM8903_IRQ);
-	gpio_request(TEGRA_GPIO_WM8903_IRQ, "wm8903");
-	gpio_direction_input(TEGRA_GPIO_WM8903_IRQ);
+	tegra_gpio_enable(gpio);
+	gpio_request(gpio, name);
+	gpio_direction_input(gpio);
+}
 
+static void __init max98095_gpio_init(void)
+{
+	BUG_ON(!machine_is_arthur());
+	sound_codec_gpio_init(TEGRA_GPIO_MAX98095_IRQ, "max98095");
+}
+
+static void __init wm8903_gpio_init(void)
+{
+	BUG_ON(!machine_is_seaboard() &&
+	       !machine_is_kaen()     &&
+	       !machine_is_aebl());
+	sound_codec_gpio_init(TEGRA_GPIO_WM8903_IRQ, "wm8903");
+}
+
+static void __init seaboard_common_pinmux_init(void)
+{
 	/* Ensure the reset line stays high. */
 	gpio_request(TEGRA_GPIO_RESET, "reset");
 	gpio_direction_output(TEGRA_GPIO_RESET, 1);
@@ -270,6 +294,12 @@ void __init fixup_pinmux_for_26Mhz(void)
 				  ARRAY_SIZE(pingroup_CDEV2_MUX_OSC));
 }
 
+void __init seaboard_pinmux_init(void)
+{
+	wm8903_gpio_init();
+	seaboard_common_pinmux_init();
+}
+
 void __init kaen_pinmux_init(void)
 {
 	/* TODO: Refactor this entire board revision specialization when
@@ -280,13 +310,15 @@ void __init kaen_pinmux_init(void)
 	int ram_id;
 	u32 reg;
 
-	seaboard_pinmux_init();
+	wm8903_gpio_init();
+	seaboard_common_pinmux_init();
 
 	/*
-	 * For Kaen DVT2 (and not DVT1) there is a single pinmux register
-	 * change to be made which accomodates a 26Mhz reference oscillator.
-	 * If DVT2, then overwrite the value that was just written in the call
-	 * to seaboard_pinmux_init().
+	 * For Kaen DVT2 (and not DVT1) there is a single pinmux
+	 * register change to be made which accomodates a 26Mhz
+	 * reference oscillator.  If DVT2, then overwrite the value
+	 * that was just written in the call to
+	 * seaboard_common_pinmux_init().
 	 *
 	 * Detect that 26Mhz oscillator is present for Kaen based on ram_id.
 	 *   ram_id = {0, 1} for DVT2, 26Mhz oscillator
@@ -301,6 +333,13 @@ void __init kaen_pinmux_init(void)
 
 void __init aebl_pinmux_init(void)
 {
-	seaboard_pinmux_init();
+	wm8903_gpio_init();
+	seaboard_common_pinmux_init();
 	fixup_pinmux_for_26Mhz();
+}
+
+void __init arthur_pinmux_init(void)
+{
+	max98095_gpio_init();
+	seaboard_common_pinmux_init();
 }

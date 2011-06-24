@@ -47,6 +47,7 @@
 #define TEGRA_GPIO_WLAN_POWER		TEGRA_GPIO_PK6
 #define TEGRA_GPIO_HP_DET		TEGRA_GPIO_PX1
 #define TEGRA_GPIO_DISABLE_CHARGER	TEGRA_GPIO_PX2
+#define TEGRA_GPIO_MAX98095_IRQ		TEGRA_GPIO_PX3
 #define TEGRA_GPIO_WM8903_IRQ		TEGRA_GPIO_PX3
 #define TEGRA_GPIO_CYTP_INT		TEGRA_GPIO_PW2
 #define TEGRA_GPIO_MXT_RST		TEGRA_GPIO_PV7
@@ -98,6 +99,7 @@ static inline int aebl_sensors_init(void) { return 0; }
 static inline void aebl_emc_init(void) { return; }
 #endif
 
+void arthur_pinmux_init(void);
 #ifdef CONFIG_MACH_ARTHUR
 void arthur_emc_init(void);
 int arthur_panel_init(void);

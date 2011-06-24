@@ -883,6 +883,12 @@ static void __init aebl_common_init(void)
 	__seaboard_common_init();
 }
 
+static void __init arthur_common_init(void)
+{
+	arthur_pinmux_init();
+	__seaboard_common_init();
+}
+
 static struct tegra_suspend_platform_data seaboard_suspend = {
 	.cpu_timer = 5000,
 	.cpu_off_timer = 5000,
@@ -1094,8 +1100,7 @@ static void __init tegra_arthur_init(void)
 
 	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
-
-	seaboard_common_init();
+	arthur_common_init();
 	arthur_panel_init();
 	arthur_emc_init();
 
