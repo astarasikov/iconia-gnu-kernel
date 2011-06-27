@@ -73,6 +73,32 @@ static inline int __inc_bootstages(void)
 }
 
 /*
+ * Insert a new bootstage in the slot specified by `idx'.
+ * If the slot is already used, move it and slots behind it
+ * before inserting the new bootstage.
+ */
+void insert_bootstage(int idx, const char *name, unsigned long time)
+{
+	mutex_lock(&bootstage_mutex);
+
+	if (num_bootstages == cap_bootstages) {
+		if (__inc_bootstages() < 0) {
+			mutex_unlock(&bootstage_mutex);
+			return;
+		}
+	}
+
+	if (idx < num_bootstages)
+		memmove(&full_bootstages[idx + 1], &full_bootstages[idx],
+			sizeof(*full_bootstages) * (num_bootstages - idx));
+
+	strlcpy(full_bootstages[idx].name, name, MAX_NAME);
+	full_bootstages[idx].time = time;
+	num_bootstages++;
+	mutex_unlock(&bootstage_mutex);
+}
+
+/*
  * This is used during the initialization of the kernel.
  */
 unsigned long bootstage_mark(const char *name)
@@ -210,9 +236,19 @@ static const struct file_operations mark_operations = {
 	.write	= bootstage_write,
 };
 
+/*
+ * Get the timings that were recorded before the kernel is initialized.
+ */
+int __attribute__((weak)) get_prekernel_timing(void)
+{
+	return 0;
+}
+
 static int __init bootstage_init(void)
 {
 	struct dentry *dir;
+
+	get_prekernel_timing();
 
 	dir = debugfs_create_dir("bootstage", NULL);
 	if (dir && !IS_ERR(dir)) {

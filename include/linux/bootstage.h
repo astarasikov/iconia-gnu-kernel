@@ -4,6 +4,7 @@
 #ifdef CONFIG_BOOTSTAGE
 unsigned long bootstage_mark(const char *name);
 unsigned long bootstage_mark_early(const char *name);
+void insert_bootstage(int idx, const char *name, unsigned long time);
 #else
 static inline unsigned long bootstage_mark(const char *name)
 {

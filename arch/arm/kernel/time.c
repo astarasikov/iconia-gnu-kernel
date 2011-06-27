@@ -24,6 +24,8 @@
 #include <linux/sysdev.h>
 #include <linux/timer.h>
 #include <linux/irq.h>
+#include <linux/bootstage.h>
+#include <linux/of.h>
 
 #include <linux/mc146818rtc.h>
 
@@ -169,3 +171,30 @@ void __init time_init(void)
 #endif
 }
 
+#ifdef CONFIG_BOOTSTAGE
+int get_prekernel_timing(void)
+{
+	struct device_node *node;
+	struct device_node *child;
+	int i = 0;
+
+	printk(KERN_INFO "TEST: bootstage_init is called in tegra\n");
+	node = of_find_node_by_path("/bootstage");
+	if (node == NULL)
+		return 0;
+
+	for_each_child_of_node(node, child) {
+		const char *name = of_get_property(child, "name", NULL);
+		const int *timep = of_get_property(child, "time", NULL);
+
+		if (name && timep) {
+			insert_bootstage(i, name,
+					(unsigned long) be32_to_cpu(*timep));
+			i++;
+		}
+	}
+	of_node_put(node);
+
+	return 0;
+}
+#endif
