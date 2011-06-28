@@ -18239,6 +18239,8 @@ static struct hda_verb alc663_mode8_init_verbs[] = {
 };
 
 static struct hda_verb alc272_mario_init_verbs[] = {
+	{0x14, AC_VERB_SET_EAPD_BTLENABLE, 2},
+	{0x15, AC_VERB_SET_EAPD_BTLENABLE, 2},
 	{0x12, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_IN},
 	{0x21, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_HP},
 	{0x21, AC_VERB_SET_AMP_GAIN_MUTE, AMP_OUT_UNMUTE},
