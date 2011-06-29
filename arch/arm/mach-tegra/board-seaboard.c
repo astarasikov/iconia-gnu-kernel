@@ -30,6 +30,7 @@
 #include <linux/power/bq20z75.h>
 #include <linux/rfkill-gpio.h>
 #include <linux/cyapa.h>
+#include <linux/platform_data/tegra_usb.h>
 
 #include <sound/wm8903.h>
 
@@ -556,6 +557,7 @@ static struct i2c_board_info __initdata cyapa_device = {
 static int seaboard_ehci_init(void)
 {
 	int gpio_status;
+	struct tegra_ehci_platform_data *pdata;
 
 	gpio_status = gpio_request(TEGRA_GPIO_USB1, "VBUS_USB1");
 	if (gpio_status < 0) {
@@ -569,6 +571,12 @@ static int seaboard_ehci_init(void)
 		WARN_ON(1);
 	}
 	gpio_set_value(TEGRA_GPIO_USB1, 1);
+
+	pdata = tegra_ehci1_device.dev.platform_data;
+	pdata->keep_clock_in_bus_suspend = 1;
+
+	pdata = tegra_ehci3_device.dev.platform_data;
+	pdata->keep_clock_in_bus_suspend = 1;
 
 	platform_device_register(&tegra_ehci1_device);
 	platform_device_register(&tegra_ehci3_device);
