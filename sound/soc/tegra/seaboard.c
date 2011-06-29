@@ -76,15 +76,11 @@ static int seaboard_get_mclk(int srate)
 	}
 }
 
-static int seaboard_asoc_hw_params(struct snd_pcm_substream *substream,
-				     struct snd_pcm_hw_params *params)
+static int seaboard_set_rate(struct snd_pcm_substream *substream,
+			     struct snd_pcm_hw_params *params,
+			     int *mclk_out)
 {
-	const int dai_format = (SND_SOC_DAIFMT_I2S   |
-				SND_SOC_DAIFMT_NB_NF |
-				SND_SOC_DAIFMT_CBS_CFS);
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_codec *codec = rtd->codec;
 	struct snd_soc_card *card = codec->card;
 	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
@@ -107,6 +103,23 @@ static int seaboard_asoc_hw_params(struct snd_pcm_substream *substream,
 		dev_err(card->dev, "Can't configure clocks\n");
 		return err;
 	}
+	*mclk_out = mclk;
+	return 0;
+}
+
+static int seaboard_asoc_hw_params(struct snd_pcm_substream *substream,
+					struct snd_pcm_hw_params *params)
+{
+	const int dai_format = (SND_SOC_DAIFMT_I2S   |
+				SND_SOC_DAIFMT_NB_NF |
+				SND_SOC_DAIFMT_CBS_CFS);
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct snd_soc_codec *codec = rtd->codec;
+	struct snd_soc_card *card = codec->card;
+	int err;
+	int mclk;
 
 	err = snd_soc_dai_set_fmt(codec_dai, dai_format);
 	if (err < 0) {
@@ -120,16 +133,16 @@ static int seaboard_asoc_hw_params(struct snd_pcm_substream *substream,
 		return err;
 	}
 
-	if (mclk_change) {
-		err = snd_soc_dai_set_sysclk(codec_dai, 0, mclk,
-					     SND_SOC_CLOCK_IN);
-		if (err < 0) {
-			dev_err(card->dev, "codec_dai clock not set\n");
-			return err;
-		}
+	err = seaboard_set_rate(substream, params, &mclk);
+	if (err < 0) {
+		dev_err(card->dev, "Can't configure sound clocks\n");
+		return err;
 	}
 
-	return 0;
+	err = snd_soc_dai_set_sysclk(codec_dai, 0, mclk, SND_SOC_CLOCK_IN);
+	if (err)
+		dev_err(card->dev, "codec_dai clock not set\n");
+	return err;
 }
 
 static struct snd_soc_ops seaboard_asoc_ops = {
@@ -139,71 +152,12 @@ static struct snd_soc_ops seaboard_asoc_ops = {
 static int seaboard_spdif_hw_params(struct snd_pcm_substream *substream,
 					struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_codec *codec = rtd->codec;
-	struct snd_soc_card *card = codec->card;
-	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
-	int srate, mclk, mclk_change;
-	int err;
-
-	/*
-	 * FIXME: Refactor mclk into PCM-specific function; SPDIF doesn't
-	 * need it
-	 */
-	srate = params_rate(params);
-	switch (srate) {
-	case 64000:
-	case 88200:
-	case 96000:
-		mclk = 128 * srate;
-		break;
-	default:
-		mclk = 256 * srate;
-		break;
-	}
-	/* FIXME: Codec only requires >= 3MHz if OSR==0 */
-	while (mclk < 6000000)
-		mclk *= 2;
-
-	err = tegra_asoc_utils_set_rate(&seaboard->util_data, srate, mclk,
-					&mclk_change);
-	if (err < 0) {
-		dev_err(card->dev, "Can't configure clocks\n");
-		return err;
-	}
-
-	return 0;
+	int mclk;
+	return seaboard_set_rate(substream, params, &mclk);
 }
 
 static struct snd_soc_ops seaboard_spdif_ops = {
 	.hw_params = seaboard_spdif_hw_params,
-};
-
-static struct snd_soc_jack seaboard_hp_jack;
-
-static struct snd_soc_jack_pin seaboard_hp_jack_pins[] = {
-	{
-		.pin = "Headphone Jack",
-		.mask = SND_JACK_HEADPHONE,
-	},
-};
-
-static struct snd_soc_jack_gpio seaboard_hp_jack_gpios[] = {
-	{
-		.name = "headphone detect",
-		.report = SND_JACK_HEADPHONE,
-		.debounce_time = 150,
-		.invert = 1,
-	}
-};
-
-static struct snd_soc_jack seaboard_mic_jack;
-
-static struct snd_soc_jack_pin seaboard_mic_jack_pins[] = {
-	{
-		.pin = "Mic Jack",
-		.mask = SND_JACK_MICROPHONE,
-	},
 };
 
 static int seaboard_event_int_spk(struct snd_soc_dapm_widget *w,
@@ -307,24 +261,11 @@ static const struct snd_kcontrol_new seaboard_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Int Spk"),
 };
 
-static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
+static int seaboard_request_gpio_hp_mute(const struct snd_soc_card *card,
+					 struct tegra_seaboard *seaboard)
 {
-	struct snd_soc_codec *codec = rtd->codec;
-	struct snd_soc_dapm_context *dapm = &codec->dapm;
-	struct snd_soc_card *card = codec->card;
-	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
-	struct seaboard_audio_platform_data *pdata = seaboard->pdata;
-	int ret;
-
-	ret = gpio_request(pdata->gpio_spkr_en, "spkr_en");
-	if (ret) {
-		dev_err(card->dev, "cannot get spkr_en gpio\n");
-		return ret;
-	}
-	seaboard->gpio_requested |= GPIO_SPKR_EN;
-
-	gpio_direction_output(pdata->gpio_spkr_en, 0);
-
+	int ret = 0;
+	const struct seaboard_audio_platform_data *pdata = seaboard->pdata;
 	if (pdata->gpio_hp_mute != -1) {
 		ret = gpio_request(pdata->gpio_hp_mute, "hp_mute");
 		if (ret) {
@@ -332,70 +273,144 @@ static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
 			return ret;
 		}
 		seaboard->gpio_requested |= GPIO_HP_MUTE;
-
 		gpio_direction_output(pdata->gpio_hp_mute, 1);
 	}
+	return ret;
+}
+
+static int seaboard_request_gpio_spkr_en(struct snd_soc_card *card)
+{
+	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
+	struct seaboard_audio_platform_data *pdata = seaboard->pdata;
+	int ret;
+
+	if (pdata->gpio_spkr_en != -1) {
+		ret = gpio_request(pdata->gpio_spkr_en, "spkr_en");
+		if (ret) {
+			dev_err(card->dev, "SPKR_EN gpio (%d) not found.\n",
+				pdata->gpio_spkr_en);
+			return ret;
+		}
+		seaboard->gpio_requested |= GPIO_SPKR_EN;
+		gpio_direction_output(pdata->gpio_spkr_en, 0);
+	}
+	return 0;
+}
+
+static struct snd_soc_jack hp;
+static struct snd_soc_jack mic;
+
+static struct snd_soc_jack_pin hp_pins[] = {
+	{
+		.pin = "Headphone Jack",
+		.mask = SND_JACK_HEADPHONE,
+	},
+};
+
+static struct snd_soc_jack_gpio hp_gpios[] = {
+	{
+		.name = "Headphone Detect",
+		.report = SND_JACK_HEADPHONE,
+		.debounce_time = 150,
+		.invert = 1,
+	}
+};
+
+static struct snd_soc_jack_pin mic_pins[] = {
+	{
+		.pin = "Mic Jack",
+		.mask = SND_JACK_MICROPHONE,
+	},
+};
+
+static int seaboard_init_jacks(struct snd_soc_codec *codec)
+{
+	struct snd_soc_dapm_context *dapm  = &codec->dapm;
+	struct snd_soc_card *card  = codec->card;
+	struct tegra_seaboard *board = snd_soc_card_get_drvdata(card);
+	struct seaboard_audio_platform_data *pdata = board->pdata;
+	int ret = 0;
+
+	hp_gpios[0].gpio = pdata->gpio_hp_det;
+
+	snd_soc_jack_new(codec, "Headphone Jack", SND_JACK_HEADPHONE,  &hp);
+	snd_soc_jack_new(codec, "Mic Jack",	  SND_JACK_MICROPHONE, &mic);
+	snd_soc_jack_add_pins(&hp,  ARRAY_SIZE(hp_pins),  hp_pins);
+	snd_soc_jack_add_pins(&mic, ARRAY_SIZE(mic_pins), mic_pins);
+
+	ret = snd_soc_jack_add_gpios(&hp, ARRAY_SIZE(hp_gpios), hp_gpios);
+	if (ret)
+		return ret;
+
+	BUG_ON(!machine_is_seaboard() && /* Only systems w/ WM8903. */
+	       !machine_is_aebl()     &&
+	       !machine_is_kaen());
+	wm8903_mic_detect(codec, &mic, SND_JACK_MICROPHONE, 0);
+	snd_soc_dapm_force_enable_pin(dapm, "Mic Bias");
+	return 0;
+}
+
+static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_soc_codec *codec = rtd->codec;
+	struct snd_soc_dapm_context *dapm = &codec->dapm;
+	struct snd_soc_card *card = codec->card;
+	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
+	int ret;
+
+	ret = seaboard_request_gpio_spkr_en(card);
+	if (ret < 0)
+		return ret;
+
+	ret = seaboard_request_gpio_hp_mute(card, seaboard);
+	if (ret < 0)
+		return ret;
 
 	ret = snd_soc_add_controls(codec, seaboard_controls,
 				   ARRAY_SIZE(seaboard_controls));
 	if (ret < 0)
 		return ret;
 
-	snd_soc_dapm_new_controls(dapm, seaboard_dapm_widgets,
+	ret = snd_soc_dapm_new_controls(dapm, seaboard_dapm_widgets,
 					ARRAY_SIZE(seaboard_dapm_widgets));
+	if (ret < 0)
+		return ret;
 
 	if (machine_is_seaboard()) {
-		snd_soc_dapm_add_routes(dapm, seaboard_audio_map,
-					ARRAY_SIZE(seaboard_audio_map));
-	} else if (machine_is_kaen()) {
-		snd_soc_dapm_add_routes(dapm, kaen_audio_map,
-					ARRAY_SIZE(kaen_audio_map));
-	} else {
-		snd_soc_dapm_add_routes(dapm, aebl_audio_map,
-					ARRAY_SIZE(aebl_audio_map));
-	}
-
-	seaboard_hp_jack_gpios[0].gpio = pdata->gpio_hp_det;
-	snd_soc_jack_new(codec, "Headphone Jack", SND_JACK_HEADPHONE,
-			 &seaboard_hp_jack);
-	snd_soc_jack_add_pins(&seaboard_hp_jack,
-			      ARRAY_SIZE(seaboard_hp_jack_pins),
-			      seaboard_hp_jack_pins);
-	snd_soc_jack_add_gpios(&seaboard_hp_jack,
-			       ARRAY_SIZE(seaboard_hp_jack_gpios),
-			       seaboard_hp_jack_gpios);
-
-	snd_soc_jack_new(codec, "Mic Jack", SND_JACK_MICROPHONE,
-			 &seaboard_mic_jack);
-	snd_soc_jack_add_pins(&seaboard_mic_jack,
-			      ARRAY_SIZE(seaboard_mic_jack_pins),
-			      seaboard_mic_jack_pins);
-	wm8903_mic_detect(codec, &seaboard_mic_jack, SND_JACK_MICROPHONE, 0);
-
-	snd_soc_dapm_force_enable_pin(dapm, "Mic Bias");
-
-	snd_soc_dapm_nc_pin(dapm, "IN1L");
-	if (machine_is_kaen())
-		snd_soc_dapm_nc_pin(dapm, "IN1R");
-	snd_soc_dapm_nc_pin(dapm, "IN2L");
-	if (!machine_is_kaen())
+		ret = snd_soc_dapm_add_routes(dapm, seaboard_audio_map,
+					      ARRAY_SIZE(seaboard_audio_map));
+		if (ret)
+			return ret;
 		snd_soc_dapm_nc_pin(dapm, "IN2R");
-	snd_soc_dapm_nc_pin(dapm, "IN2L");
-	snd_soc_dapm_nc_pin(dapm, "IN3R");
-	snd_soc_dapm_nc_pin(dapm, "IN3L");
-
-	if (machine_is_aebl()) {
+		snd_soc_dapm_nc_pin(dapm, "LINEOUTR");
+		snd_soc_dapm_nc_pin(dapm, "LINEOUTL");
+	} else if (machine_is_kaen()) {
+		ret = snd_soc_dapm_add_routes(dapm, kaen_audio_map,
+					      ARRAY_SIZE(kaen_audio_map));
+		if (ret)
+			return ret;
+		snd_soc_dapm_nc_pin(dapm, "IN1R");
+		snd_soc_dapm_nc_pin(dapm, "LINEOUTR");
+		snd_soc_dapm_nc_pin(dapm, "LINEOUTL");
+	} else {
+		BUG_ON(!machine_is_aebl());
+		ret = snd_soc_dapm_add_routes(dapm, aebl_audio_map,
+					      ARRAY_SIZE(aebl_audio_map));
+		if (ret)
+			return ret;
+		snd_soc_dapm_nc_pin(dapm, "IN2R");
 		snd_soc_dapm_nc_pin(dapm, "LON");
 		snd_soc_dapm_nc_pin(dapm, "RON");
 		snd_soc_dapm_nc_pin(dapm, "ROP");
 		snd_soc_dapm_nc_pin(dapm, "LOP");
-	} else {
-		snd_soc_dapm_nc_pin(dapm, "LINEOUTR");
-		snd_soc_dapm_nc_pin(dapm, "LINEOUTL");
 	}
+	snd_soc_dapm_nc_pin(dapm, "IN1L");
+	snd_soc_dapm_nc_pin(dapm, "IN2L");
+	snd_soc_dapm_nc_pin(dapm, "IN3R");
+	snd_soc_dapm_nc_pin(dapm, "IN3L");
 
+	seaboard_init_jacks(codec);
 	snd_soc_dapm_sync(dapm);
-
 	return 0;
 }
 
