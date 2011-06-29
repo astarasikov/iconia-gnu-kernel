@@ -64,9 +64,24 @@ struct tegra_seaboard {
 	bool vdd_dmic_enabled;
 };
 
-static int seaboard_asoc_hw_params(struct snd_pcm_substream *substream,
-					struct snd_pcm_hw_params *params)
+static int seaboard_get_mclk(int srate)
 {
+	switch (srate) {
+	case 64000:
+	case 88200:
+	case 96000:
+		return 128 * srate;
+	default:
+		return 256 * srate;
+	}
+}
+
+static int seaboard_asoc_hw_params(struct snd_pcm_substream *substream,
+				     struct snd_pcm_hw_params *params)
+{
+	const int dai_format = (SND_SOC_DAIFMT_I2S   |
+				SND_SOC_DAIFMT_NB_NF |
+				SND_SOC_DAIFMT_CBS_CFS);
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
@@ -76,17 +91,12 @@ static int seaboard_asoc_hw_params(struct snd_pcm_substream *substream,
 	int srate, mclk, mclk_change;
 	int err;
 
+	BUG_ON(!machine_is_seaboard() && /* WM8903 clock setting. */
+	       !machine_is_aebl()     &&
+	       !machine_is_kaen());
+
 	srate = params_rate(params);
-	switch (srate) {
-	case 64000:
-	case 88200:
-	case 96000:
-		mclk = 128 * srate;
-		break;
-	default:
-		mclk = 256 * srate;
-		break;
-	}
+	mclk = seaboard_get_mclk(srate);
 	/* FIXME: Codec only requires >= 3MHz if OSR==0 */
 	while (mclk < 6000000)
 		mclk *= 2;
@@ -98,19 +108,13 @@ static int seaboard_asoc_hw_params(struct snd_pcm_substream *substream,
 		return err;
 	}
 
-	err = snd_soc_dai_set_fmt(codec_dai,
-					SND_SOC_DAIFMT_I2S |
-					SND_SOC_DAIFMT_NB_NF |
-					SND_SOC_DAIFMT_CBS_CFS);
+	err = snd_soc_dai_set_fmt(codec_dai, dai_format);
 	if (err < 0) {
 		dev_err(card->dev, "codec_dai fmt not set\n");
 		return err;
 	}
 
-	err = snd_soc_dai_set_fmt(cpu_dai,
-					SND_SOC_DAIFMT_I2S |
-					SND_SOC_DAIFMT_NB_NF |
-					SND_SOC_DAIFMT_CBS_CFS);
+	err = snd_soc_dai_set_fmt(cpu_dai, dai_format);
 	if (err < 0) {
 		dev_err(card->dev, "cpu_dai fmt not set\n");
 		return err;
@@ -224,11 +228,9 @@ static int seaboard_event_hp(struct snd_soc_dapm_widget *w,
 	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
 	struct seaboard_audio_platform_data *pdata = seaboard->pdata;
 
-	if (!(seaboard->gpio_requested & GPIO_HP_MUTE))
-		return 0;
-
-	gpio_set_value_cansleep(pdata->gpio_hp_mute,
-				!SND_SOC_DAPM_EVENT_ON(event));
+	if (seaboard->gpio_requested & GPIO_HP_MUTE)
+		gpio_set_value_cansleep(pdata->gpio_hp_mute,
+					!SND_SOC_DAPM_EVENT_ON(event));
 
 	return 0;
 }
@@ -440,13 +442,13 @@ static __devinit int tegra_snd_seaboard_probe(struct platform_device *pdev)
 
 	pdata = pdev->dev.platform_data;
 	if (!pdata) {
-		dev_err(&pdev->dev, "no platform data supplied\n");
+		dev_err(&pdev->dev, "No platform data supplied.\n");
 		return -EINVAL;
 	}
 
 	seaboard = kzalloc(sizeof(struct tegra_seaboard), GFP_KERNEL);
 	if (!seaboard) {
-		dev_err(&pdev->dev, "Can't allocate tegra_seaboard\n");
+		dev_err(&pdev->dev, "Can't allocate tegra_seaboard.\n");
 		return -ENOMEM;
 	}
 
@@ -470,7 +472,7 @@ static __devinit int tegra_snd_seaboard_probe(struct platform_device *pdev)
 
 	ret = snd_soc_register_card(card);
 	if (ret) {
-		dev_err(&pdev->dev, "snd_soc_register_card failed (%d)\n",
+		dev_err(&pdev->dev, "snd_soc_register_card failed (result: %d).\n",
 			ret);
 		goto err_clear_drvdata;
 	}
