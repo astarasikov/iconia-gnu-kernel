@@ -591,6 +591,51 @@ static int __init tegra_init_disable_boot_clocks(void)
 }
 late_initcall(tegra_init_disable_boot_clocks);
 
+
+static void __init __tegra_init_check_max_rates(struct clk *c)
+{
+	unsigned long flags, rate;
+	struct clk *child;
+
+	clk_lock_save(c, flags);
+
+	rate = clk_get_rate_locked(c);
+
+	if (rate > c->max_rate) {
+		pr_warn_once("Capping clocks set too high:\n");
+
+		pr_warn("   %12s (%lu > %lu) %s\n", c->name, rate, c->max_rate,
+			c->state == ON ? "(clock enabled!)" : "");
+
+		clk_set_rate_locked(c, c->max_rate);
+	}
+
+	clk_unlock_restore(c, flags);
+
+	list_for_each_entry(child, &clocks, node)
+		if (child->parent == c)
+			__tegra_init_check_max_rates(child);
+}
+
+/*
+ * Iterate through all clocks, capping any clock that is higher than max_rate.
+ */
+static int __init tegra_init_check_max_rates(void)
+{
+	struct clk *c;
+
+	mutex_lock(&clock_list_lock);
+
+	list_for_each_entry(c, &clocks, node)
+		if (!c->parent)
+			__tegra_init_check_max_rates(c);
+
+	mutex_unlock(&clock_list_lock);
+
+	return 0;
+}
+late_initcall(tegra_init_check_max_rates);
+
 #ifdef CONFIG_DEBUG_FS
 
 /*
