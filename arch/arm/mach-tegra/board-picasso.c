@@ -208,6 +208,7 @@ static struct mxt_platform_data mxt_platform_data = {
 	.blen			= 0x10,
 	.threshold		= 0x37,
 	.voltage		= 3300000,
+	.orient			= MXT_DIAGONAL,
 	.irqflags		= IRQF_TRIGGER_FALLING,
 	.config			= mxt_config_data,
 	.config_length	= sizeof(mxt_config_data),
