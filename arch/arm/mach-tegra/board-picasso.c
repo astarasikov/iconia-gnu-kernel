@@ -104,7 +104,7 @@ static struct tegra_utmip_config utmi_phy_config[] = {
 
 static struct tegra_ulpi_config ulpi_phy_config = {
 	.reset_gpio = TEGRA_GPIO_PG2,
-	.clk = "clk_dev2",
+	.clk = "cdev2",
 };
 
 static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
@@ -125,12 +125,26 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 	},
 };
 
+static void __init picasso_usb_init(void) {
+	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
+	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];	
+	tegra_otg_device.dev.platform_data = &tegra_ehci1_device;
+
+	platform_device_register(&tegra_udc_device);
+	platform_device_register(&tegra_ehci2_device);
+	
+	//platform_device_register(&tegra_otg_device);
+	platform_device_register(&tegra_ehci3_device);
+}
 /******************************************************************************
  * Clocks
  *****************************************************************************/
 static __initdata struct tegra_clk_init_table picasso_clk_init_table[] = {
 	/* name		parent		rate		enabled */
 	{ "uartd",	"pll_p",	216000000,	true},
+	{ "pll_m",	"clk_m",	600000000,	true},
+	{ "emc",	"pll_m",	600000000,	true},
 	{ "uartc",	"pll_c",	600000000,	false},
 	{ "blink",	"clk_32k",	32768,		false},
 	{ "pll_p_out4",	"pll_p",	24000000,	true },
@@ -142,7 +156,10 @@ static __initdata struct tegra_clk_init_table picasso_clk_init_table[] = {
 	{ "audio",	"pll_a_out0",	11289600,	true},
 	{ "audio_2x",	"audio",	22579200,	true},
 	{ "spdif_out",	"pll_a_out0",	5644800,	false},
-	{ "kbc",	"clk_32k",	32768,		true},
+	//{ "kbc",	"clk_32k",	32768,		true},
+	{ "usbd",	"clk_m",	12000000,	true},
+	{ "usb2",	"clk_m",	12000000,	false},
+	{ "usb3",	"clk_m",	12000000,	false},
 	{ NULL,		NULL,		0,		0},
 };
 
@@ -354,9 +371,6 @@ static struct platform_device *picasso_devices[] __initdata = {
 	&tegra_gart_device,
 	&tegra_aes_device,
 	&picasso_keys_device,
-	&tegra_ehci1_device,
-	&tegra_ehci2_device,
-	&tegra_ehci3_device,
 };
 
 int __init tegra_picasso_protected_aperture_init(void)
@@ -375,15 +389,13 @@ static void __init tegra_picasso_init(void)
 {
 	picasso_pinmux_init();
 	tegra_clk_init_from_table(picasso_clk_init_table);
-	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
-	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
-	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
 	
 	platform_add_devices(picasso_devices, ARRAY_SIZE(picasso_devices));
 
 	picasso_emc_init();
 	picasso_i2c_init();
 	picasso_regulator_init();
+	picasso_usb_init();
 	picasso_keys_init();
 	picasso_panel_init();
 	picasso_sdhci_init();
