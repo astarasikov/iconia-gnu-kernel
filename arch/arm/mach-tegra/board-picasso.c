@@ -131,7 +131,7 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 static __initdata struct tegra_clk_init_table picasso_clk_init_table[] = {
 	/* name		parent		rate		enabled */
 	{ "uartd",	"pll_p",	216000000,	true},
-	{ "uartc",	"pll_m",	600000000,	false},
+	{ "uartc",	"pll_c",	600000000,	false},
 	{ "blink",	"clk_32k",	32768,		false},
 	{ "pll_p_out4",	"pll_p",	24000000,	true },
 	{ "pwm",	"clk_m",	12000000,	false},
