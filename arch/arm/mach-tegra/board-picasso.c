@@ -103,7 +103,7 @@ static struct tegra_utmip_config utmi_phy_config[] = {
 };
 
 static struct tegra_ulpi_config ulpi_phy_config = {
-	.reset_gpio = TEGRA_GPIO_PG2,
+	.reset_gpio = PICASSO_GPIO_ULPI_RESET,
 	.clk = "cdev2",
 };
 
@@ -249,19 +249,19 @@ static struct mxt_platform_data mxt_platform_data = {
 static struct i2c_board_info mxt_device = {
 	I2C_BOARD_INFO("atmel_mxt_ts", 0x4c),
 	.platform_data = &mxt_platform_data,
-	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PV6),
+	.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_TS_IRQ),
 };
 
 static void __init picasso_touch_init(void) {
-	tegra_gpio_enable(TEGRA_GPIO_PV6);
-	gpio_request(TEGRA_GPIO_PV6, "atmel_touch_chg");
+	tegra_gpio_enable(PICASSO_GPIO_TS_IRQ);
+	gpio_request(PICASSO_GPIO_TS_IRQ, "atmel_touch_chg");
 
-	tegra_gpio_enable(TEGRA_GPIO_PQ7);
-	gpio_request(TEGRA_GPIO_PQ7, "atmel_touch_reset");
+	tegra_gpio_enable(PICASSO_GPIO_TS_RESET);
+	gpio_request(PICASSO_GPIO_TS_RESET, "atmel_touch_reset");
 
-	gpio_set_value(TEGRA_GPIO_PQ7, 0);
+	gpio_set_value(PICASSO_GPIO_TS_RESET, 0);
 	msleep(1);
-	gpio_set_value(TEGRA_GPIO_PQ7, 1);
+	gpio_set_value(PICASSO_GPIO_TS_RESET, 1);
 	msleep(100);
 
 	i2c_register_board_info(0, &mxt_device, 1);
@@ -271,40 +271,40 @@ static void __init picasso_touch_init(void) {
  * I2C
  *****************************************************************************/
 static struct tegra_i2c_platform_data picasso_i2c1_platform_data = {
-        .adapter_nr     = 0,
-        .bus_count      = 1,
-        .bus_clk_rate   = { 400000, 0 },
+	.adapter_nr     = 0,
+	.bus_count      = 1,
+	.bus_clk_rate   = { 400000, 0 },
 };
 
 static const struct tegra_pingroup_config i2c2_ddc = {
-        .pingroup       = TEGRA_PINGROUP_DDC,
-        .func           = TEGRA_MUX_I2C2,
+	.pingroup       = TEGRA_PINGROUP_DDC,
+		.func           = TEGRA_MUX_I2C2,
 };
 
 static const struct tegra_pingroup_config i2c2_gen2 = {
-        .pingroup       = TEGRA_PINGROUP_PTA,
-        .func           = TEGRA_MUX_I2C2,
+	.pingroup       = TEGRA_PINGROUP_PTA,
+	.func           = TEGRA_MUX_I2C2,
 };
 
 static struct tegra_i2c_platform_data picasso_i2c2_platform_data = {
-        .adapter_nr     = 1,
-        .bus_count      = 2,
-        .bus_clk_rate   = { 50000, 100000 },
-        .bus_mux        = { &i2c2_ddc, &i2c2_gen2 },
-        .bus_mux_len    = { 1, 1 },
+	.adapter_nr     = 1,
+	.bus_count      = 2,
+	.bus_clk_rate   = { 50000, 100000 },
+	.bus_mux        = { &i2c2_ddc, &i2c2_gen2 },
+	.bus_mux_len    = { 1, 1 },
 };
 
 static struct tegra_i2c_platform_data picasso_i2c3_platform_data = {
-        .adapter_nr     = 3,
-        .bus_count      = 1,
-        .bus_clk_rate   = { 400000, 0 },
+	.adapter_nr     = 3,
+	.bus_count      = 1,
+	.bus_clk_rate   = { 400000, 0 },
 };
 
 static struct tegra_i2c_platform_data picasso_dvc_platform_data = {
-        .adapter_nr     = 4,
-        .bus_count      = 1,
-        .bus_clk_rate   = { 400000, 0 },
-        .is_dvc         = true,
+	.adapter_nr     = 4,
+	.bus_count      = 1,
+	.bus_clk_rate   = { 400000, 0 },
+	.is_dvc         = true,
 };
 
 static void picasso_i2c_init(void)
@@ -323,22 +323,40 @@ static void picasso_i2c_init(void)
 /******************************************************************************
  * GPIO Keys
  *****************************************************************************/
-#define GPIO_KEY(_id, _gpio,_isactivelow, _iswake)		\
-	{					\
-		.code = _id,			\
-		.gpio = TEGRA_GPIO_##_gpio,	\
-		.active_low = _isactivelow,		\
-		.desc = #_id,			\
-		.type = EV_KEY,			\
-		.wakeup = _iswake,		\
-		.debounce_interval = 10,	\
-	}
-
 static struct gpio_keys_button picasso_keys[] = {
-	[0] = GPIO_KEY(KEY_VOLUMEUP, PQ4, 1,  0),
-	[1] = GPIO_KEY(KEY_VOLUMEDOWN, PQ5, 1, 0),
-	[2] = GPIO_KEY(KEY_POWER, PC7, 0, 1),
-	[3] = GPIO_KEY(KEY_POWER, PI3, 0, 0),
+	{
+		.code = KEY_VOLUMEUP,
+		.gpio = PICASSO_GPIO_KEY_nVOLUMEUP,
+		.active_low = 1,
+		.desc = "Volume Up Key",
+		.type = EV_KEY,
+		.debounce_interval = 10,
+	},
+	{
+		.code = KEY_VOLUMEDOWN,
+		.gpio = PICASSO_GPIO_KEY_nVOLUMEDOWN,
+		.active_low = 1,
+		.desc = "Volume Down Key",
+		.type = EV_KEY,
+		.debounce_interval = 10,
+	},
+	{
+		.code = KEY_POWER,
+		.gpio = PICASSO_GPIO_KEY_POWER,
+		.active_low = 1,
+		.desc = "Power Key",
+		.type = EV_KEY,
+		.wakeup = 1,
+		.debounce_interval = 10,
+	},
+	{
+		.code = KEY_POWER,
+		.gpio = PICASSO_GPIO_KEY_POWER2,
+		.active_low = 1,
+		.desc = "Power Key 2",
+		.type = EV_KEY,
+		.debounce_interval = 10,
+	},
 };
 
 static struct gpio_keys_platform_data picasso_keys_platform_data = {
@@ -363,6 +381,36 @@ static void picasso_keys_init(void)
 }
 
 /******************************************************************************
+ * SDHC
+ *****************************************************************************/
+static struct tegra_sdhci_platform_data tegra_sdhci_platform_data1 = {
+	.cd_gpio = -1,
+	.wp_gpio = -1,
+	.power_gpio = -1,
+};
+
+static struct tegra_sdhci_platform_data tegra_sdhci_platform_data3 = {
+	.cd_gpio = PICASSO_GPIO_SDHCI2_CD,
+	.wp_gpio = -1,
+	.power_gpio = PICASSO_GPIO_SDHCI2_PWR,
+};
+
+static struct tegra_sdhci_platform_data tegra_sdhci_platform_data4 = {
+	.cd_gpio = -1,
+	.wp_gpio = -1,
+	.power_gpio = -1,
+};
+
+static void __init picasso_sdhci_init(void) {
+	tegra_sdhci_device1.dev.platform_data = &tegra_sdhci_platform_data1;
+	tegra_sdhci_device3.dev.platform_data = &tegra_sdhci_platform_data3;
+	tegra_sdhci_device4.dev.platform_data = &tegra_sdhci_platform_data4;
+
+	platform_device_register(&tegra_sdhci_device4);
+	platform_device_register(&tegra_sdhci_device3);
+	//platform_device_register(&tegra_sdhci_device1);
+}
+/******************************************************************************
  * Platform devices
  *****************************************************************************/
 static struct platform_device *picasso_devices[] __initdata = {
@@ -373,14 +421,14 @@ static struct platform_device *picasso_devices[] __initdata = {
 	&picasso_keys_device,
 };
 
-int __init tegra_picasso_protected_aperture_init(void)
+static int __init tegra_picasso_protected_aperture_init(void)
 {
 	tegra_protected_aperture_init(tegra_grhost_aperture);
 	return 0;
 }
 late_initcall(tegra_picasso_protected_aperture_init);
 
-void __init tegra_picasso_reserve(void)
+static void __init tegra_picasso_reserve(void)
 {
 	tegra_reserve(SZ_256M, SZ_8M, SZ_16M);
 }

@@ -19,7 +19,6 @@
 
 int picasso_charge_init(void);
 int picasso_regulator_init(void);
-int picasso_sdhci_init(void);
 int picasso_pinmux_init(void);
 int picasso_panel_init(void);
 int picasso_wired_jack_init(void);
@@ -27,7 +26,21 @@ int picasso_sensors_init(void);
 int picasso_kbc_init(void);
 int picasso_emc_init(void);
 
-/* external gpios */
+#define PICASSO_GPIO_KEY_nVOLUMEUP	TEGRA_GPIO_PQ4
+#define PICASSO_GPIO_KEY_nVOLUMEDOWN	TEGRA_GPIO_PQ5
+#define PICASSO_GPIO_KEY_POWER	TEGRA_GPIO_PC7
+#define PICASSO_GPIO_KEY_POWER2	TEGRA_GPIO_PI3
+#define PICASSO_GPIO_ULPI_RESET	TEGRA_GPIO_PG2
+#define PICASSO_GPIO_TS_IRQ	TEGRA_GPIO_PV6
+#define PICASSO_GPIO_TS_RESET	TEGRA_GPIO_PQ7
+
+#define PICASSO_GPIO_PNL_ENABLE	TEGRA_GPIO_PC6
+#define PICASSO_GPIO_BL_ENABLE	TEGRA_GPIO_PD4
+#define PICASSO_GPIO_LVDS_SHUTDOWN	TEGRA_GPIO_PB2
+#define PICASSO_GPIO_HDMI_HPD	TEGRA_GPIO_PN7
+
+#define PICASSO_GPIO_SDHCI2_CD	TEGRA_GPIO_PI5
+#define PICASSO_GPIO_SDHCI2_PWR	TEGRA_GPIO_PI6
 
 /* TPS6586X gpios */
 #define TPS6586X_GPIO_BASE	TEGRA_NR_GPIOS
