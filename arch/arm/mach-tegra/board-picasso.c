@@ -167,20 +167,6 @@ static __initdata struct tegra_clk_init_table picasso_clk_init_table[] = {
  * Touchscreen
  *****************************************************************************/
 static const u8 mxt_config_data[] = {
-/* 6,6
- * 7,3
- * 8,10
- * 9, 34
- * 15, 11
- * 22, 17
- * 24, 19
- * 25, 14
- * 27, 7
- * 28, 6
- * 40, 5
- * 41, 6
- */
-
 	/* MXT_GEN_COMMAND(6) */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	/* MXT_GEN_POWER(7) */
@@ -215,12 +201,12 @@ static const u8 mxt_config_data[] = {
 };
 
 static struct mxt_platform_data mxt_platform_data = {
-	.x_line			= 27,
-	.y_line			= 42,
+	.x_line			= 0x1c,
+	.y_line			= 0x29,
 	.x_size			= 1280,
 	.y_size			= 800,
-	.blen			= 0x16,
-	.threshold		= 0x28,
+	.blen			= 0x10,
+	.threshold		= 0x37,
 	.voltage		= 3300000,
 	.irqflags		= IRQF_TRIGGER_FALLING,
 	.config			= mxt_config_data,
