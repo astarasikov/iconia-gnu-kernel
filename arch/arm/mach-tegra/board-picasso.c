@@ -36,6 +36,8 @@
 #include <linux/platform_data/tegra_usb.h>
 #include <linux/input.h>
 #include <linux/regulator/consumer.h>
+#include <linux/pda_power.h>
+#include <linux/power/bq20z75.h>
 
 #include <mach/iomap.h>
 #include <mach/irqs.h>
@@ -132,6 +134,7 @@ static void __init picasso_usb_init(void) {
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];	
 	tegra_otg_device.dev.platform_data = &tegra_ehci1_device;
 
+	tegra_gpio_enable(PICASSO_GPIO_ULPI_RESET);
 	platform_device_register(&tegra_udc_device);
 	platform_device_register(&tegra_ehci2_device);
 	
@@ -270,8 +273,82 @@ static void picasso_power_off(void)
 	}
 }
 
-static void __init picasso_power_init(void) {
+static char *picasso_batteries[] = {
+	"battery",
+};
+
+static struct resource picasso_power_resources[] = {
+	[0] = {
+		.name = "ac",
+		.flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE |
+		IORESOURCE_IRQ_LOWEDGE,
+		.start = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_AC_DETECT_IRQ),
+		.end = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_AC_DETECT_IRQ),
+	},
+};
+
+static int picasso_is_ac_online(void)
+{
+	return !gpio_get_value(PICASSO_GPIO_AC_DETECT_IRQ);
+}
+
+static void picasso_set_charge(int flags)
+{
+	gpio_direction_output(PICASSO_GPIO_CHARGE_DISABLE, !flags);
+}
+
+static int picasso_power_init(struct device *dev)
+{
+	int rc = 0;
+
+	rc = gpio_request(PICASSO_GPIO_CHARGE_DISABLE, "Charger Disable");
+	if (rc)
+		goto err_chg;
+
+	rc = gpio_request(PICASSO_GPIO_AC_DETECT_IRQ, "Charger Detection");
+	if (rc)
+		goto err_ac;
+
+	tegra_gpio_enable(PICASSO_GPIO_CHARGE_DISABLE);
+	tegra_gpio_enable(PICASSO_GPIO_AC_DETECT_IRQ);
+	return 0;
+
+err_ac:
+	gpio_free(PICASSO_GPIO_CHARGE_DISABLE);
+err_chg:
+	return rc;
+}
+
+static void picasso_power_exit(struct device *dev)
+{
+	gpio_free(PICASSO_GPIO_CHARGE_DISABLE);
+	gpio_free(PICASSO_GPIO_AC_DETECT_IRQ);
+	tegra_gpio_disable(PICASSO_GPIO_AC_DETECT_IRQ);
+	tegra_gpio_disable(PICASSO_GPIO_CHARGE_DISABLE);
+}
+
+static struct pda_power_pdata picasso_power_data = {
+	.init = picasso_power_init,
+	.is_ac_online = picasso_is_ac_online,
+	.set_charge = picasso_set_charge,
+	.exit = picasso_power_exit,
+	.supplied_to = picasso_batteries,
+	.num_supplicants = ARRAY_SIZE(picasso_batteries),
+};
+
+static struct platform_device picasso_powerdev = {
+	.name = "pda-power",
+	.id = -1,
+	.resource = picasso_power_resources,
+	.num_resources = ARRAY_SIZE(picasso_power_resources),
+	.dev = {
+		.platform_data = &picasso_power_data,
+	},
+};
+
+static void __init picasso_power_supply_init(void) {
 	pm_power_off = picasso_power_off;
+	platform_device_register(&picasso_powerdev);
 }
 /******************************************************************************
  * I2C
@@ -463,7 +540,7 @@ static void __init tegra_picasso_init(void)
 	picasso_emc_init();
 	picasso_i2c_init();
 	picasso_regulator_init();
-	picasso_power_init();
+	picasso_power_supply_init();
 	picasso_usb_init();
 	picasso_keys_init();
 	picasso_panel_init();
