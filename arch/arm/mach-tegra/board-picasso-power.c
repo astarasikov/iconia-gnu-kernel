@@ -38,16 +38,6 @@
 #define PMC_CTRL		0x0
 #define PMC_CTRL_INTR_LOW	(1 << 17)
 
-#define CHARGING_DISABLE	TEGRA_GPIO_PR6
-
-int __init picasso_charge_init(void)
-{
-	gpio_request(CHARGING_DISABLE, "chg_disable");
-	gpio_direction_output(CHARGING_DISABLE, 0);
-	tegra_gpio_enable(CHARGING_DISABLE);
-	return 0;
-}
-
 static struct regulator_consumer_supply tps658621_sm0_supply[] = {
 	REGULATOR_SUPPLY("vdd_core", NULL),
 };
@@ -80,7 +70,7 @@ static struct regulator_consumer_supply tps658621_ldo3_supply[] = {
 
 static struct regulator_consumer_supply tps658621_ldo4_supply[] = {
 	REGULATOR_SUPPLY("avdd_osc", NULL),
-	REGULATOR_SUPPLY("vddio_sys", "panjit_touch"),
+	REGULATOR_SUPPLY("vddio_sys", NULL),
 };
 
 static struct regulator_consumer_supply tps658621_ldo5_supply[] = {
