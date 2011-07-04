@@ -363,6 +363,20 @@ static struct gpio_keys_button picasso_keys[] = {
 		.type = EV_KEY,
 		.debounce_interval = 10,
 	},
+	{
+		.code = KEY_RFKILL,
+		.gpio = PICASSO_GPIO_SWITCH_LOCK,
+		.desc = "Lock Switch",
+		.type = EV_SW,
+		.debounce_interval = 10,
+	},
+	{
+		.code = SW_DOCK,
+		.gpio = PICASSO_GPIO_SWITCH_DOCK,
+		.desc = "Dock Switch",
+		.type = EV_SW,
+		.debounce_interval = 10,
+	},
 };
 
 static struct gpio_keys_platform_data picasso_keys_platform_data = {
