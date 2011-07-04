@@ -35,41 +35,36 @@
 #include "devices.h"
 #include "gpio-names.h"
 #include "board.h"
-
-#define picasso_pnl_pwr_enb	TEGRA_GPIO_PC6
-#define picasso_bl_enb		TEGRA_GPIO_PD4
-#define picasso_lvds_shutdown	TEGRA_GPIO_PB2
-#define picasso_hdmi_hpd	TEGRA_GPIO_PN7
+#include "board-picasso.h"
 
 static struct regulator *picasso_hdmi_reg = NULL;
 static struct regulator *picasso_hdmi_pll = NULL;
 
-
 static int picasso_backlight_init(struct device *dev) {
 	int ret;
 
-	ret = gpio_request(picasso_bl_enb, "backlight_enb");
+	ret = gpio_request(PICASSO_GPIO_BL_ENABLE, "backlight_enb");
 	if (ret < 0)
 		return ret;
 
-	ret = gpio_direction_output(picasso_bl_enb, 1);
+	ret = gpio_direction_output(PICASSO_GPIO_BL_ENABLE, 1);
 	if (ret < 0)
-		gpio_free(picasso_bl_enb);
+		gpio_free(PICASSO_GPIO_BL_ENABLE);
 	else
-		tegra_gpio_enable(picasso_bl_enb);
+		tegra_gpio_enable(PICASSO_GPIO_BL_ENABLE);
 
 	return ret;
 };
 
 static void picasso_backlight_exit(struct device *dev) {
-	gpio_set_value(picasso_bl_enb, 0);
-	gpio_free(picasso_bl_enb);
-	tegra_gpio_disable(picasso_bl_enb);
+	gpio_set_value(PICASSO_GPIO_BL_ENABLE, 0);
+	gpio_free(PICASSO_GPIO_BL_ENABLE);
+	tegra_gpio_disable(PICASSO_GPIO_BL_ENABLE);
 }
 
 static int picasso_backlight_notify(struct device *unused, int brightness)
 {
-	gpio_set_value(picasso_bl_enb, !!brightness);
+	gpio_set_value(PICASSO_GPIO_BL_ENABLE, !!brightness);
 	return brightness;
 }
 
@@ -93,16 +88,16 @@ static struct platform_device picasso_backlight_device = {
 
 static int picasso_panel_enable(void)
 {
-	gpio_set_value(picasso_pnl_pwr_enb, 1);
+	gpio_set_value(PICASSO_GPIO_PNL_ENABLE, 1);
 	msleep(200);
-	gpio_set_value(picasso_lvds_shutdown, 1);
+	gpio_set_value(PICASSO_GPIO_LVDS_SHUTDOWN, 1);
 	return 0;
 }
 
 static int picasso_panel_disable(void)
 {
-	gpio_set_value(picasso_lvds_shutdown, 0);
-	gpio_set_value(picasso_pnl_pwr_enb, 0);
+	gpio_set_value(PICASSO_GPIO_LVDS_SHUTDOWN, 0);
+	gpio_set_value(PICASSO_GPIO_PNL_ENABLE, 0);
 	return 0;
 }
 
@@ -234,7 +229,7 @@ static struct tegra_dc_out picasso_disp2_out = {
 	.flags		= TEGRA_DC_OUT_HOTPLUG_HIGH,
 
 	.dcc_bus	= 1,
-	.hotplug_gpio	= picasso_hdmi_hpd,
+	.hotplug_gpio	= PICASSO_GPIO_HDMI_HPD,
 
 	.align		= TEGRA_DC_ALIGN_MSB,
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
@@ -334,17 +329,17 @@ int __init picasso_panel_init(void)
 	int err;
 	struct resource *res;
 
-	gpio_request(picasso_pnl_pwr_enb, "pnl_pwr_enb");
-	gpio_direction_output(picasso_pnl_pwr_enb, 1);
-	tegra_gpio_enable(picasso_pnl_pwr_enb);
+	gpio_request(PICASSO_GPIO_PNL_ENABLE, "pnl_pwr_enb");
+	gpio_direction_output(PICASSO_GPIO_PNL_ENABLE, 1);
+	tegra_gpio_enable(PICASSO_GPIO_PNL_ENABLE);
 
-	gpio_request(picasso_lvds_shutdown, "lvds_shdn");
-	gpio_direction_output(picasso_lvds_shutdown, 1);
-	tegra_gpio_enable(picasso_lvds_shutdown);
+	gpio_request(PICASSO_GPIO_LVDS_SHUTDOWN, "lvds_shdn");
+	gpio_direction_output(PICASSO_GPIO_LVDS_SHUTDOWN, 1);
+	tegra_gpio_enable(PICASSO_GPIO_LVDS_SHUTDOWN);
 
-	tegra_gpio_enable(picasso_hdmi_hpd);
-	gpio_request(picasso_hdmi_hpd, "hdmi_hpd");
-	gpio_direction_input(picasso_hdmi_hpd);
+	tegra_gpio_enable(PICASSO_GPIO_HDMI_HPD);
+	gpio_request(PICASSO_GPIO_HDMI_HPD, "hdmi_hpd");
+	gpio_direction_input(PICASSO_GPIO_HDMI_HPD);
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	picasso_panel_early_suspender.suspend = picasso_panel_early_suspend;
