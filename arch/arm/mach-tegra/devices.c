@@ -335,6 +335,38 @@ static struct resource tegra_usb3_resources[] = {
 	},
 };
 
+static u64 tegra_udc_dmamask = DMA_BIT_MASK(32);
+
+static struct fsl_usb2_platform_data tegra_udc_pdata = {
+	.operating_mode	= FSL_USB2_DR_DEVICE,
+	.phy_mode	= FSL_USB2_PHY_UTMI,
+};
+
+static struct resource tegra_udc_resources[] = {
+	[0] = {
+		.start	= TEGRA_USB_BASE,
+		.end	= TEGRA_USB_BASE + TEGRA_USB_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	[1] = {
+		.start	= INT_USB,
+		.end	= INT_USB,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device tegra_udc_device = {
+	.name	= "fsl-tegra-udc",
+	.id	= -1,
+	.dev	= {
+		.dma_mask	= &tegra_udc_dmamask,
+		.coherent_dma_mask = DMA_BIT_MASK(32),
+		.platform_data	= &tegra_udc_pdata,
+	},
+	.resource = tegra_udc_resources,
+	.num_resources = ARRAY_SIZE(tegra_udc_resources),
+};
+
 static u64 tegra_ehci_dmamask = DMA_BIT_MASK(32);
 
 struct platform_device tegra_ehci1_device = {
@@ -368,6 +400,26 @@ struct platform_device tegra_ehci3_device = {
 	},
 	.resource = tegra_usb3_resources,
 	.num_resources = ARRAY_SIZE(tegra_usb3_resources),
+};
+
+static struct resource tegra_otg_resources[] = {
+	[0] = {
+		.start	= TEGRA_USB_BASE,
+		.end	= TEGRA_USB_BASE + TEGRA_USB_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	[1] = {
+		.start	= INT_USB,
+		.end	= INT_USB,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device tegra_otg_device = {
+	.name		= "tegra-otg",
+	.id		= -1,
+	.resource	= tegra_otg_resources,
+	.num_resources	= ARRAY_SIZE(tegra_otg_resources),
 };
 
 static struct resource tegra_pmu_resources[] = {
