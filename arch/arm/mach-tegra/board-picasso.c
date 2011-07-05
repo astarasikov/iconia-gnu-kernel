@@ -49,6 +49,9 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 
+#include <sound/wm8903.h>
+#include <mach/tegra_wm8903_pdata.h>
+
 #include "board.h"
 #include "board-picasso.h"
 #include "clock.h"
@@ -155,12 +158,12 @@ static __initdata struct tegra_clk_init_table picasso_clk_init_table[] = {
 	{ "pwm",	"clk_m",	12000000,	false},
 	{ "pll_a",	NULL,		11289600,	true},
 	{ "pll_a_out0",	NULL,		11289600,	true},
-	{ "i2s1",	"pll_a_out0",	2822400,	true},
-	{ "i2s2",	"pll_a_out0",	11289600,	true},
-	{ "audio",	"pll_a_out0",	11289600,	true},
-	{ "audio_2x",	"audio",	22579200,	true},
+	{ "i2s1",	"pll_a_out0",	2822400,	false},
+	{ "i2s2",	"pll_a_out0",	11289600,	false},
+	{ "audio",	"pll_a_out0",	11289600,	false},
+	{ "audio_2x",	"audio",	22579200,	false},
 	{ "spdif_out",	"pll_a_out0",	5644800,	false},
-	//{ "kbc",	"clk_32k",	32768,		true},
+	//{ "kbc",	"clk_32k",	32768,		false},
 	{ "usbd",	"clk_m",	12000000,	false},
 	{ "usb2",	"clk_m",	12000000,	false},
 	{ "usb3",	"clk_m",	12000000,	false},
@@ -238,6 +241,7 @@ static void __init picasso_touch_init(void) {
 
 	i2c_register_board_info(0, &mxt_device, 1);
 }
+
 /******************************************************************************
  * Power Supply
  *****************************************************************************/
@@ -274,7 +278,7 @@ static void picasso_power_off(void)
 }
 
 static char *picasso_batteries[] = {
-	"battery",
+	"acer_picasso_battery",
 };
 
 static struct resource picasso_power_resources[] = {
@@ -346,10 +350,57 @@ static struct platform_device picasso_powerdev = {
 	},
 };
 
+static struct i2c_board_info __initdata picasso_battery = {
+	I2C_BOARD_INFO("acer_picasso_battery", 0x58),
+	.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_AC_DETECT_IRQ),
+};
+
 static void __init picasso_power_supply_init(void) {
 	pm_power_off = picasso_power_off;
 	platform_device_register(&picasso_powerdev);
+	i2c_register_board_info(2, &picasso_battery, 1);
 }
+
+/******************************************************************************
+ * Audio
+ *****************************************************************************/
+static struct tegra_wm8903_platform_data picasso_audio_pdata = {
+	.gpio_spkr_en		= -1,
+	.gpio_hp_mute		= -1,
+	.gpio_hp_det		= PICASSO_GPIO_HP_DETECT,
+	.gpio_int_mic_en	= PICASSO_GPIO_MIC_EN_INT,
+	.gpio_ext_mic_en	= PICASSO_GPIO_MIC_EN_EXT,
+};
+
+static struct platform_device picasso_audio_device = {
+	.name	= "tegra-snd-wm8903",
+	.id	= 0,
+	.dev	= {
+		.platform_data  = &picasso_audio_pdata,
+	},
+};
+static struct i2c_board_info __initdata wm8903_device = {
+	I2C_BOARD_INFO("wm8903", 0x1a),
+	.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_WM8903_IRQ),
+};
+
+static void __init picasso_sound_init(void) {
+	int rc;
+	rc = gpio_request(PICASSO_GPIO_WM8903_IRQ, "wm8903 irq");
+	if (rc) {
+		printk(KERN_ERR "%s: unable to request wm8903 gpio\n", __func__);
+	}
+	else {
+		tegra_gpio_enable(PICASSO_GPIO_WM8903_IRQ);
+		tegra_gpio_enable(PICASSO_GPIO_HP_DETECT);
+		tegra_gpio_enable(PICASSO_GPIO_MIC_EN_INT);
+		tegra_gpio_enable(PICASSO_GPIO_MIC_EN_EXT);
+		gpio_direction_input(PICASSO_GPIO_WM8903_IRQ);
+		i2c_register_board_info(0, &wm8903_device, 1);
+		platform_device_register(&picasso_audio_device);
+	}
+}
+
 /******************************************************************************
  * I2C
  *****************************************************************************/
@@ -361,7 +412,7 @@ static struct tegra_i2c_platform_data picasso_i2c1_platform_data = {
 
 static const struct tegra_pingroup_config i2c2_ddc = {
 	.pingroup       = TEGRA_PINGROUP_DDC,
-		.func           = TEGRA_MUX_I2C2,
+	.func           = TEGRA_MUX_I2C2,
 };
 
 static const struct tegra_pingroup_config i2c2_gen2 = {
@@ -372,7 +423,7 @@ static const struct tegra_pingroup_config i2c2_gen2 = {
 static struct tegra_i2c_platform_data picasso_i2c2_platform_data = {
 	.adapter_nr     = 1,
 	.bus_count      = 2,
-	.bus_clk_rate   = { 50000, 100000 },
+	.bus_clk_rate   = { 400000, 100000 },
 	.bus_mux        = { &i2c2_ddc, &i2c2_gen2 },
 	.bus_mux_len    = { 1, 1 },
 };
@@ -390,7 +441,7 @@ static struct tegra_i2c_platform_data picasso_dvc_platform_data = {
 	.is_dvc         = true,
 };
 
-static void picasso_i2c_init(void)
+static void __init picasso_i2c_init(void)
 {
 	tegra_i2c_device1.dev.platform_data = &picasso_i2c1_platform_data;
 	tegra_i2c_device2.dev.platform_data = &picasso_i2c2_platform_data;
@@ -497,16 +548,6 @@ static struct tegra_sdhci_platform_data tegra_sdhci_platform_data4 = {
 	.wp_gpio = -1,
 	.power_gpio = -1,
 };
-
-static void __init picasso_sdhci_init(void) {
-	tegra_sdhci_device1.dev.platform_data = &tegra_sdhci_platform_data1;
-	tegra_sdhci_device3.dev.platform_data = &tegra_sdhci_platform_data3;
-	tegra_sdhci_device4.dev.platform_data = &tegra_sdhci_platform_data4;
-
-	platform_device_register(&tegra_sdhci_device4);
-	platform_device_register(&tegra_sdhci_device3);
-	//platform_device_register(&tegra_sdhci_device1);
-}
 /******************************************************************************
  * Platform devices
  *****************************************************************************/
@@ -516,6 +557,11 @@ static struct platform_device *picasso_devices[] __initdata = {
 	&tegra_gart_device,
 	&tegra_aes_device,
 	&picasso_keys_device,
+	&tegra_i2s_device1,
+	&tegra_das_device,
+	&tegra_pcm_device,
+	&tegra_sdhci_device4,
+	&tegra_sdhci_device3,
 };
 
 static int __init tegra_picasso_protected_aperture_init(void)
@@ -535,6 +581,10 @@ static void __init tegra_picasso_init(void)
 	picasso_pinmux_init();
 	tegra_clk_init_from_table(picasso_clk_init_table);
 	
+	tegra_sdhci_device1.dev.platform_data = &tegra_sdhci_platform_data1;
+	tegra_sdhci_device3.dev.platform_data = &tegra_sdhci_platform_data3;
+	tegra_sdhci_device4.dev.platform_data = &tegra_sdhci_platform_data4;
+	
 	platform_add_devices(picasso_devices, ARRAY_SIZE(picasso_devices));
 
 	picasso_emc_init();
@@ -544,8 +594,8 @@ static void __init tegra_picasso_init(void)
 	picasso_usb_init();
 	picasso_keys_init();
 	picasso_panel_init();
-	picasso_sdhci_init();
 	picasso_touch_init();
+	picasso_sound_init();
 }
 
 MACHINE_START(VENTANA, "picasso")
