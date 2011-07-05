@@ -557,7 +557,9 @@ static int __init spi_tegra_probe(struct platform_device *pdev)
 	tspi->rx_dma_req.req_sel = spi_tegra_req_sels[pdev->id];
 	tspi->rx_dma_req.dev = tspi;
 
+#ifdef CONFIG_OF
 	master->dev.of_node = of_node_get(pdev->dev.of_node);
+#endif
 	ret = spi_register_master(master);
 
 	if (ret < 0)
@@ -566,7 +568,9 @@ static int __init spi_tegra_probe(struct platform_device *pdev)
 	return ret;
 
 err5:
+#ifdef CONFIG_OF
 	of_node_put(master->dev.of_node);
+#endif
 	dma_free_coherent(&pdev->dev, sizeof(u32) * BB_LEN,
 			  tspi->rx_bb, tspi->rx_bb_phys);
 err4:
@@ -658,15 +662,15 @@ static struct of_device_id spi_tegra_of_match_table[] __devinitdata = {
 	{}
 };
 MODULE_DEVICE_TABLE(of, spi_tegra_of_match_table);
-#else /* CONFIG_OF */
-#define spi_tegra_of_match_table NULL
 #endif /* CONFIG_OF */
 
 static struct platform_driver spi_tegra_driver = {
 	.driver = {
 		.name =		"spi_tegra",
 		.owner =	THIS_MODULE,
+#ifdef CONFIG_OF
 		.of_match_table = spi_tegra_of_match_table,
+#endif
 	},
 	.remove =	__devexit_p(spi_tegra_remove),
 #ifdef CONFIG_PM
