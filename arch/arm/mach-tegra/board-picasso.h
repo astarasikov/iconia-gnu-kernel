@@ -17,12 +17,9 @@
 #ifndef _MACH_TEGRA_BOARD_PICASSO_H
 #define _MACH_TEGRA_BOARD_PICASSO_H
 
-int picasso_charge_init(void);
 int picasso_regulator_init(void);
 int picasso_pinmux_init(void);
 int picasso_panel_init(void);
-int picasso_wired_jack_init(void);
-int picasso_sensors_init(void);
 int picasso_kbc_init(void);
 int picasso_emc_init(void);
 
@@ -69,8 +66,9 @@ int picasso_emc_init(void);
 
 #define PICASSO_GPIO_AKM8975_IRQ	TEGRA_GPIO_PN5
 #define PICASSO_GPIO_KXTF9_IRQ	TEGRA_GPIO_PS7
-#define PICASSO_GPIO_ISL29018_IRQ	TEGRA_GPIO_PZ2
+#define PICASSO_GPIO_AL3000A_IRQ	TEGRA_GPIO_PZ2
 #define PICASSO_GPIO_MPU3050_IRQ	TEGRA_GPIO_PZ4
+#define PICASSO_GPIO_NCT1008	TEGRA_GPIO_PN6
 
 /* TPS6586X gpios */
 #define TPS6586X_GPIO_BASE	TEGRA_NR_GPIOS
