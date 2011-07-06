@@ -192,7 +192,7 @@ static enum power_supply_property picasso_battery_properties[] = {
 };
 
 static struct power_supply picasso_battery_supply = {
-	.name = PICASSO_EC_BAT_ID,
+	.name = "battery",
 	.type = POWER_SUPPLY_TYPE_BATTERY,
 	.properties = picasso_battery_properties,
 	.num_properties = ARRAY_SIZE(picasso_battery_properties),

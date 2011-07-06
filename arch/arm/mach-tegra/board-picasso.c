@@ -279,7 +279,7 @@ static void picasso_power_off(void)
 }
 
 static char *picasso_batteries[] = {
-	PICASSO_EC_BAT_ID,
+	"battery",
 };
 
 static struct resource picasso_power_resources[] = {
