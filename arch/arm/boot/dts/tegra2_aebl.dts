@@ -1,0 +1,8 @@
+/dts-v1/;
+
+/include/ "tegra20.dtsi"
+
+/ {
+        model = "Google Aebl";
+        compatible = "google,aebl", "nvidia,tegra20";
+};
