@@ -38,6 +38,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/pda_power.h>
 #include <linux/mfd/acer_picasso_ec.h>
+#include <linux/nct1008.h>
 
 #include <mach/iomap.h>
 #include <mach/irqs.h>
@@ -435,10 +436,6 @@ static struct tegra_i2c_platform_data picasso_dvc_platform_data = {
 	.is_dvc         = true,
 };
 
-static struct i2c_board_info __initdata picasso_ec = {
-	I2C_BOARD_INFO(PICASSO_EC_ID, 0x58),
-};
-
 static void __init picasso_i2c_init(void)
 {
 	tegra_i2c_device1.dev.platform_data = &picasso_i2c1_platform_data;
@@ -450,7 +447,50 @@ static void __init picasso_i2c_init(void)
 	platform_device_register(&tegra_i2c_device3);
 	platform_device_register(&tegra_i2c_device2);
 	platform_device_register(&tegra_i2c_device1);
+}
+
+/******************************************************************************
+ * Sensors
+ *****************************************************************************/
+/*FIXME
+ * al3000a_ls
+ * akm8975
+ * mpu3050
+ * kxtf9
+ */
+
+static struct nct1008_platform_data ventana_nct1008_pdata = {
+	.supported_hwrev = true,
+	.ext_range = false,
+	.conv_rate = 0x08,
+	.offset = 0,
+	.hysteresis = 0,
+	.shutdown_ext_limit = 85,
+	.shutdown_local_limit = 90,
+	.throttling_ext_limit = 65,
+	.alarm_fn = tegra_throttling_enable,
+};
+
+static struct i2c_board_info __initdata picasso_i2c4_board_info[] = {
+	{
+		I2C_BOARD_INFO("nct1008", 0x4C),
+		.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_NCT1008),
+		.platform_data = &ventana_nct1008_pdata,
+	},
+};
+
+static struct i2c_board_info __initdata picasso_ec = {
+	I2C_BOARD_INFO(PICASSO_EC_ID, 0x58),
+};
+
+static void __init picasso_sensors_init(void) {
+	tegra_gpio_enable(PICASSO_GPIO_NCT1008);
+	gpio_request(PICASSO_GPIO_NCT1008, "nct1008");
+	gpio_direction_input(PICASSO_GPIO_NCT1008);
+
 	i2c_register_board_info(2, &picasso_ec, 1);
+	i2c_register_board_info(4, picasso_i2c4_board_info,
+		ARRAY_SIZE(picasso_i2c4_board_info));
 }
 
 /******************************************************************************
@@ -584,11 +624,15 @@ static void __init tegra_picasso_init(void)
 	tegra_sdhci_device1.dev.platform_data = &tegra_sdhci_platform_data1;
 	tegra_sdhci_device3.dev.platform_data = &tegra_sdhci_platform_data3;
 	tegra_sdhci_device4.dev.platform_data = &tegra_sdhci_platform_data4;
-	
+
+//	tegra_gpio_enable(PICASSO_GPIO_WLAN_POWER);
+//	gpio_direction_output(PICASSO_GPIO_WLAN_POWER, 0);
+
 	platform_add_devices(picasso_devices, ARRAY_SIZE(picasso_devices));
 
 	picasso_emc_init();
 	picasso_i2c_init();
+	picasso_sensors_init();
 	picasso_regulator_init();
 	picasso_power_supply_init();
 	picasso_usb_init();
