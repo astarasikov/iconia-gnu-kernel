@@ -278,7 +278,7 @@ static void picasso_power_off(void)
 }
 
 static char *picasso_batteries[] = {
-	"acer_picasso_battery",
+	PICASSO_EC_BAT_ID,
 };
 
 static struct resource picasso_power_resources[] = {
@@ -350,15 +350,9 @@ static struct platform_device picasso_powerdev = {
 	},
 };
 
-static struct i2c_board_info __initdata picasso_battery = {
-	I2C_BOARD_INFO(PICASSO_EC_ID, 0x58),
-	.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_AC_DETECT_IRQ),
-};
-
 static void __init picasso_power_supply_init(void) {
 	pm_power_off = picasso_power_off;
 	platform_device_register(&picasso_powerdev);
-	i2c_register_board_info(2, &picasso_battery, 1);
 }
 
 /******************************************************************************
@@ -441,6 +435,10 @@ static struct tegra_i2c_platform_data picasso_dvc_platform_data = {
 	.is_dvc         = true,
 };
 
+static struct i2c_board_info __initdata picasso_ec = {
+	I2C_BOARD_INFO(PICASSO_EC_ID, 0x58),
+};
+
 static void __init picasso_i2c_init(void)
 {
 	tegra_i2c_device1.dev.platform_data = &picasso_i2c1_platform_data;
@@ -452,6 +450,7 @@ static void __init picasso_i2c_init(void)
 	platform_device_register(&tegra_i2c_device3);
 	platform_device_register(&tegra_i2c_device2);
 	platform_device_register(&tegra_i2c_device1);
+	i2c_register_board_info(2, &picasso_ec, 1);
 }
 
 /******************************************************************************
