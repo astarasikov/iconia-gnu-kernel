@@ -37,7 +37,7 @@
 #include <linux/input.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pda_power.h>
-#include <linux/power/bq20z75.h>
+#include <linux/mfd/acer_picasso_ec.h>
 
 #include <mach/iomap.h>
 #include <mach/irqs.h>
@@ -351,7 +351,7 @@ static struct platform_device picasso_powerdev = {
 };
 
 static struct i2c_board_info __initdata picasso_battery = {
-	I2C_BOARD_INFO("acer_picasso_battery", 0x58),
+	I2C_BOARD_INFO(PICASSO_EC_ID, 0x58),
 	.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_AC_DETECT_IRQ),
 };
 
