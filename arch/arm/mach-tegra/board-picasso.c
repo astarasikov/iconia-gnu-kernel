@@ -153,7 +153,7 @@ static __initdata struct tegra_clk_init_table picasso_clk_init_table[] = {
 	{ "pll_m",	"clk_m",	600000000,	true},
 	{ "emc",	"pll_m",	600000000,	true},
 	{ "uartc",	"pll_c",	600000000,	false},
-	{ "blink",	"clk_32k",	32768,		false},
+	{ "blink",	"clk_32k",	32768,		true},
 	{ "pll_p_out4",	"pll_p",	24000000,	true },
 	{ "pwm",	"clk_m",	12000000,	false},
 	{ "pll_a",	NULL,		11289600,	true},
@@ -534,7 +534,7 @@ static void picasso_keys_init(void)
 static struct tegra_sdhci_platform_data tegra_sdhci_platform_data1 = {
 	.cd_gpio = -1,
 	.wp_gpio = -1,
-	.power_gpio = -1,
+	.power_gpio = PICASSO_GPIO_WLAN_RESET,
 };
 
 static struct tegra_sdhci_platform_data tegra_sdhci_platform_data3 = {
@@ -562,6 +562,7 @@ static struct platform_device *picasso_devices[] __initdata = {
 	&tegra_pcm_device,
 	&tegra_sdhci_device4,
 	&tegra_sdhci_device3,
+	&tegra_sdhci_device1,
 };
 
 static int __init tegra_picasso_protected_aperture_init(void)
