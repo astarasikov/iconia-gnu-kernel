@@ -369,6 +369,13 @@ config LEDS_NETXBIG
 	  and 5Big Network v2 boards. The LEDs are wired to a CPLD and are
 	  controlled through a GPIO extension bus.
 
+config LEDS_ACER_PICASSO
+	tristate "LED support for Acer Picasso"
+	depends on MFD_ACER_PICASSO_EC
+	default y
+	help
+	  This option enables support for LEDs in Acer Iconia Tab A500 computer
+
 config LEDS_TRIGGERS
 	bool "LED Trigger support"
 	depends on LEDS_CLASS
