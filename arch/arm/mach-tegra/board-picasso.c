@@ -151,23 +151,7 @@ static void __init picasso_usb_init(void) {
 static __initdata struct tegra_clk_init_table picasso_clk_init_table[] = {
 	/* name		parent		rate		enabled */
 	{ "uartd",	"pll_p",	216000000,	true},
-	{ "pll_m",	"clk_m",	600000000,	true},
-	{ "emc",	"pll_m",	600000000,	true},
-	{ "uartc",	"pll_c",	600000000,	false},
 	{ "blink",	"clk_32k",	32768,		true},
-	{ "pll_p_out4",	"pll_p",	24000000,	true },
-	{ "pwm",	"clk_m",	12000000,	false},
-	{ "pll_a",	NULL,		11289600,	true},
-	{ "pll_a_out0",	NULL,		11289600,	true},
-	{ "i2s1",	"pll_a_out0",	2822400,	false},
-	{ "i2s2",	"pll_a_out0",	11289600,	false},
-	{ "audio",	"pll_a_out0",	11289600,	false},
-	{ "audio_2x",	"audio",	22579200,	false},
-	{ "spdif_out",	"pll_a_out0",	5644800,	false},
-	//{ "kbc",	"clk_32k",	32768,		false},
-	{ "usbd",	"clk_m",	12000000,	false},
-	{ "usb2",	"clk_m",	12000000,	false},
-	{ "usb3",	"clk_m",	12000000,	false},
 	{ NULL,		NULL,		0,		0},
 };
 
@@ -624,9 +608,6 @@ static void __init tegra_picasso_init(void)
 	tegra_sdhci_device1.dev.platform_data = &tegra_sdhci_platform_data1;
 	tegra_sdhci_device3.dev.platform_data = &tegra_sdhci_platform_data3;
 	tegra_sdhci_device4.dev.platform_data = &tegra_sdhci_platform_data4;
-
-//	tegra_gpio_enable(PICASSO_GPIO_WLAN_POWER);
-//	gpio_direction_output(PICASSO_GPIO_WLAN_POWER, 0);
 
 	platform_add_devices(picasso_devices, ARRAY_SIZE(picasso_devices));
 
