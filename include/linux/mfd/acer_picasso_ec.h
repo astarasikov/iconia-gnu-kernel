@@ -10,6 +10,13 @@
 #define PICASSO_EC_BAT_ID "acer_picasso_battery"
 #define PICASSO_EC_LED_ID "acer_picasso_leds"
 
+enum picasso_ec_reg {
+	EC_BATT_CAPACITY = 0x0,
+	EC_BATT_VOLTAGE	= 0x1,
+	EC_BATT_DESIGN_CAPACITY = 0x8,
+	EC_BATT_TEMPERATURE = 0xa,
+};
+
 /**
  * @brief the callback to read a 16-bit word from an ec register
  * @param client the pointer to the i2c_client of the ec chip
