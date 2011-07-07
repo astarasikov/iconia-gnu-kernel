@@ -50,14 +50,14 @@ static struct led_classdev picasso_leds[] = {
 
 static void picasso_update_color_leds(struct work_struct* work) {
 	if (!picasso_leds[ORANGE].brightness && !picasso_leds[WHITE].brightness) {
-		priv->write(priv->client, 0x40, 0);
+		priv->write(priv->client, EC_LED_OFF, 0);
 		return;
 	}
 	if (picasso_leds[WHITE].brightness) {
-		priv->write(priv->client, 0x42, 0);
+		priv->write(priv->client, EC_LED_WHITE, 0);
 	}
 	if (picasso_leds[ORANGE].brightness) {
-		priv->write(priv->client, 0x43, 0);
+		priv->write(priv->client, EC_LED_ORANGE, 0);
 	}
 }
 
@@ -97,6 +97,9 @@ led_fail:
 static int picasso_leds_remove(struct platform_device *pdev)
 {
 	int i;
+	
+	priv->write(priv->client, EC_LED_RESET, 0);
+	
 	for (i = 0; i < ARRAY_SIZE(picasso_leds); i++) {
 		led_classdev_unregister(&picasso_leds[i]);
 	}
@@ -108,11 +111,13 @@ static int picasso_leds_remove(struct platform_device *pdev)
 static int picasso_leds_suspend(struct platform_device *pdev, pm_message_t mesg)
 {
 	cancel_work_sync(&colorled_wq);
+	priv->write(priv->client, EC_LED_RESET, 0);
 	return 0;
 }
 
 static int picasso_leds_resume(struct platform_device *pdev)
 {
+	schedule_work(&colorled_wq);
 	return 0;
 }
 #else
