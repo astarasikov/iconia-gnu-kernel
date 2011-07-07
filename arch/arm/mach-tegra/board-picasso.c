@@ -230,38 +230,6 @@ static void __init picasso_touch_init(void) {
 /******************************************************************************
  * Power Supply
  *****************************************************************************/
-static void reg_off(const char *reg)
-{
-	int rc;
-	struct regulator *regulator;
-
-	regulator = regulator_get(NULL, reg);
-
-	if (IS_ERR(regulator)) {
-		pr_err("%s: regulator_get returned %ld\n", __func__,
-		       PTR_ERR(regulator));
-		return;
-	}
-
-	rc = regulator_force_disable(regulator);
-	if (rc)
-		pr_err("%s: regulator_force_disable returned %d\n", __func__,
-			rc);
-	regulator_put(regulator);
-}
-
-static void picasso_power_off(void)
-{
-	reg_off("vdd_sm2");
-	reg_off("vdd_core");
-	reg_off("vdd_cpu");
-	local_irq_disable();
-	while (1) {
-		dsb();
-		__asm__ ("wfi");
-	}
-}
-
 static char *picasso_batteries[] = {
 	"battery",
 };
@@ -334,11 +302,6 @@ static struct platform_device picasso_powerdev = {
 		.platform_data = &picasso_power_data,
 	},
 };
-
-static void __init picasso_power_supply_init(void) {
-	pm_power_off = picasso_power_off;
-	platform_device_register(&picasso_powerdev);
-}
 
 /******************************************************************************
  * Audio
@@ -586,6 +549,7 @@ static struct platform_device *picasso_devices[] __initdata = {
 	&tegra_sdhci_device4,
 	&tegra_sdhci_device3,
 	&tegra_sdhci_device1,
+	&picasso_powerdev,
 };
 
 static int __init tegra_picasso_protected_aperture_init(void)
@@ -615,7 +579,6 @@ static void __init tegra_picasso_init(void)
 	picasso_i2c_init();
 	picasso_sensors_init();
 	picasso_regulator_init();
-	picasso_power_supply_init();
 	picasso_usb_init();
 	picasso_keys_init();
 	picasso_panel_init();
