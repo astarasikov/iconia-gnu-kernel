@@ -9,6 +9,7 @@
 #define PICASSO_EC_ID	PICASSO_EC_NAME
 #define PICASSO_EC_BAT_ID "acer_picasso_battery"
 #define PICASSO_EC_LED_ID "acer_picasso_leds"
+#define PICASSO_EC_SYS_ID "acer_picasso_system"
 
 enum picasso_ec_reg {
 	EC_BATT_CAPACITY = 0x0,
@@ -20,6 +21,9 @@ enum picasso_ec_reg {
 	EC_LED_OFF = 0x41,
 	EC_LED_WHITE = 0x42,
 	EC_LED_ORANGE = 0x43,
+
+	EC_SYS_SHUTDOWN = 0x52,
+	EC_SYS_RESTART = 0x55,
 };
 
 /**
