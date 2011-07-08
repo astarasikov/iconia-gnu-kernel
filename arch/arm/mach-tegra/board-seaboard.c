@@ -93,8 +93,8 @@ static __initdata struct tegra_clk_init_table seaboard_clk_init_table[] = {
 	{ "audio",      "pll_a_out0",   11289600,       false},
 	{ "audio_2x",   "audio",        22579200,       false},
 	{ "spdif_out",  "pll_a_out0",   11289600,       false},
-        { "uartb",      "pll_p",        216000000,      true},
-        { "uartd",      "pll_p",        216000000,      true},
+	{ "uartb",      "pll_p",        216000000,      false},
+	{ "uartd",      "pll_p",        216000000,      false},
 	{ "pwm",        "clk_m",        12000000,       false},
 	{ NULL,		NULL,		0,		0},
 };
@@ -1036,6 +1036,11 @@ static struct tegra_suspend_platform_data seaboard_suspend = {
 
 static void __init __init_debug_uart_D(void)
 {
+	struct clk *c;
+
+	c = tegra_get_clock_by_name("uartd");
+	clk_enable(c);
+
 	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTD_BASE);
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTD_BASE;
 	debug_uart_platform_data[0].irq = INT_UARTD;
@@ -1043,6 +1048,11 @@ static void __init __init_debug_uart_D(void)
 
 static void __init __init_debug_uart_B(void)
 {
+	struct clk *c;
+
+	c = tegra_get_clock_by_name("uartb");
+	clk_enable(c);
+
 	debug_uart_platform_data[0].membase = IO_ADDRESS(TEGRA_UARTB_BASE);
 	debug_uart_platform_data[0].mapbase = TEGRA_UARTB_BASE;
 	debug_uart_platform_data[0].irq = INT_UARTB;
