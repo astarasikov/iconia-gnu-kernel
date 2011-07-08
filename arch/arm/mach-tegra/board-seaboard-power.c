@@ -25,6 +25,7 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <mach/iomap.h>
+#include <mach/powergate.h>
 #include <linux/err.h>
 
 #include <asm/mach-types.h>
@@ -343,6 +344,8 @@ int __init seaboard_power_init(void)
 		pr_warning("Unable to initialize ac power\n");
 
 	pm_power_off = seaboard_power_off;
+
+	tegra_powergate_power_off(TEGRA_POWERGATE_PCIE);
 
 	return 0;
 }
