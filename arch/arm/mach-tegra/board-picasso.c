@@ -314,7 +314,7 @@ static struct platform_device picasso_powerdev = {
  * Audio
  *****************************************************************************/
 static struct tegra_wm8903_platform_data picasso_audio_pdata = {
-	.gpio_spkr_en		= -1,
+	.gpio_spkr_en		= PICASSO_GPIO_SPK_AMP,
 	.gpio_hp_mute		= -1,
 	.gpio_hp_det		= PICASSO_GPIO_HP_DETECT,
 	.gpio_int_mic_en	= PICASSO_GPIO_MIC_EN_INT,
@@ -328,9 +328,16 @@ static struct platform_device picasso_audio_device = {
 		.platform_data  = &picasso_audio_pdata,
 	},
 };
+
+static struct wm8903_platform_data picasso_wm8903_pdata = {
+	.micdet_delay = 100,
+	.gpio_base = PICASSO_WM8903_GPIO_BASE,
+};
+
 static struct i2c_board_info __initdata wm8903_device = {
 	I2C_BOARD_INFO("wm8903", 0x1a),
 	.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_WM8903_IRQ),
+	.platform_data = &picasso_wm8903_pdata,
 };
 
 static void __init picasso_sound_init(void) {
