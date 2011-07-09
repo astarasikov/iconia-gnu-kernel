@@ -152,6 +152,13 @@ static __initdata struct tegra_clk_init_table picasso_clk_init_table[] = {
 	/* name		parent		rate		enabled */
 	{ "uartd",	"pll_p",	216000000,	true},
 	{ "blink",	"clk_32k",	32768,		true},
+	{ "pll_a",	NULL,		11289600,	true},
+	{ "pll_a_out0",	NULL,		11289600,	true},
+	{ "i2s1",	"pll_a_out0",	2822400,	true},
+	{ "i2s2",	"pll_a_out0",	11289600,	true},
+	{ "audio",	"pll_a_out0",	11289600,	true},
+	{ "audio_2x",	"audio",	22579200,	true},
+	{ "spdif_out",	"pll_a_out0",	5644800,	false},
 	{ NULL,		NULL,		0,		0},
 };
 
