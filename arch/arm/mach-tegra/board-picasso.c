@@ -332,6 +332,13 @@ static struct platform_device picasso_audio_device = {
 static struct wm8903_platform_data picasso_wm8903_pdata = {
 	.micdet_delay = 100,
 	.gpio_base = PICASSO_WM8903_GPIO_BASE,
+	.gpio_cfg = {
+		WM8903_GPIO_NO_CONFIG,
+		WM8903_GPIO_NO_CONFIG,
+		WM8903_GPn_FN_GPIO_OUTPUT << WM8903_GP3_FN_SHIFT,
+		WM8903_GPIO_NO_CONFIG,
+		WM8903_GPIO_NO_CONFIG,
+	},
 };
 
 static struct i2c_board_info __initdata wm8903_device = {
