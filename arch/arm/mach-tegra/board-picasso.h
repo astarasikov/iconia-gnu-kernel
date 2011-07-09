@@ -90,4 +90,7 @@ int picasso_emc_init(void);
 #define CAM3_LDO_SHUTDN_L_GPIO	(TCA6416_GPIO_BASE + 11) /* gpio11 */
 #define CAM_I2C_MUX_RST_GPIO	(TCA6416_GPIO_BASE + 15) /* gpio15 */
 
+#define PICASSO_WM8903_GPIO_BASE (TCA6416_GPIO_BASE + 16)
+#define PICASSO_GPIO_SPK_AMP (PICASSO_WM8903_GPIO_BASE + 2)
+
 #endif
