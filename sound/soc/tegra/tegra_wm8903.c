@@ -138,6 +138,11 @@ static struct snd_soc_jack_pin tegra_wm8903_hp_jack_pins[] = {
 		.pin = "Headphone Jack",
 		.mask = SND_JACK_HEADPHONE,
 	},
+	{
+		.pin = "Int Spk",
+		.mask = SND_JACK_HEADPHONE,
+		.invert = 1,
+	},
 };
 
 static struct snd_soc_jack_gpio tegra_wm8903_hp_jack_gpio = {
@@ -164,11 +169,10 @@ static int tegra_wm8903_event_int_spk(struct snd_soc_dapm_widget *w,
 	struct tegra_wm8903 *machine = snd_soc_card_get_drvdata(card);
 	struct tegra_wm8903_platform_data *pdata = machine->pdata;
 
-	if (!(machine->gpio_requested & GPIO_SPKR_EN))
-		return 0;
-
-	gpio_set_value_cansleep(pdata->gpio_spkr_en,
-				SND_SOC_DAPM_EVENT_ON(event));
+	if (machine->gpio_requested & GPIO_SPKR_EN) {
+		gpio_set_value_cansleep(pdata->gpio_spkr_en,
+			SND_SOC_DAPM_EVENT_ON(event));
+	}
 
 	return 0;
 }
@@ -180,12 +184,11 @@ static int tegra_wm8903_event_hp(struct snd_soc_dapm_widget *w,
 	struct snd_soc_card *card = dapm->card;
 	struct tegra_wm8903 *machine = snd_soc_card_get_drvdata(card);
 	struct tegra_wm8903_platform_data *pdata = machine->pdata;
-
-	if (!(machine->gpio_requested & GPIO_HP_MUTE))
-		return 0;
-
-	gpio_set_value_cansleep(pdata->gpio_hp_mute,
-				!SND_SOC_DAPM_EVENT_ON(event));
+	
+	if (machine->gpio_requested & GPIO_HP_MUTE) {
+		gpio_set_value_cansleep(pdata->gpio_hp_mute,
+			!SND_SOC_DAPM_EVENT_ON(event));
+	}
 
 	return 0;
 }
@@ -236,10 +239,6 @@ static const struct snd_soc_dapm_route aebl_audio_map[] = {
 	{"Int Spk", NULL, "LINEOUTL"},
 	{"Mic Bias", NULL, "Mic Jack"},
 	{"IN1R", NULL, "Mic Bias"},
-};
-
-static const struct snd_kcontrol_new tegra_wm8903_controls[] = {
-	SOC_DAPM_PIN_SWITCH("Int Spk"),
 };
 
 static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
@@ -297,10 +296,28 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 		gpio_direction_output(pdata->gpio_ext_mic_en, 0);
 	}
 	
-	ret = snd_soc_add_controls(codec, tegra_wm8903_controls,
-				   ARRAY_SIZE(tegra_wm8903_controls));
-	if (ret < 0)
-		return ret;
+	snd_soc_dapm_new_controls(dapm, tegra_wm8903_dapm_widgets,
+					ARRAY_SIZE(tegra_wm8903_dapm_widgets));
+	snd_soc_dapm_add_routes(dapm, aebl_audio_map,
+				ARRAY_SIZE(aebl_audio_map));
+
+	if (machine_is_harmony()
+#ifndef CONFIG_VENTANA_ACER_PICASSO	
+	|| machine_is_ventana()
+#endif
+	) {
+		snd_soc_dapm_add_routes(dapm, harmony_audio_map,
+			ARRAY_SIZE(harmony_audio_map));
+	} else if (machine_is_seaboard()) {
+		snd_soc_dapm_add_routes(dapm, seaboard_audio_map,
+			ARRAY_SIZE(seaboard_audio_map));
+	} else if (machine_is_kaen()) {
+		snd_soc_dapm_add_routes(dapm, kaen_audio_map,
+			ARRAY_SIZE(kaen_audio_map));
+	} else {
+		snd_soc_dapm_add_routes(dapm, aebl_audio_map,
+			ARRAY_SIZE(aebl_audio_map));
+	}
 
 	if (gpio_is_valid(pdata->gpio_hp_det)) {
 		tegra_wm8903_hp_jack_gpio.gpio = pdata->gpio_hp_det;
@@ -365,8 +382,6 @@ static struct snd_soc_card snd_soc_tegra_wm8903 = {
 	.name = "tegra-wm8903",
 	.dai_link = &tegra_wm8903_dai,
 	.num_links = 1,
-	.dapm_widgets = tegra_wm8903_dapm_widgets,
-	.num_dapm_widgets = ARRAY_SIZE(tegra_wm8903_dapm_widgets),
 };
 
 static __devinit int tegra_wm8903_driver_probe(struct platform_device *pdev)
@@ -398,19 +413,6 @@ static __devinit int tegra_wm8903_driver_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, machine);
 
-	if (machine_is_harmony() || machine_is_ventana()) {
-		card->dapm_routes = harmony_audio_map;
-		card->num_dapm_routes = ARRAY_SIZE(harmony_audio_map);
-	} else if (machine_is_seaboard()) {
-		card->dapm_routes = seaboard_audio_map;
-		card->num_dapm_routes = ARRAY_SIZE(seaboard_audio_map);
-	} else if (machine_is_kaen()) {
-		card->dapm_routes = kaen_audio_map;
-		card->num_dapm_routes = ARRAY_SIZE(kaen_audio_map);
-	} else {
-		card->dapm_routes = aebl_audio_map;
-		card->num_dapm_routes = ARRAY_SIZE(aebl_audio_map);
-	}
 
 	ret = snd_soc_register_card(card);
 	if (ret) {
