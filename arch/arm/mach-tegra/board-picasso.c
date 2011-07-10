@@ -421,10 +421,9 @@ static void __init picasso_i2c_init(void)
  * Sensors
  *****************************************************************************/
 /*FIXME
- * al3000a_ls
- * akm8975
- * mpu3050
- * kxtf9
+ * al3000a_ls 0:0x1c PZ2
+ * kxtf9 0:0xF PS7
+ * mpu3050 4:0x68 PZ4
  */
 
 static struct nct1008_platform_data ventana_nct1008_pdata = {
@@ -445,6 +444,10 @@ static struct i2c_board_info __initdata picasso_i2c4_board_info[] = {
 		.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_NCT1008),
 		.platform_data = &ventana_nct1008_pdata,
 	},
+	{
+		I2C_BOARD_INFO("ak8975", 0x0c),
+		.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_AKM8975_IRQ),
+	},
 };
 
 static struct i2c_board_info __initdata picasso_ec = {
@@ -452,11 +455,15 @@ static struct i2c_board_info __initdata picasso_ec = {
 };
 
 static void __init picasso_sensors_init(void) {
-	tegra_gpio_enable(PICASSO_GPIO_NCT1008);
 	gpio_request(PICASSO_GPIO_NCT1008, "nct1008");
+	tegra_gpio_enable(PICASSO_GPIO_NCT1008);
 	gpio_direction_input(PICASSO_GPIO_NCT1008);
+	
+	//The i2c driver will request the gpio.. uhh..
+	tegra_gpio_enable(PICASSO_GPIO_AKM8975_IRQ);
 
 	i2c_register_board_info(2, &picasso_ec, 1);
+	
 	i2c_register_board_info(4, picasso_i2c4_board_info,
 		ARRAY_SIZE(picasso_i2c4_board_info));
 }
