@@ -39,6 +39,7 @@
 #include <linux/pda_power.h>
 #include <linux/mfd/acer_picasso_ec.h>
 #include <linux/nct1008.h>
+#include <linux/rfkill-gpio.h>
 
 #include <mach/iomap.h>
 #include <mach/irqs.h>
@@ -543,6 +544,24 @@ static void picasso_keys_init(void)
 }
 
 /******************************************************************************
+ * Bluetooth rfkill
+ *****************************************************************************/
+static struct rfkill_gpio_platform_data bt_rfkill_platform_data = {
+	.name		= "bt_rfkill",
+	.reset_gpio	= PICASSO_GPIO_nBT_SHUTDOWN,
+	.power_clk_name	= "blink",
+	.type		= RFKILL_TYPE_BLUETOOTH,
+};
+
+static struct platform_device bt_rfkill_device = {
+	.name	= "rfkill_gpio",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &bt_rfkill_platform_data,
+	},
+};
+
+/******************************************************************************
  * SDHC
  *****************************************************************************/
 static struct tegra_sdhci_platform_data tegra_sdhci_platform_data1 = {
@@ -578,6 +597,7 @@ static struct platform_device *picasso_devices[] __initdata = {
 	&tegra_sdhci_device3,
 	&tegra_sdhci_device1,
 	&picasso_powerdev,
+	&bt_rfkill_device
 };
 
 static int __init tegra_picasso_protected_aperture_init(void)
