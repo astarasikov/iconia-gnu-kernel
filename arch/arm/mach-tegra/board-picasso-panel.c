@@ -305,25 +305,6 @@ static struct platform_device *picasso_gfx_devices[] __initdata = {
 	&picasso_backlight_device,
 };
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-/* put early_suspend/late_resume handlers here for the display in order
- * to keep the code out of the display driver, keeping it closer to upstream
- */
-struct early_suspend picasso_panel_early_suspender;
-
-static void picasso_panel_early_suspend(struct early_suspend *h)
-{
-	if (num_registered_fb > 0)
-		fb_blank(registered_fb[0], FB_BLANK_POWERDOWN);
-}
-
-static void picasso_panel_late_resume(struct early_suspend *h)
-{
-	if (num_registered_fb > 0)
-		fb_blank(registered_fb[0], FB_BLANK_UNBLANK);
-}
-#endif
-
 int __init picasso_panel_init(void)
 {
 	int err;
@@ -340,13 +321,6 @@ int __init picasso_panel_init(void)
 	tegra_gpio_enable(PICASSO_GPIO_HDMI_HPD);
 	gpio_request(PICASSO_GPIO_HDMI_HPD, "hdmi_hpd");
 	gpio_direction_input(PICASSO_GPIO_HDMI_HPD);
-
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	picasso_panel_early_suspender.suspend = picasso_panel_early_suspend;
-	picasso_panel_early_suspender.resume = picasso_panel_late_resume;
-	picasso_panel_early_suspender.level = EARLY_SUSPEND_LEVEL_DISABLE_FB;
-	register_early_suspend(&picasso_panel_early_suspender);
-#endif
 
 	picasso_carveouts[1].base = tegra_carveout_start;
 	picasso_carveouts[1].size = tegra_carveout_size;
