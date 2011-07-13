@@ -1283,6 +1283,7 @@ void __init tegra_ventana_init(void)
 
 	ventana_common_init();
 	seaboard_panel_init();
+	ventana_emc_init();
 
 	seaboard_i2c_register_devices();
 	seaboard_i2c_init();
