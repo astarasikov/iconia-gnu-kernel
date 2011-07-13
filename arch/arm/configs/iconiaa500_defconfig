@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux/arm 2.6.38.3 Kernel Configuration
-# Sun Jul 10 14:12:29 2011
+# Wed Jul 13 22:00:51 2011
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -420,7 +420,7 @@ CONFIG_ALIGNMENT_TRAP=y
 # CONFIG_USE_OF is not set
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="nvmem=128M@384M mem=1024M@0M vmalloc=256M lp0_vec=8192@0x1840c000 console=tty0 usbcore.old_scheme_first=1 root=/dev/mmcblk1p2 rootwait rootfstype=ext4"
+CONFIG_CMDLINE="nvmem=128M@384M mem=1024M@0M vmalloc=256M lp0_vec=8192@0x1840c000 console=tty0 usbcore.old_scheme_first=1 root=/dev/mmcblk1p2 rootwait rootfstype=ext4 no_console_suspend=1"
 CONFIG_CMDLINE_FORCE=y
 # CONFIG_XIP_KERNEL is not set
 # CONFIG_KEXEC is not set
@@ -649,7 +649,8 @@ CONFIG_RFKILL_GPIO=y
 # Generic Driver Options
 #
 CONFIG_UEVENT_HELPER_PATH=""
-# CONFIG_DEVTMPFS is not set
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
 CONFIG_STANDALONE=y
 CONFIG_PREVENT_FIRMWARE_BUILD=y
 CONFIG_FW_LOADER=y
