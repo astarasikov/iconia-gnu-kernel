@@ -99,60 +99,63 @@ static struct regulator_consumer_supply tps658621_ldo9_supply[] = {
 	REGULATOR_SUPPLY("avdd_amp", NULL),
 };
 
-#define REGULATOR_INIT(_id, _minmv, _maxmv)				\
+#define REGULATOR_INIT(_id, _minmv, _maxmv, _always_on)				\
+	static struct regulator_init_data reg_##_id##_data = \
 	{								\
 		.constraints = {					\
 			.min_uV = (_minmv)*1000,			\
 			.max_uV = (_maxmv)*1000,			\
-			.valid_modes_mask = (REGULATOR_MODE_NORMAL |	\
-					     REGULATOR_MODE_STANDBY),	\
+			.valid_modes_mask = (REGULATOR_MODE_FAST |	\
+					     REGULATOR_MODE_NORMAL),	\
 			.valid_ops_mask = (REGULATOR_CHANGE_MODE |	\
 					   REGULATOR_CHANGE_STATUS |	\
 					   REGULATOR_CHANGE_VOLTAGE),	\
+			.always_on = _always_on, \
+			.apply_uV = (_minmv == _maxmv), \
 		},							\
 		.num_consumer_supplies = ARRAY_SIZE(tps658621_##_id##_supply),\
 		.consumer_supplies = tps658621_##_id##_supply,		\
 	}
 
-static struct regulator_init_data sm0_data = REGULATOR_INIT(sm0, 725, 1500);
-static struct regulator_init_data sm1_data = REGULATOR_INIT(sm1, 725, 1500);
-static struct regulator_init_data sm2_data = REGULATOR_INIT(sm2, 3000, 4550);
-static struct regulator_init_data ldo0_data = REGULATOR_INIT(ldo0, 1250, 3300);
-static struct regulator_init_data ldo1_data = REGULATOR_INIT(ldo1, 725, 1500);
-static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2, 725, 1500);
-static struct regulator_init_data ldo3_data = REGULATOR_INIT(ldo3, 1250, 3300);
-static struct regulator_init_data ldo4_data = REGULATOR_INIT(ldo4, 1700, 2475);
-static struct regulator_init_data ldo5_data = REGULATOR_INIT(ldo5, 1250, 3300);
-static struct regulator_init_data ldo6_data = REGULATOR_INIT(ldo6, 1250, 1800);
-static struct regulator_init_data ldo7_data = REGULATOR_INIT(ldo7, 1250, 3300);
-static struct regulator_init_data ldo8_data = REGULATOR_INIT(ldo8, 1250, 3300);
-static struct regulator_init_data ldo9_data = REGULATOR_INIT(ldo9, 1250, 3300);
+REGULATOR_INIT(sm0, 725, 1500, true);
+REGULATOR_INIT(sm1, 725, 1500, true);
+REGULATOR_INIT(sm2, 3000, 4550, true);
+REGULATOR_INIT(ldo0, 1250, 3300, false);
+REGULATOR_INIT(ldo1, 725, 1500, true);
+REGULATOR_INIT(ldo2, 725, 1500, false);
+REGULATOR_INIT(ldo3, 1250, 3300, true);
+REGULATOR_INIT(ldo4, 1700, 2475, true);
+REGULATOR_INIT(ldo5, 1250, 3300, false);
+REGULATOR_INIT(ldo6, 1250, 1800, false);
+REGULATOR_INIT(ldo7, 1250, 3300, false);
+REGULATOR_INIT(ldo8, 1250, 3300, false);
+REGULATOR_INIT(ldo9, 1250, 3300, true);
 
 static struct tps6586x_rtc_platform_data rtc_data = {
 	.irq = TEGRA_NR_IRQS + TPS6586X_INT_RTC_ALM1,
 };
 
-#define TPS_REG(_id, _data)			\
+#define TPS_REG(_id, _reg)			\
 	{					\
 		.id = TPS6586X_ID_##_id,	\
 		.name = "tps6586x-regulator",	\
-		.platform_data = _data,		\
+		.platform_data = &reg_##_reg##_data,		\
 	}
 
 static struct tps6586x_subdev_info tps_devs[] = {
-	TPS_REG(SM_0, &sm0_data),
-	TPS_REG(SM_1, &sm1_data),
-	TPS_REG(SM_2, &sm2_data),
-	TPS_REG(LDO_0, &ldo0_data),
-	TPS_REG(LDO_1, &ldo1_data),
-	TPS_REG(LDO_2, &ldo2_data),
-	TPS_REG(LDO_3, &ldo3_data),
-	TPS_REG(LDO_4, &ldo4_data),
-	TPS_REG(LDO_5, &ldo5_data),
-	TPS_REG(LDO_6, &ldo6_data),
-	TPS_REG(LDO_7, &ldo7_data),
-	TPS_REG(LDO_8, &ldo8_data),
-	TPS_REG(LDO_9, &ldo9_data),
+	TPS_REG(SM_0, sm0),
+	TPS_REG(SM_1, sm1),
+	TPS_REG(SM_2, sm2),
+	TPS_REG(LDO_0, ldo0),
+	TPS_REG(LDO_1, ldo1),
+	TPS_REG(LDO_2, ldo2),
+	TPS_REG(LDO_3, ldo3),
+	TPS_REG(LDO_4, ldo4),
+	TPS_REG(LDO_5, ldo5),
+	TPS_REG(LDO_6, ldo6),
+	TPS_REG(LDO_7, ldo7),
+	TPS_REG(LDO_8, ldo8),
+	TPS_REG(LDO_9, ldo9),
 	{
 	 .id = 0,
 	 .name = "tps6586x-rtc",
@@ -164,7 +167,7 @@ static struct tps6586x_platform_data tps_platform = {
 	.irq_base = TEGRA_NR_IRQS,
 	.num_subdevs = ARRAY_SIZE(tps_devs),
 	.subdevs = tps_devs,
-	.gpio_base = TEGRA_NR_GPIOS,
+	.gpio_base = PICASSO_TPS6586X_GPIO_BASE,
 };
 
 static struct i2c_board_info __initdata picasso_regulators[] = {
@@ -189,12 +192,12 @@ static struct tegra_suspend_platform_data picasso_suspend_data = {
 	.corereq_high = false,
 	.sysclkreq_high = true,
 	.wake_enb =
-	    TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_GPIO_PC7 | TEGRA_WAKE_USB1_VBUS |
-	    TEGRA_WAKE_GPIO_PV2 | TEGRA_WAKE_GPIO_PS0,
+		TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_GPIO_PC7 | TEGRA_WAKE_USB1_VBUS |
+		TEGRA_WAKE_GPIO_PV2 | TEGRA_WAKE_GPIO_PS0,
 	.wake_high = TEGRA_WAKE_GPIO_PC7,
 	.wake_low = TEGRA_WAKE_GPIO_PV2,
 	.wake_any =
-	    TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_USB1_VBUS | TEGRA_WAKE_GPIO_PS0,
+		TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_USB1_VBUS | TEGRA_WAKE_GPIO_PS0,
 };
 
 int __init picasso_regulator_init(void)
@@ -223,20 +226,20 @@ static int __init picasso_pcie_init(void)
 {
 	int ret;
 
-	ret = gpio_request(TPS6586X_GPIO_BASE, "pcie_vdd");
+	ret = gpio_request(PICASSO_TPS6586X_GPIO_BASE, "pcie_vdd");
 	if (ret < 0)
 		goto fail;
 
-	ret = gpio_direction_output(TPS6586X_GPIO_BASE, 1);
+	ret = gpio_direction_output(PICASSO_TPS6586X_GPIO_BASE, 1);
 	if (ret < 0)
 		goto fail;
 
-	gpio_export(TPS6586X_GPIO_BASE, false);
+	gpio_export(PICASSO_TPS6586X_GPIO_BASE, false);
 	return 0;
 
  fail:
-	pr_err("%s: gpio_request failed #%d\n", __func__, TPS6586X_GPIO_BASE);
-	gpio_free(TPS6586X_GPIO_BASE);
+	pr_err("%s: gpio_request failed #%d\n", __func__, PICASSO_TPS6586X_GPIO_BASE);
+	gpio_free(PICASSO_TPS6586X_GPIO_BASE);
 	return ret;
 }
 
