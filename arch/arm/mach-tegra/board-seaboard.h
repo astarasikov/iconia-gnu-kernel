@@ -103,5 +103,10 @@ static inline int aebl_sensors_init(void) { return 0; }
 #endif
  
 void ventana_pinmux_init(void);
+#ifdef CONFIG_MACH_VENTANA
+void ventana_emc_init(void);
+#else
+static inline void ventana_emc_init(void) { return; }
+#endif
 
 #endif
