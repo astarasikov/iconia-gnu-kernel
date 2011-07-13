@@ -568,6 +568,7 @@ static struct tegra_sdhci_platform_data tegra_sdhci_platform_data1 = {
 	.cd_gpio = -1,
 	.wp_gpio = -1,
 	.power_gpio = PICASSO_GPIO_WLAN_RESET,
+	.pm_flags = MMC_PM_KEEP_POWER,
 };
 
 static struct tegra_sdhci_platform_data tegra_sdhci_platform_data3 = {
