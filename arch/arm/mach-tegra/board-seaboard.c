@@ -1008,6 +1008,12 @@ static void __init arthur_common_init(void)
 	__seaboard_common_init();
 }
 
+static void __init ventana_common_init(void)
+{
+	ventana_pinmux_init();
+	__seaboard_common_init();
+}
+
 static struct tegra_suspend_platform_data seaboard_suspend = {
 	.cpu_timer = 5000,
 	.cpu_off_timer = 5000,
@@ -1238,6 +1244,50 @@ static void __init tegra_arthur_init(void)
 	seaboard_i2c_init();
 }
 
+#define GPIO_KEY(_id, _gpio, _iswake)		\
+	{					\
+		.code = _id,			\
+		.gpio = TEGRA_GPIO_##_gpio,	\
+		.active_low = 1,		\
+		.desc = #_id,			\
+		.type = EV_KEY,			\
+		.wakeup = _iswake,		\
+		.debounce_interval = 10,	\
+	}
+
+static struct gpio_keys_button ventana_keys[] = {
+	GPIO_KEY(KEY_MENU,		PQ3, 0),
+	GPIO_KEY(KEY_HOME,		PQ1, 0),
+	GPIO_KEY(KEY_BACK,		PQ2, 0),
+	GPIO_KEY(KEY_VOLUMEUP,		PQ5, 0),
+	GPIO_KEY(KEY_VOLUMEDOWN,	PQ4, 0),
+	GPIO_KEY(KEY_POWER,		PV2, 1),
+};
+
+static struct gpio_keys_platform_data ventana_keys_data = {
+	.buttons	= ventana_keys,
+	.nbuttons	= ARRAY_SIZE(ventana_keys),
+};
+
+void __init tegra_ventana_init(void)
+{
+	tegra_init_suspend(&seaboard_suspend);
+
+	__init_debug_uart_D();
+
+	seaboard_gpio_keys_device.dev.platform_data = &ventana_keys_data;
+
+	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
+	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
+
+	ventana_common_init();
+	seaboard_panel_init();
+
+	seaboard_i2c_register_devices();
+	seaboard_i2c_init();
+}
+
 static const char *seaboard_dt_board_compat[] = {
 	"nvidia,seaboard",
 	NULL
@@ -1326,4 +1376,19 @@ MACHINE_START(ARTHUR, "arthur")
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_arthur_init,
 	.dt_compat	= arthur_dt_board_compat,
+MACHINE_END
+
+static const char *ventana_dt_board_compat[] = {
+	"nvidia,ventana",
+	NULL
+};
+
+MACHINE_START(VENTANA, "ventana")
+	.boot_params    = 0x00000100,
+	.map_io		= tegra_map_common_io,
+	.init_early	= tegra_init_early,
+	.init_irq       = tegra_init_irq,
+	.timer          = &tegra_timer,
+	.init_machine	= tegra_ventana_init,
+	.dt_compat	= ventana_dt_board_compat,
 MACHINE_END

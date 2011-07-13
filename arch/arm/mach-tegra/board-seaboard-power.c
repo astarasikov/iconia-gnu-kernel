@@ -27,6 +27,7 @@
 #include <mach/iomap.h>
 #include <linux/err.h>
 
+#include <asm/mach-types.h>
 #include "board-seaboard.h"
 #include "gpio-names.h"
 
@@ -268,6 +269,8 @@ static struct platform_device seaboard_ac_power_device = {
 	},
 };
 
+static unsigned disable_charger_gpio = TEGRA_GPIO_DISABLE_CHARGER;
+
 int __init seaboard_ac_power_init(void)
 {
 	int err;
@@ -280,12 +283,12 @@ int __init seaboard_ac_power_init(void)
 		gpio_free(TEGRA_GPIO_AC_ONLINE);
 	}
 
-	err = gpio_request(TEGRA_GPIO_DISABLE_CHARGER, "disable charger");
+	err = gpio_request(disable_charger_gpio, "disable charger");
 	if (err < 0) {
 		pr_err("could not acquire charger disable\n");
 	} else {
-		gpio_direction_output(TEGRA_GPIO_DISABLE_CHARGER, 0);
-		gpio_free(TEGRA_GPIO_DISABLE_CHARGER);
+		gpio_direction_output(disable_charger_gpio, 0);
+		gpio_free(disable_charger_gpio);
 	}
 
 	err = platform_device_register(&seaboard_ac_power_device);
@@ -331,6 +334,9 @@ int __init seaboard_power_init(void)
 	err = seaboard_regulator_init();
 	if (err < 0)
 		pr_warning("Unable to initialize regulator\n");
+
+	if (machine_is_ventana())
+		disable_charger_gpio = TEGRA_GPIO_VENTANA_DISABLE_CHARGER;
 
 	err = seaboard_ac_power_init();
 	if (err < 0)

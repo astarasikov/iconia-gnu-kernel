@@ -260,7 +260,8 @@ static void __init wm8903_gpio_init(void)
 	BUG_ON(!machine_is_seaboard() &&
 	       !machine_is_kaen()     &&
 	       !machine_is_aebl()     &&
-	       !machine_is_asymptote());
+	       !machine_is_asymptote() &&
+	       !machine_is_ventana());
 	sound_codec_gpio_init(TEGRA_GPIO_WM8903_IRQ, "wm8903");
 }
 
@@ -277,6 +278,26 @@ static void __init seaboard_common_pinmux_init(void)
 					ARRAY_SIZE(seaboard_drive_pinmux));
 
 	tegra_gpio_config(gpio_table, ARRAY_SIZE(gpio_table));
+}
+
+static void __init update_pinmux(struct tegra_pingroup_config *newtbl, int size)
+{
+	int i, j;
+	struct tegra_pingroup_config *new_pingroup, *base_pingroup;
+
+	/* Update base seaboard pinmux table with secondary board
+	 * specific pinmux table table.
+	 */
+	for (i = 0; i < size; i++) {
+		new_pingroup = &newtbl[i];
+		for (j = 0; j < ARRAY_SIZE(seaboard_pinmux); j++) {
+			base_pingroup = &seaboard_pinmux[j];
+			if (new_pingroup->pingroup == base_pingroup->pingroup) {
+				*base_pingroup = *new_pingroup;
+				break;
+			}
+		}
+	}
 }
 
 #define STRAP_OPT 0x008
@@ -342,5 +363,33 @@ void __init aebl_pinmux_init(void)
 void __init arthur_pinmux_init(void)
 {
 	max98095_gpio_init();
+	seaboard_common_pinmux_init();
+}
+
+static __initdata struct tegra_pingroup_config ventana_pinmux[] = {
+	{TEGRA_PINGROUP_DAP3, TEGRA_MUX_DAP3,     TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_DDC,  TEGRA_MUX_RSVD2,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTA,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTB,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTC,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTD,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_GMD,  TEGRA_MUX_SFLASH,   TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_LPW0, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_LPW2, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_LSC1, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_LSCK, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_LSDA, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_PTA,  TEGRA_MUX_RSVD2,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_SLXC, TEGRA_MUX_SDIO3,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_SLXK, TEGRA_MUX_SDIO3,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_SPIA, TEGRA_MUX_GMI,      TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_SPIC, TEGRA_MUX_GMI,      TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_SPIG, TEGRA_MUX_SPI2_ALT, TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+};
+
+void __init ventana_pinmux_init(void)
+{
+	wm8903_gpio_init();
+	update_pinmux(ventana_pinmux, ARRAY_SIZE(ventana_pinmux));
 	seaboard_common_pinmux_init();
 }

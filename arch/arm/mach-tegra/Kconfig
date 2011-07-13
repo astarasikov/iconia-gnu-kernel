@@ -48,6 +48,7 @@ config MACH_HARMONY
 
 config MACH_VENTANA
        bool "Ventana board"
+       select MACH_SEABOARD
        help
          Support for NVIDIA Ventana development platform
 
