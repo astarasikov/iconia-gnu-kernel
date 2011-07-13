@@ -71,6 +71,12 @@ config MACH_TRIMSLICE
        help
          Support for CompuLab TrimSlice platform
 
+config MACH_VENTANA
+       bool "Ventana board"
+       select MACH_SEABOARD
+       help
+         Support for NVIDIA Ventana development platform
+ 
 config MACH_WARIO
        bool "Wario board"
        select MACH_SEABOARD
