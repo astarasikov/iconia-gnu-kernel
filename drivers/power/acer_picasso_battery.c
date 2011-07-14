@@ -99,15 +99,15 @@ union power_supply_propval *val) {
 
 	if (capacity < 100) {
 		if (ac_status) {
-			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
-		} else {
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+		} else {
+			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
 		}
 	} else {
 		if (ac_status) {
-			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
-		} else {
 			val->intval = POWER_SUPPLY_STATUS_FULL;
+		} else {
+			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		}
 	}
 
