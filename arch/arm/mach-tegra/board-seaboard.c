@@ -958,7 +958,7 @@ MACHINE_START(KAEN, "kaen")
 MACHINE_END
 
 static const char *aebl_dt_board_compat[] = {
-	"nvidia,aebl",
+	"google,aebl",
 	NULL
 };
 
