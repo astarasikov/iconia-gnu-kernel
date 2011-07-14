@@ -30,6 +30,9 @@ static struct acer_picasso_ec_priv *priv = NULL;
 
 static void picasso_shutdown(void) {
 	priv->write(priv->client, EC_SYS_SHUTDOWN, 0);
+	
+	local_irq_disable();
+	while (1);
 }
 
 static int picasso_sys_probe(struct platform_device *pdev)

@@ -102,6 +102,10 @@ static struct mfd_cell picasso_ec_funcs[] = {
 		.id = -1,
 		.name = PICASSO_EC_LED_ID,
 	},
+	{
+		.id = -1,
+		.name = PICASSO_EC_SYS_ID,
+	}
 };
 
 static int picasso_ec_probe(struct i2c_client *client,
