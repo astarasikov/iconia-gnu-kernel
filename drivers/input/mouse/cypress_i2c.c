@@ -1969,6 +1969,17 @@ static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 	} else
 		input_set_events_per_packet(input, 60);
 
+	if (touch->physical_size_x && touch->physical_size_y) {
+		input_abs_set_res(input, ABS_X,
+			touch->max_abs_x / touch->physical_size_x);
+		input_abs_set_res(input, ABS_Y,
+			touch->max_abs_y / touch->physical_size_y);
+		input_abs_set_res(input, ABS_MT_POSITION_X,
+			touch->max_abs_x / touch->physical_size_x);
+		input_abs_set_res(input, ABS_MT_POSITION_Y,
+			touch->max_abs_y / touch->physical_size_y);
+	}
+
 	__set_bit(EV_KEY, input->evbit);
 	__set_bit(BTN_TOUCH, input->keybit);
 	__set_bit(BTN_TOOL_FINGER, input->keybit);

@@ -270,10 +270,12 @@ static void int_callback(struct urb *urb)
 					     DEFAULT_READ_URB_LENGTH,
 					     read_callback, dev);
 			status = usb_submit_urb(dev->qmi.readurb, GFP_ATOMIC);
-			if (status) {
-				DBG("Error submitting Read URB %d\n", status);
+			if (status == 0) {
+				/* Do not resubmit the int_urb because
+				 * it will be resubmitted in read_callback */
 				return;
 			}
+			DBG("Error submitting Read URB %d\n", status);
 		} else if ((urb->actual_length == 16) &&
 			   (*(u64 *)urb->transfer_buffer == CDC_CONNECTION_SPEED_CHANGE)) {
 			/* if upstream or downstream is 0, stop traffic.
@@ -503,13 +505,14 @@ static int read_sync(struct qcusbnet *dev, void **buf, u16 cid, u16 tid)
 struct writectx {
 	struct semaphore sem;
 	struct kref ref;
-	struct buffer *buf;
+	struct urbsetup setup;
+	struct buffer *data;
 };
 
 static void writectx_release(struct kref *ref)
 {
 	struct writectx *ctx = container_of(ref, struct writectx, ref);
-	buffer_put(ctx->buf);
+	buffer_put(ctx->data);
 	kfree(ctx);
 }
 
@@ -522,13 +525,18 @@ static void write_callback(struct urb *urb)
 	kref_put(&ctx->ref, writectx_release);
 }
 
-static int write_sync(struct qcusbnet *dev, struct buffer *buf, u16 cid)
+/** @brief Synchronously (probably) sends a data buffer to the card.
+ *
+ *  @param dev
+ *  @param data_buf Borrowed reference to data buffer
+ *  @param cid Client ID
+ */
+static int write_sync(struct qcusbnet *dev, struct buffer *data_buf, u16 cid)
 {
 	int result;
 	struct writectx *ctx;
 	struct urb *urb;
 	struct urb *removed_urb;
-	struct urbsetup setup;
 	unsigned long flags;
 
 	if (!device_valid(dev)) {
@@ -549,7 +557,7 @@ static int write_sync(struct qcusbnet *dev, struct buffer *buf, u16 cid)
 		return -ENOMEM;
 	}
 
-	result = qmux_fill(cid, buf);
+	result = qmux_fill(cid, data_buf);
 	if (result < 0) {
 		usb_free_urb(urb);
 		kfree(ctx);
@@ -557,28 +565,31 @@ static int write_sync(struct qcusbnet *dev, struct buffer *buf, u16 cid)
 	}
 
 	/* CDC Send Encapsulated Request packet */
-	setup.type = 0x21;
-	setup.code = 0;
-	setup.value = 0;
-	setup.index = 0;
-	setup.len = 0;
-	setup.len = buffer_size(buf);
+	ctx->setup.type = 0x21;
+	ctx->setup.code = 0;
+	ctx->setup.value = 0;
+	ctx->setup.index = 0;
+	ctx->setup.len = buffer_size(data_buf);
 
 	usb_fill_control_urb(urb, dev->usbnet->udev,
 			     usb_sndctrlpipe(dev->usbnet->udev, 0),
-			     (unsigned char *)&setup, buffer_data(buf),
-	                     buffer_size(buf), NULL, dev);
+			     (unsigned char *)&ctx->setup,
+	                     buffer_data(data_buf), buffer_size(data_buf),
+	                     NULL, dev);
 
 	DBG("Actual Write:\n");
 	if (qcusbnet_debug)
 		print_hex_dump(KERN_INFO,  "gobi-write: ", DUMP_PREFIX_OFFSET,
-		               16, 1, buffer_data(buf), buffer_size(buf), true);
+		               16, 1, buffer_data(data_buf),
+		               buffer_size(data_buf), true);
 
 	sema_init(&ctx->sem, 0);
 	kref_init(&ctx->ref);
-	kref_get(&ctx->ref);	/* for the urb */
-	buffer_get(buf);	/* give a ref to the context (also the urb) */
-	ctx->buf = buf;
+	kref_get(&ctx->ref);	/* get a ref to the context for the urb */
+
+	/* The context now has another ref to the data buffer */
+	buffer_get(data_buf);
+	ctx->data = data_buf;
 
 	urb->complete = write_callback;
 	urb->context = ctx;
@@ -590,7 +601,6 @@ static int write_sync(struct qcusbnet *dev, struct buffer *buf, u16 cid)
 			qc_suspend(dev->iface, PMSG_SUSPEND);
 		}
 		usb_free_urb(urb);
-		buffer_put(buf);
 		kref_put(&ctx->ref, writectx_release);
 		return result;
 	}
@@ -601,7 +611,6 @@ static int write_sync(struct qcusbnet *dev, struct buffer *buf, u16 cid)
 		usb_free_urb(urb);
 		spin_unlock_irqrestore(&dev->qmi.clients_lock, flags);
 		usb_autopm_put_interface(dev->iface);
-		buffer_put(buf);
 		kref_put(&ctx->ref, writectx_release);
 		return -EINVAL;
 	}
@@ -616,7 +625,6 @@ static int write_sync(struct qcusbnet *dev, struct buffer *buf, u16 cid)
 
 		spin_unlock_irqrestore(&dev->qmi.clients_lock, flags);
 		usb_autopm_put_interface(dev->iface);
-		buffer_put(buf);
 		kref_put(&ctx->ref, writectx_release);
 		return result;
 	}
@@ -640,10 +648,7 @@ static int write_sync(struct qcusbnet *dev, struct buffer *buf, u16 cid)
 
 	if (!result) {
 		if (!urb->status) {
-			/* It's still safe to access buf here because our caller
-			 * must have been holding at least one ref in order to
-			 * give us the buffer. */
-			result = buffer_size(buf);
+			result = buffer_size(data_buf);
 		} else {
 			DBG("bad status = %d\n", urb->status);
 			result = urb->status;

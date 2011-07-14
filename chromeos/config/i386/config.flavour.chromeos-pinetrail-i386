@@ -18,6 +18,7 @@
 CONFIG_EXTRA_FIRMWARE=""
 # CONFIG_FB_BACKLIGHT is not set
 # CONFIG_FORCEDETH is not set
+# CONFIG_IWLWIFI is not set
 # CONFIG_PCNET32 is not set
 # CONFIG_R8169 is not set
 # CONFIG_RT2500USB is not set
@@ -30,4 +31,7 @@ CONFIG_RTLWIFI=m
 # CONFIG_TIGON3 is not set
 # CONFIG_USB_RTL8150 is not set
 # CONFIG_VIA_RHINE is not set
+# CONFIG_X86_POWERNOW_K6 is not set
+# CONFIG_X86_POWERNOW_K7 is not set
+# CONFIG_X86_POWERNOW_K8 is not set
 # CONFIG_ZD1211RW is not set

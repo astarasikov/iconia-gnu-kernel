@@ -35,6 +35,7 @@
 #include <linux/leds.h>
 #include <linux/leds_pwm.h>
 
+#include <sound/max98095.h>
 #include <sound/wm8903.h>
 
 #include <mach/iomap.h>
@@ -459,7 +460,7 @@ static struct seaboard_audio_platform_data audio_pdata = {
 };
 
 static struct platform_device audio_device = {
-	.name = "tegra-snd-seaboard",
+	.name = "tegra-snd-seaboard", /* must match DRV_NAME in seaboard.c */
 	.id   = 0,
 	.dev  = {
 		.platform_data = &audio_pdata,
@@ -469,6 +470,28 @@ static struct platform_device audio_device = {
 static struct platform_device spdif_dit_device = {
 	.name   = "spdif-dit",
 	.id     = -1,
+};
+
+static struct led_pwm arthur_pwm_leds[] = {
+	{
+		.name		= "tegra::kbd_backlight",
+		.pwm_id		= 1,
+		.max_brightness	= 255,
+		.pwm_period_ns	= 1000000,
+	},
+};
+
+static struct led_pwm_platform_data arthur_pwm_data = {
+	.leds		= arthur_pwm_leds,
+	.num_leds	= ARRAY_SIZE(arthur_pwm_leds),
+};
+
+static struct platform_device arthur_leds_pwm = {
+	.name	= "leds_pwm",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &arthur_pwm_data,
+	},
 };
 
 static struct platform_device *seaboard_devices[] __initdata = {
@@ -489,6 +512,11 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&tegra_spdif_device,
 	&spdif_dit_device,
 	&bt_rfkill_device,
+};
+
+static struct platform_device *arthur_devices[] __initdata = {
+	&tegra_pwfm1_device,
+	&arthur_leds_pwm,
 };
 
 static struct nct1008_platform_data nct1008_pdata = {
@@ -518,6 +546,110 @@ static struct wm8903_platform_data wm8903_pdata = {
 	},
 };
 
+static struct max98095_eq_cfg max98095_eq_cfg[] = {
+	{ /* Flat response */
+		.name = "FLAT",
+		.rate = 44100,
+		.band1 = { 0x2000, 0xC002, 0x4000, 0x00E9, 0x0000 },
+		.band2 = { 0x2000, 0xC00F, 0x4000, 0x02BC, 0x0000 },
+		.band3 = { 0x2000, 0xC0A7, 0x4000, 0x0916, 0x0000 },
+		.band4 = { 0x2000, 0xC5C2, 0x4000, 0x1A87, 0x0000 },
+		.band5 = { 0x2000, 0xF6B0, 0x4000, 0x3F51, 0x0000 },
+	},
+	{ /* Low pass Fc=1KHz */
+		.name = "LOWPASS1K",
+		.rate = 44100,
+		.band1 = { 0x205D, 0xC001, 0x3FEF, 0x002E, 0x02E0 },
+		.band2 = { 0x5B9A, 0xC093, 0x3AB2, 0x088B, 0x1981 },
+		.band3 = { 0x0D22, 0xC170, 0x26EA, 0x0D79, 0x32CF },
+		.band4 = { 0x0894, 0xC612, 0x01B3, 0x1B34, 0x3FFA },
+		.band5 = { 0x0815, 0x3FFF, 0xCF78, 0x0000, 0x29B7 },
+	},
+	{ /* BASS=-12dB, TREBLE=+9dB, Fc=5KHz */
+		.name = "HIBOOST",
+		.rate = 44100,
+		.band1 = { 0x0815, 0xC001, 0x3AA4, 0x0003, 0x19A2 },
+		.band2 = { 0x0815, 0xC103, 0x092F, 0x0B55, 0x3F56 },
+		.band3 = { 0x0E0A, 0xC306, 0x1E5C, 0x136E, 0x3856 },
+		.band4 = { 0x2459, 0xF665, 0x0CAA, 0x3F46, 0x3EBB },
+		.band5 = { 0x5BBB, 0x3FFF, 0xCEB0, 0x0000, 0x28CA },
+	},
+	{ /* BASS=12dB, TREBLE=+12dB */
+		.name = "LOUD12DB",
+		.rate = 44100,
+		.band1 = { 0x7FC1, 0xC001, 0x3EE8, 0x0020, 0x0BC7 },
+		.band2 = { 0x51E9, 0xC016, 0x3C7C, 0x033F, 0x14E9 },
+		.band3 = { 0x1745, 0xC12C, 0x1680, 0x0C2F, 0x3BE9 },
+		.band4 = { 0x4536, 0xD7E2, 0x0ED4, 0x31DD, 0x3E42 },
+		.band5 = { 0x7FEF, 0x3FFF, 0x0BAB, 0x0000, 0x3EED },
+	},
+	{
+		.name = "FLAT",
+		.rate = 16000,
+		.band1 = { 0x2000, 0xC004, 0x4000, 0x0141, 0x0000 },
+		.band2 = { 0x2000, 0xC033, 0x4000, 0x0505, 0x0000 },
+		.band3 = { 0x2000, 0xC268, 0x4000, 0x115F, 0x0000 },
+		.band4 = { 0x2000, 0xDA62, 0x4000, 0x33C6, 0x0000 },
+		.band5 = { 0x2000, 0x4000, 0x4000, 0x0000, 0x0000 },
+	},
+	{
+		.name = "LOWPASS1K",
+		.rate = 16000,
+		.band1 = { 0x2000, 0xC004, 0x4000, 0x0141, 0x0000 },
+		.band2 = { 0x5BE8, 0xC3E0, 0x3307, 0x15ED, 0x26A0 },
+		.band3 = { 0x0F71, 0xD15A, 0x08B3, 0x2BD0, 0x3F67 },
+		.band4 = { 0x0815, 0x3FFF, 0xCF78, 0x0000, 0x29B7 },
+		.band5 = { 0x0815, 0x3FFF, 0xCF78, 0x0000, 0x29B7 },
+	},
+	{ /* BASS=-12dB, TREBLE=+9dB, Fc=2KHz */
+		.name = "HIBOOST",
+		.rate = 16000,
+		.band1 = { 0x0815, 0xC001, 0x3BD2, 0x0009, 0x16BF },
+		.band2 = { 0x080E, 0xC17E, 0xF653, 0x0DBD, 0x3F43 },
+		.band3 = { 0x0F80, 0xDF45, 0xEE33, 0x36FE, 0x3D79 },
+		.band4 = { 0x590B, 0x3FF0, 0xE882, 0x02BD, 0x3B87 },
+		.band5 = { 0x4C87, 0xF3D0, 0x063F, 0x3ED4, 0x3FB1 },
+	},
+	{ /* BASS=12dB, TREBLE=+12dB */
+		.name = "LOUD12DB",
+		.rate = 16000,
+		.band1 = { 0x7FC1, 0xC001, 0x3D07, 0x0058, 0x1344 },
+		.band2 = { 0x2DA6, 0xC013, 0x3CF1, 0x02FF, 0x138B },
+		.band3 = { 0x18F1, 0xC08E, 0x244D, 0x0863, 0x34B5 },
+		.band4 = { 0x2BE0, 0xF385, 0x04FD, 0x3EC5, 0x3FCE },
+		.band5 = { 0x7FEF, 0x4000, 0x0BAB, 0x0000, 0x3EED },
+	},
+};
+
+static struct max98095_biquad_cfg max98095_bq_cfg[] = {
+	{
+		.name = "LP4K",
+		.rate = 44100,
+		.band1 = { 0x5019, 0xe0de, 0x03c2, 0x0784, 0x03c2 },
+		.band2 = { 0x5013, 0xe0e5, 0x03c1, 0x0783, 0x03c1 },
+	},
+	{
+		.name = "HP4K",
+		.rate = 44100,
+		.band1 = { 0x5019, 0xe0de, 0x2e4b, 0xa36a, 0x2e4b },
+		.band2 = { 0x5013, 0xe0e5, 0x2e47, 0xa371, 0x2e47 },
+	},
+};
+
+static struct max98095_pdata max98095_pdata = {
+	.eq_cfg		   = max98095_eq_cfg,
+	.eq_cfgcnt	   = ARRAY_SIZE(max98095_eq_cfg),
+	.bq_cfg		   = max98095_bq_cfg,
+	.bq_cfgcnt	   = ARRAY_SIZE(max98095_bq_cfg),
+	.digmic_left_mode  = 0, /* 0 -> analog, 1 -> digital mic */
+	.digmic_right_mode = 0, /* 0 -> analog, 1 -> digital mic */
+};
+
+static struct i2c_board_info __initdata max98095_device = {
+	I2C_BOARD_INFO("max98095", 0x10),
+	.platform_data = &max98095_pdata,
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MAX98095_IRQ),
+};
 
 static struct i2c_board_info __initdata wm8903_device = {
 	I2C_BOARD_INFO("wm8903", 0x1a),
@@ -578,17 +710,19 @@ static const u8 mxt_config_data[] = {
 	/* MXT_TOUCH_KEYARRAY(15) */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00,
+	/* MXT_SPT_COMMSCONFIG(18) */
+	0x00, 0x00,
 	/* MXT_PROCG_NOISE(22) */
 	0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x19, 0x00,
 	0x00, 0x00, 0x05, 0x0a, 0x14, 0x1e, 0x00,
 	/* MXT_PROCI_ONETOUCH(24) */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	/* MXT_PROCI_TWOTOUCH(27) */
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	/* MXT_SPT_SELFTEST(25) */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00,
+	/* MXT_PROCI_TWOTOUCH(27) */
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	/* MXT_SPT_CTECONFIG(28) */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	/* MXT_PROCI_GRIP(40) */
@@ -596,7 +730,7 @@ static const u8 mxt_config_data[] = {
 	/* MXT_PROCI_PALM(41) */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	/* MXT_SPT_DIGITIZER(43) */
-	0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 static struct mxt_platform_data mxt_platform_data = {
@@ -857,6 +991,12 @@ static void __init aebl_common_init(void)
 	__seaboard_common_init();
 }
 
+static void __init arthur_common_init(void)
+{
+	arthur_pinmux_init();
+	__seaboard_common_init();
+}
+
 static struct tegra_suspend_platform_data seaboard_suspend = {
 	.cpu_timer = 5000,
 	.cpu_off_timer = 5000,
@@ -1040,33 +1180,6 @@ static void __init tegra_wario_init(void)
 	seaboard_i2c_init();
 }
 
-static struct led_pwm arthur_pwm_leds[] = {
-	{
-		.name		= "tegra::kbd_backlight",
-		.pwm_id		= 1,
-		.max_brightness	= 255,
-		.pwm_period_ns	= 1000000,
-	},
-};
-
-static struct led_pwm_platform_data arthur_pwm_data = {
-	.leds		= arthur_pwm_leds,
-	.num_leds	= ARRAY_SIZE(arthur_pwm_leds),
-};
-
-static struct platform_device arthur_leds_pwm = {
-	.name	= "leds_pwm",
-	.id	= -1,
-	.dev	= {
-		.platform_data = &arthur_pwm_data,
-	},
-};
-
-static struct platform_device *arthur_devices[] __initdata = {
-	&tegra_pwfm1_device,
-	&arthur_leds_pwm,
-};
-
 static void __init tegra_arthur_init(void)
 {
 	int err;
@@ -1095,8 +1208,7 @@ static void __init tegra_arthur_init(void)
 
 	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
-
-	seaboard_common_init();
+	arthur_common_init();
 	arthur_panel_init();
 	arthur_emc_init();
 
@@ -1146,7 +1258,7 @@ MACHINE_START(KAEN, "kaen")
 MACHINE_END
 
 static const char *aebl_dt_board_compat[] = {
-	"nvidia,aebl",
+	"google,aebl",
 	NULL
 };
 
