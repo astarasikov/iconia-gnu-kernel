@@ -455,17 +455,17 @@ static struct tegra_sdhci_platform_data sdhci_pdata4 = {
 	.is_8bit	= 1,
 };
 
-static struct seaboard_audio_platform_data audio_pdata = {
+static struct seaboard_audio_platform_data seaboard_audio_pdata = {
 	.gpio_spkr_en = TEGRA_GPIO_SPKR_EN,
 	.gpio_hp_det = TEGRA_GPIO_HP_DET,
 	.gpio_hp_mute = -1,
 };
 
-static struct platform_device audio_device = {
+static struct platform_device seaboard_audio_device = {
 	.name = "tegra-snd-seaboard", /* must match DRV_NAME in seaboard.c */
 	.id   = 0,
 	.dev  = {
-		.platform_data = &audio_pdata,
+		.platform_data = &seaboard_audio_pdata,
 	},
 };
 
@@ -506,7 +506,6 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&tegra_sdhci_device3,
 	&tegra_sdhci_device1,
 	&seaboard_gpio_keys_device,
-	&audio_device,
 	&tegra_avp_device,
 	&tegra_i2s_device1,
 	&tegra_das_device,
@@ -516,7 +515,11 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&bt_rfkill_device,
 };
 
-static struct platform_device *arthur_devices[] __initdata = {
+static struct platform_device *seaboard_specific_devices[] __initdata = {
+	&seaboard_audio_device,
+};
+
+static struct platform_device *arthur_specific_devices[] __initdata = {
 	&tegra_pwfm1_device,
 	&arthur_leds_pwm,
 };
@@ -988,7 +991,8 @@ static void __init asymptote_i2c_register_devices(void)
 	i2c_register_board_info(4, &nct1008_device, 1);
 }
 
-static void __init __seaboard_common_init(void)
+static void __init __seaboard_common_init(struct platform_device **devices,
+					  int num_devices)
 {
 	struct clk *clk;
 
@@ -1010,6 +1014,8 @@ static void __init __seaboard_common_init(void)
 	tegra_sdhci_device4.dev.platform_data = &sdhci_pdata4;
 
 	platform_add_devices(seaboard_devices, ARRAY_SIZE(seaboard_devices));
+	if (devices)            /* Add board-specific devices. */
+		platform_add_devices(devices, num_devices);
 
 	seaboard_power_init();
 	seaboard_ehci_init();
@@ -1041,37 +1047,43 @@ static void __init tegra_set_clock_readskew(const char *clk_name, int skew)
 static void __init seaboard_common_init(void)
 {
 	seaboard_pinmux_init();
-	__seaboard_common_init();
+	__seaboard_common_init(seaboard_specific_devices,
+			       ARRAY_SIZE(seaboard_specific_devices));
 }
 
 static void __init kaen_common_init(void)
 {
 	kaen_pinmux_init();
-	__seaboard_common_init();
+	__seaboard_common_init(seaboard_specific_devices,
+			       ARRAY_SIZE(seaboard_specific_devices));
 }
 
 static void __init aebl_common_init(void)
 {
 	aebl_pinmux_init();
-	__seaboard_common_init();
+	__seaboard_common_init(seaboard_specific_devices,
+			       ARRAY_SIZE(seaboard_specific_devices));
 }
 
 static void __init arthur_common_init(void)
 {
 	arthur_pinmux_init();
-	__seaboard_common_init();
+	__seaboard_common_init(arthur_specific_devices,
+			       ARRAY_SIZE(arthur_specific_devices));
 }
 
 static void __init ventana_common_init(void)
 {
 	ventana_pinmux_init();
-	__seaboard_common_init();
+	__seaboard_common_init(seaboard_specific_devices,
+			       ARRAY_SIZE(seaboard_specific_devices));
 }
 
 static void __init asymptote_common_init(void)
 {
 	asymptote_pinmux_init();
-	__seaboard_common_init();
+	__seaboard_common_init(seaboard_specific_devices,
+			       ARRAY_SIZE(seaboard_specific_devices));
 }
 
 static struct tegra_suspend_platform_data seaboard_suspend = {
@@ -1161,7 +1173,7 @@ static void __init tegra_kaen_init(void)
 	gpio_request(TEGRA_GPIO_W_DISABLE, "w_disable");
 	gpio_direction_output(TEGRA_GPIO_W_DISABLE, 1);
 
-	audio_pdata.gpio_hp_mute = TEGRA_GPIO_KAEN_HP_MUTE;
+	seaboard_audio_pdata.gpio_hp_mute = TEGRA_GPIO_KAEN_HP_MUTE;
 	tegra_gpio_enable(TEGRA_GPIO_KAEN_HP_MUTE);
 
 	tegra_gpio_enable(TEGRA_GPIO_BATT_DETECT);
@@ -1265,10 +1277,6 @@ static void __init tegra_arthur_init(void)
 	tegra_init_suspend(&seaboard_suspend);
 
 	__init_debug_uart_B();
-
-	/* Register arthur specific platform devices. */
-	err = platform_add_devices(arthur_devices, ARRAY_SIZE(arthur_devices));
-	WARN_ON(err);
 
 	/* Set up the GPIO and pingroup controlling the camera's power. */
 	tegra_gpio_enable(TEGRA_GPIO_PV4);
