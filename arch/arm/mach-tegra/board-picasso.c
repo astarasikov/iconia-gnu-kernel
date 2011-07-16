@@ -605,16 +605,9 @@ static struct platform_device *picasso_devices[] __initdata = {
 	&bt_rfkill_device
 };
 
-static int __init tegra_picasso_protected_aperture_init(void)
-{
-	tegra_protected_aperture_init(tegra_grhost_aperture);
-	return 0;
-}
-late_initcall(tegra_picasso_protected_aperture_init);
-
 static void __init tegra_picasso_reserve(void)
 {
-	tegra_reserve(SZ_64M, SZ_8M, SZ_16M);
+	tegra_reserve(SZ_128M - (12 << 20), SZ_8M, SZ_16M);
 }
 
 static void __init tegra_picasso_init(void)
