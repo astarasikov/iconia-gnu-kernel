@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux/arm 2.6.38.3 Kernel Configuration
-# Thu Jul 14 17:23:38 2011
+# Fri Jul 15 02:53:34 2011
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -386,7 +386,7 @@ CONFIG_PREEMPT=y
 CONFIG_HZ=100
 # CONFIG_THUMB2_KERNEL is not set
 CONFIG_AEABI=y
-# CONFIG_OABI_COMPAT is not set
+CONFIG_OABI_COMPAT=y
 # CONFIG_ARCH_SPARSEMEM_DEFAULT is not set
 # CONFIG_ARCH_SELECT_MEMORY_MODEL is not set
 CONFIG_HIGHMEM=y
@@ -420,7 +420,7 @@ CONFIG_ALIGNMENT_TRAP=y
 # CONFIG_USE_OF is not set
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="nvmem=128M@384M mem=1024M@0M vmalloc=256M lp0_vec=8192@0x1840c000 console=tty0 usbcore.old_scheme_first=1 root=/dev/mmcblk1p2 rootwait rootfstype=ext4 no_console_suspend=1"
+CONFIG_CMDLINE="nvmem=64M@960M mem=1024M@0M vmalloc=256M lp0_vec=8192@0x1840c000 console=tty0 usbcore.old_scheme_first=1 root=/dev/mmcblk1p2 rootwait rootfstype=ext4"
 CONFIG_CMDLINE_FORCE=y
 # CONFIG_XIP_KERNEL is not set
 # CONFIG_KEXEC is not set
@@ -456,6 +456,8 @@ CONFIG_CPU_IDLE_GOV_MENU=y
 #
 # At least one emulation must be selected
 #
+# CONFIG_FPE_NWFPE is not set
+# CONFIG_FPE_FASTFPE is not set
 CONFIG_VFP=y
 CONFIG_VFPv3=y
 # CONFIG_NEON is not set
@@ -1257,9 +1259,9 @@ CONFIG_TEGRA_DC=y
 CONFIG_FB_TEGRA=y
 CONFIG_TEGRA_DC_EXTENSIONS=y
 CONFIG_TEGRA_NVMAP=y
-CONFIG_NVMAP_RECLAIM_UNPINNED_VM=y
-CONFIG_NVMAP_ALLOW_SYSMEM=y
-# CONFIG_NVMAP_HIGHMEM_ONLY is not set
+# CONFIG_NVMAP_RECLAIM_UNPINNED_VM is not set
+# CONFIG_NVMAP_ALLOW_SYSMEM is not set
+CONFIG_NVMAP_HIGHMEM_ONLY=y
 # CONFIG_NVMAP_CARVEOUT_KILLER is not set
 # CONFIG_BACKLIGHT_LCD_SUPPORT is not set
 
