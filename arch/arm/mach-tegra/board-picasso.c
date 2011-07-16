@@ -614,7 +614,7 @@ late_initcall(tegra_picasso_protected_aperture_init);
 
 static void __init tegra_picasso_reserve(void)
 {
-	tegra_reserve(SZ_256M, SZ_8M, SZ_16M);
+	tegra_reserve(SZ_64M, SZ_8M, SZ_16M);
 }
 
 static void __init tegra_picasso_init(void)
