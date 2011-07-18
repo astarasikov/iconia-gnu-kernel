@@ -58,12 +58,9 @@ static u32 pseudo_palette[16];
 static int tegra_fb_check_var(struct fb_var_screeninfo *var,
 			      struct fb_info *info)
 {
-	if ((var->yres * var->xres * var->bits_per_pixel / 8 * 2) >
+	if ((var->yres * var->xres * var->bits_per_pixel / 8) >
 	    info->screen_size)
 		return -EINVAL;
-
-	/* double yres_virtual to allow double buffering through pan_display */
-	var->yres_virtual = var->yres * 2;
 
 	return 0;
 }
@@ -453,7 +450,7 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 	info->var.xres			= fb_data->xres;
 	info->var.yres			= fb_data->yres;
 	info->var.xres_virtual		= fb_data->xres;
-	info->var.yres_virtual		= fb_data->yres * 2;
+	info->var.yres_virtual		= fb_data->yres;
 	info->var.bits_per_pixel	= fb_data->bits_per_pixel;
 	info->var.activate		= FB_ACTIVATE_VBL;
 	info->var.height		= tegra_dc_get_out_height(dc);
