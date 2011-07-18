@@ -504,7 +504,6 @@ static struct gpio_keys_button picasso_keys[] = {
 	{
 		.code = KEY_POWER,
 		.gpio = PICASSO_GPIO_KEY_POWER2,
-		.active_low = 1,
 		.desc = "Power Key 2",
 		.type = EV_KEY,
 		.debounce_interval = 10,
