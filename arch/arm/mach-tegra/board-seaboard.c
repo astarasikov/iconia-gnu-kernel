@@ -1274,6 +1274,21 @@ MACHINE_START(AEBL, "aebl")
 	.dt_compat	= aebl_dt_board_compat,
 MACHINE_END
 
+static const char const *asymptote_dt_board_compat[] = {
+	"google,asymptote",
+	NULL
+};
+
+MACHINE_START(ASYMPTOTE, "asymptote")
+	.boot_params    = 0x00000100,
+	.map_io         = tegra_map_common_io,
+	.init_early     = tegra_init_early,
+	.init_irq       = tegra_init_irq,
+	.timer          = &tegra_timer,
+	.init_machine   = tegra_wario_init,
+	.dt_compat	= asymptote_dt_board_compat,
+MACHINE_END
+
 static const char *wario_dt_board_compat[] = {
 	"nvidia,wario",
 	NULL

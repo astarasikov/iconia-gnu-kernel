@@ -32,6 +32,15 @@ config MACH_AEBL
        help
          Support for the Aebl version of Seaboard
 
+config MACH_ASYMPTOTE
+        bool "Asymptote board"
+        select MACH_SEABOARD
+        help
+          Support for the Asymptote version of Seaboard.
+          This board has many of the same characteristics
+          as Seaboard and Wario, however it will differ
+          in the EMC timings.
+
 config MACH_HARMONY
        bool "Harmony board"
        help

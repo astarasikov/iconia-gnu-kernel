@@ -252,7 +252,8 @@ void __init seaboard_emc_init(void)
 	/* Adding allowances for wario as it shares the same memory
 	 * configuration as seaboard.
 	 */
-	BUG_ON(!machine_is_seaboard() && !machine_is_wario());
+	BUG_ON(!machine_is_seaboard() && !machine_is_wario()
+		&& !machine_is_asymptote());
 
 	if (tegra_sku_id == SKU_ID_T20) {
 		tegra_init_emc(seaboard_emc_tables_hynix_333Mhz,
