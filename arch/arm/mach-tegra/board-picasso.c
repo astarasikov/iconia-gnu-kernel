@@ -592,6 +592,7 @@ static struct platform_device *picasso_devices[] __initdata = {
 	&tegra_pmu_device,
 	&tegra_gart_device,
 	&tegra_aes_device,
+	&tegra_avp_device,
 	&picasso_keys_device,
 	&tegra_i2s_device1,
 	&tegra_das_device,
