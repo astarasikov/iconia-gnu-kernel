@@ -423,7 +423,7 @@ static const struct tegra_emc_table kaen_emc_tables_Nanya_380Mhz[] = {
 			0x00000000,   /* ODT_READ */
 			0x00000083,   /* FBIO_CFG5 */
 			0xa06204ae,   /* CFG_DIG_DLL */
-			0x007fd010,   /* DLL_XFORM_DQS */
+			0x007da010,   /* DLL_XFORM_DQS */
 			0x00000000,   /* DLL_XFORM_QUSE */
 			0x00000000,   /* ZCAL_REF_CNT */
 			0x00000000,   /* ZCAL_WAIT_CNT */
@@ -438,7 +438,7 @@ static const struct tegra_emc_table kaen_emc_tables_Nanya_380Mhz[] = {
 			0x00000016,   /* RC */
 			0x00000031,   /* RFC */
 			0x00000012,   /* RAS */
-			0x00000006,   /* RP */
+			0x00000005,   /* RP */
 			0x00000004,   /* R2W */
 			0x00000005,   /* W2R */
 			0x00000003,   /* R2P */
@@ -456,25 +456,25 @@ static const struct tegra_emc_table kaen_emc_tables_Nanya_380Mhz[] = {
 			0x00000000,   /* BURST_REFRESH_NUM */
 			0x00000003,   /* PDEX2WR */
 			0x00000003,   /* PDEX2RD */
-			0x00000006,   /* PCHG2PDEN */
+			0x00000005,   /* PCHG2PDEN */
 			0x00000005,   /* ACT2PDEN */
 			0x00000001,   /* AR2PDEN */
-			0x00000010,   /* RW2PDEN */
+			0x0000000f,   /* RW2PDEN */
 			0x000000c8,   /* TXSR */
 			0x00000003,   /* TCKE */
 			0x0000000e,   /* TFAW */
-			0x00000007,   /* TRPAB */
+			0x00000006,   /* TRPAB */
 			0x00000008,   /* TCLKSTABLE */
 			0x00000002,   /* TCLKSTOP */
 			0x00000000,   /* TREFBW */
-			0x00000004,   /* QUSE_EXTRA */
-			0x00000002,   /* FBIO_CFG6 */
+			0x00000000,   /* QUSE_EXTRA */
+			0x00000003,   /* FBIO_CFG6 */
 			0x00000000,   /* ODT_WRITE */
 			0x00000000,   /* ODT_READ */
 			0x00000083,   /* FBIO_CFG5 */
 			0xe044048b,   /* CFG_DIG_DLL */
-			0x007e4010,   /* DLL_XFORM_DQS */
-			0x00016617,   /* DLL_XFORM_QUSE */
+			0x007da010,   /* DLL_XFORM_DQS */
+			0x00000000,   /* DLL_XFORM_QUSE */
 			0x00000000,   /* ZCAL_REF_CNT */
 			0x00000000,   /* ZCAL_WAIT_CNT */
 			0x00000000,   /* AUTO_CAL_INTERVAL */
@@ -631,7 +631,7 @@ static const struct tegra_emc_table kaen_emc_tables_Samsung_380Mhz[] = {
 			0x00000000,   /* ODT_READ */
 			0x00000083,   /* FBIO_CFG5 */
 			0xa06204ae,   /* CFG_DIG_DLL */
-			0x007e0010,   /* DLL_XFORM_DQS */
+			0x007e2010,   /* DLL_XFORM_DQS */
 			0x00000000,   /* DLL_XFORM_QUSE */
 			0x00000000,   /* ZCAL_REF_CNT */
 			0x00000000,   /* ZCAL_WAIT_CNT */
@@ -676,13 +676,13 @@ static const struct tegra_emc_table kaen_emc_tables_Samsung_380Mhz[] = {
 			0x00000002,   /* TCLKSTOP */
 			0x00000000,   /* TREFBW */
 			0x00000000,   /* QUSE_EXTRA */
-			0x00000002,   /* FBIO_CFG6 */
+			0x00000003,   /* FBIO_CFG6 */
 			0x00000000,   /* ODT_WRITE */
 			0x00000000,   /* ODT_READ */
 			0x00000083,   /* FBIO_CFG5 */
 			0xe044048b,   /* CFG_DIG_DLL */
-			0x007e0010,   /* DLL_XFORM_DQS */
-			0x00023215,   /* DLL_XFORM_QUSE */
+			0x007de010,   /* DLL_XFORM_DQS */
+			0x00000000,   /* DLL_XFORM_QUSE */
 			0x00000000,   /* ZCAL_REF_CNT */
 			0x00000000,   /* ZCAL_WAIT_CNT */
 			0x00000000,   /* AUTO_CAL_INTERVAL */
