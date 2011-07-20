@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux/arm 2.6.38.3 Kernel Configuration
-# Sun Jul 17 02:29:35 2011
+# Thu Jul 21 01:23:59 2011
 #
 CONFIG_ARM=y
 CONFIG_HAVE_PWM=y
@@ -48,8 +48,10 @@ CONFIG_HAVE_KERNEL_LZO=y
 # CONFIG_KERNEL_LZMA is not set
 CONFIG_KERNEL_LZO=y
 CONFIG_SWAP=y
-# CONFIG_SYSVIPC is not set
-# CONFIG_POSIX_MQUEUE is not set
+CONFIG_SYSVIPC=y
+CONFIG_SYSVIPC_SYSCTL=y
+CONFIG_POSIX_MQUEUE=y
+CONFIG_POSIX_MQUEUE_SYSCTL=y
 # CONFIG_BSD_PROCESS_ACCT is not set
 # CONFIG_TASKSTATS is not set
 # CONFIG_AUDIT is not set
