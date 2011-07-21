@@ -25,8 +25,12 @@
 #include <linux/ieee80211.h>
 #include <net/cfg80211.h>
 #include <net/netlink.h>
+#include <linux/mmc/pm.h>
+#include <linux/mmc/sdio_func.h>
 
 #include "ar6000_drv.h"
+
+#include "../../hif/sdio/linux_sdio/include/hif_internal.h"
 
 
 extern A_WAITQUEUE_HEAD arEvent;
@@ -1787,6 +1791,65 @@ static int ar6k_flush_pmksa(struct wiphy *wiphy, struct net_device *netdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static int ar6k_cfg80211_suspend(struct wiphy *wiphy,
+				 struct cfg80211_wowlan *wow)
+{
+	struct ar6_softc *ar = wiphy_priv(wiphy);
+	struct hif_device *hif_dev = ar->arHifDevice;
+	struct sdio_func *func = hif_dev->func;
+	mmc_pm_flag_t flags;
+	int ret;
+
+	flags = sdio_get_host_pm_caps(func);
+
+	if (!(flags & MMC_PM_KEEP_POWER))
+		/* as host doesn't support keep power we need to bail out */
+		return -EINVAL;
+
+	ret = sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
+
+	if (ret) {
+		printk(KERN_ERR "ath6kl: set sdio pm flags failed: %d\n",
+		       ret);
+		return ret;
+	}
+
+	switch (ar->smeState) {
+	case SME_CONNECTING:
+		cfg80211_connect_result(ar->arNetDev, ar->arBssid, NULL, 0,
+					NULL, 0,
+					WLAN_STATUS_UNSPECIFIED_FAILURE,
+					GFP_KERNEL);
+		break;
+	case SME_CONNECTED:
+	default:
+		/*
+		 * FIXME: oddly enough smeState is in DISCONNECTED during
+		 * suspend, why? Need to send disconnected event in that
+		 * state.
+		 */
+		cfg80211_disconnected(ar->arNetDev, 0, NULL, 0, GFP_KERNEL);
+		break;
+	}
+
+	if (ar->arConnected || ar->arConnectPending)
+		wmi_disconnect_cmd(ar->arWmi);
+
+	ar->smeState = SME_DISCONNECTED;
+
+	/* disable scanning */
+	if (wmi_scanparams_cmd(ar->arWmi, 0xFFFF, 0, 0, 0, 0, 0, 0, 0,
+			       0, 0) != 0)
+		printk(KERN_WARNING "ath6kl: failed to disable scan "
+		       "during suspend\n");
+
+	ar6k_cfg80211_scanComplete_event(ar, A_ECANCELED);
+
+	return 0;
+}
+#endif
+
 static struct
 cfg80211_ops ar6k_cfg80211_ops = {
     .change_virtual_intf = ar6k_cfg80211_change_iface,
@@ -1812,6 +1875,9 @@ cfg80211_ops ar6k_cfg80211_ops = {
     .del_pmksa = ar6k_del_pmksa,
     .flush_pmksa = ar6k_flush_pmksa,
     CFG80211_TESTMODE_CMD(ar6k_testmode_cmd)
+#ifdef CONFIG_PM
+    .suspend = ar6k_cfg80211_suspend,
+#endif
 };
 
 struct wireless_dev *

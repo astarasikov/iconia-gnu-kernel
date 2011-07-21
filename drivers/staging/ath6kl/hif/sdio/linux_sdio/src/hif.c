@@ -50,10 +50,6 @@
 #endif
 
 /* ATHENV */
-#if defined(CONFIG_PM)
-#define dev_to_sdio_func(d)	container_of(d, struct sdio_func, dev)
-#define to_sdio_driver(d)      container_of(d, struct sdio_driver, drv)
-#endif /* CONFIG_PM */
 static void delHifDevice(struct hif_device * device);
 static int Func0_CMD52WriteByte(struct mmc_card *card, unsigned int address, unsigned char byte);
 static int Func0_CMD52ReadByte(struct mmc_card *card, unsigned int address, unsigned char *byte);
@@ -160,72 +156,11 @@ static void ath6kl_hifdev_remove(struct sdio_func *func)
 	delHifDevice(device);
 }
 
-#if defined(CONFIG_PM)
-static int ath6kl_hifdev_suspend(struct device *dev)
-{
-	struct sdio_func *func = dev_to_sdio_func(dev);
-	int status = 0;
-	struct hif_device *device;
-
-	device = ath6kl_get_hifdev(func);
-
-	if (device && device->claimedContext &&
-	    osdrvCallbacks.deviceSuspendHandler) {
-		/* set true first for PowerStateChangeNotify(..) */
-		device->is_suspend = true;
-		status = osdrvCallbacks.
-			deviceSuspendHandler(device->claimedContext);
-		if (status)
-			device->is_suspend = false;
-	}
-
-	CleanupHIFScatterResources(device);
-
-	switch (status) {
-	case 0:
-		return 0;
-	case A_EBUSY:
-		/* Hack for kernel in order to support deep sleep and wow */
-		return -EBUSY;
-	default:
-		return -1;
-	}
-}
-
-static int ath6kl_hifdev_resume(struct device *dev)
-{
-	struct sdio_func *func = dev_to_sdio_func(dev);
-	int status = 0;
-	struct hif_device *device;
-
-	device = ath6kl_get_hifdev(func);
-	if (device && device->claimedContext &&
-	    osdrvCallbacks.deviceSuspendHandler) {
-		status = osdrvCallbacks.
-			deviceResumeHandler(device->claimedContext);
-		if (status == 0)
-			device->is_suspend = false;
-	}
-
-	return status;
-}
-
-static const struct dev_pm_ops ath6kl_hifdev_pmops = {
-	.suspend = ath6kl_hifdev_suspend,
-	.resume = ath6kl_hifdev_resume,
-};
-#endif /* CONFIG_PM */
-
 static struct sdio_driver ath6kl_hifdev_driver = {
 	.name = "ath6kl_hifdev",
 	.id_table = ath6kl_hifdev_ids,
 	.probe = ath6kl_hifdev_probe,
 	.remove = ath6kl_hifdev_remove,
-#if defined(CONFIG_PM)
-	.drv = {
-		.pm = &ath6kl_hifdev_pmops,
-	},
-#endif
 };
 
 /* make sure we only unregister when registered. */
@@ -769,42 +704,6 @@ int
 PowerStateChangeNotify(struct hif_device *device, HIF_DEVICE_POWER_CHANGE_TYPE config)
 {
     int status = 0;
-#if defined(CONFIG_PM)
-	struct sdio_func *func = device->func;
-    int old_reset_val;
-    AR_DEBUG_PRINTF(ATH_DEBUG_TRACE, ("AR6000: +PowerStateChangeNotify %d\n", config));
-    switch (config) {
-       case HIF_DEVICE_POWER_DOWN:
-       case HIF_DEVICE_POWER_CUT:
-            old_reset_val = reset_sdio_on_unload;
-            reset_sdio_on_unload = 1;
-            status = hifDisableFunc(device, func);
-            reset_sdio_on_unload = old_reset_val;
-            if (!device->is_suspend) {
-                struct mmc_host *host = func->card->host;
-	            host->ios.clock = 0;
-	            host->ios.vdd = 0;
-                host->ios.bus_mode = MMC_BUSMODE_OPENDRAIN;
-                host->ios.chip_select = MMC_CS_DONTCARE;
-                host->ios.power_mode = MMC_POWER_OFF;
-                host->ios.bus_width = MMC_BUS_WIDTH_1;
-                host->ios.timing = MMC_TIMING_LEGACY;
-                host->ops->set_ios(host, &host->ios);
-            }
-            break;
-       case HIF_DEVICE_POWER_UP:
-            if (device->powerConfig == HIF_DEVICE_POWER_CUT) {
-                status = ReinitSDIO(device);
-            }
-            if (status == 0) {
-                status = hifEnableFunc(device, func);
-            }
-            break;
-    } 
-    device->powerConfig = config;
-
-    AR_DEBUG_PRINTF(ATH_DEBUG_TRACE, ("AR6000: -PowerStateChangeNotify\n"));
-#endif
     return status;
 }
 
@@ -920,26 +819,6 @@ static int startup_task(void *param)
     }
     return 0;
 }
-
-#if defined(CONFIG_PM)
-static int enable_task(void *param)
-{
-    struct hif_device *device;
-    device = (struct hif_device *)param;
-    AR_DEBUG_PRINTF(ATH_DEBUG_TRACE, ("AR6000: call  from resume_task\n"));
-
-        /* start  up inform DRV layer */
-    if (device && 
-        device->claimedContext && 
-        osdrvCallbacks.devicePowerChangeHandler &&
-        osdrvCallbacks.devicePowerChangeHandler(device->claimedContext, HIF_DEVICE_POWER_UP) != 0)
-    {
-        AR_DEBUG_PRINTF(ATH_DEBUG_TRACE, ("AR6000: Device rejected\n"));
-    }
-
-    return 0;
-}
-#endif
 
 void
 HIFAckInterrupt(struct hif_device *device)
@@ -1132,12 +1011,6 @@ static int hifEnableFunc(struct hif_device *device, struct sdio_func *func)
         taskFunc = startup_task;
         taskName = "AR6K startup";
         ret = 0;
-#if defined(CONFIG_PM)
-    } else {
-        taskFunc = enable_task;
-        taskName = "AR6K enable";
-        ret = -ENOMEM;
-#endif /* CONFIG_PM */
     }
     /* create resume thread */
     pTask = kthread_create(taskFunc, (void *)device, taskName);

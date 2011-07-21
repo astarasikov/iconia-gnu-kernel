@@ -630,14 +630,6 @@ struct ar6_softc {
     u32 smeState;
     u16 arWlanPowerState;
     bool                  arWlanOff;
-#ifdef CONFIG_PM
-    u16 arWowState;
-    bool                  arBTOff;
-    bool                  arBTSharing;
-    u16 arSuspendConfig;
-    u16 arWlanOffConfig;
-    u16 arWow2Config;
-#endif
     u8 scan_triggered;
     WMI_SCAN_PARAMS_CMD     scParams;
 #define AR_MCAST_FILTER_MAC_ADDR_SIZE  4
