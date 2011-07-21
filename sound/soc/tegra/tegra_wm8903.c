@@ -301,11 +301,7 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_add_routes(dapm, aebl_audio_map,
 				ARRAY_SIZE(aebl_audio_map));
 
-	if (machine_is_harmony()
-#ifndef CONFIG_VENTANA_ACER_PICASSO	
-	|| machine_is_ventana()
-#endif
-	) {
+	if (machine_is_harmony() || machine_is_ventana()) {
 		snd_soc_dapm_add_routes(dapm, harmony_audio_map,
 			ARRAY_SIZE(harmony_audio_map));
 	} else if (machine_is_seaboard()) {

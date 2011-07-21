@@ -207,7 +207,7 @@ config CHARGER_GPIO
 
 config BATTERY_ACER_PICASSO
 	tristate "Acer Picasso Battery"
-	depends on MACH_PICASSO || VENTANA_ACER_PICASSO
+	depends on MFD_ACER_PICASSO_EC
 	help
 	  Say Y here to enable support for the battery in Acer Iconia A500.
 

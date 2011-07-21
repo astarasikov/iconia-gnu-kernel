@@ -626,7 +626,7 @@ config MFD_WL1273_CORE
 
 config MFD_ACER_PICASSO_EC
 	bool "Acer Iconia A500 EC"
-	depends on (MACH_PICASSO || VENTANA_ACER_PICASSO) && I2C
+	depends on MACH_PICASSO && I2C
 	default y
 	help
 		Say Y here to enable the embedded controller in Acer Iconia Tab

@@ -63,12 +63,12 @@ obj-${CONFIG_MACH_TEGRA_DT}             += board-dt.o
 obj-${CONFIG_MACH_TRIMSLICE}            += board-trimslice.o
 obj-${CONFIG_MACH_TRIMSLICE}            += board-trimslice-pinmux.o
 
-obj-${CONFIG_VENTANA_GENERIC}		+= board-ventana.o
-obj-${CONFIG_VENTANA_GENERIC}		+= board-ventana-pinmux.o
-obj-${CONFIG_VENTANA_GENERIC}		+= board-ventana-power.o
+obj-${CONFIG_MACH_VENTANA}		+= board-ventana.o
+obj-${CONFIG_MACH_VENTANA}		+= board-ventana-pinmux.o
+obj-${CONFIG_MACH_VENTANA}		+= board-ventana-power.o
 
-obj-${CONFIG_VENTANA_ACER_PICASSO}		+= board-picasso.o
-obj-${CONFIG_VENTANA_ACER_PICASSO}		+= board-picasso-pinmux.o
-obj-${CONFIG_VENTANA_ACER_PICASSO}		+= board-picasso-power.o
-obj-${CONFIG_VENTANA_ACER_PICASSO}		+= board-picasso-panel.o
-obj-${CONFIG_VENTANA_ACER_PICASSO}		+= board-picasso-memory.o
+obj-${CONFIG_MACH_PICASSO}		+= board-picasso.o
+obj-${CONFIG_MACH_PICASSO}		+= board-picasso-pinmux.o
+obj-${CONFIG_MACH_PICASSO}		+= board-picasso-power.o
+obj-${CONFIG_MACH_PICASSO}		+= board-picasso-panel.o
+obj-${CONFIG_MACH_PICASSO}		+= board-picasso-memory.o

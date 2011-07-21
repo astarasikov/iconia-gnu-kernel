@@ -631,7 +631,7 @@ static void __init tegra_picasso_init(void)
 	picasso_sound_init();
 }
 
-MACHINE_START(VENTANA, "picasso")
+MACHINE_START(PICASSO, "picasso")
 	.boot_params    = 0x00000100,
 	.map_io		= tegra_map_common_io,
 	.init_early	= tegra_init_early,
