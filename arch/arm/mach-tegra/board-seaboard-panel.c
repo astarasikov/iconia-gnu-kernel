@@ -243,6 +243,22 @@ static struct tegra_dc_mode arthur_panel_modes[] = {
 	},
 };
 
+static struct tegra_dc_mode asymptote_panel_modes[] = {
+	{
+		.pclk = 62200000,
+		.h_ref_to_sync = 16,
+		.v_ref_to_sync = 1,
+		.h_sync_width = 58,
+		.v_sync_width = 40,
+		.h_back_porch = 58,
+		.v_back_porch = 20,
+		.h_active = 1024,
+		.v_active = 768,
+		.h_front_porch = 58,
+		.v_front_porch = 1,
+	},
+};
+
 static struct tegra_fb_data seaboard_fb_data = {
 	.win		= 0,
 	.xres		= 1366,
@@ -262,6 +278,13 @@ static struct tegra_fb_data arthur_fb_data = {
 	.xres		= 1366,
 	.yres		= 910,
 	.bits_per_pixel	= 32,
+};
+
+static struct tegra_fb_data asymptote_fb_data = {
+	.win		= 0,
+	.xres		= 1024,
+	.yres		= 768,
+	.bits_per_pixel	= 16,
 };
 
 static struct tegra_fb_data seaboard_hdmi_fb_data = {
@@ -377,13 +400,10 @@ static struct platform_device *seaboard_gfx_devices[] __initdata = {
 	&seaboard_backlight_device,
 };
 
-static void __init seaboard_panel_gpio_init(void)
+static void __init seaboard_common_panel_gpio_init(void)
 {
 	gpio_request(TEGRA_GPIO_EN_VDD_PNL, "en_vdd_pnl");
 	gpio_direction_output(TEGRA_GPIO_EN_VDD_PNL, 1);
-
-	gpio_request(TEGRA_GPIO_BACKLIGHT_VDD, "bl_vdd");
-	gpio_direction_output(TEGRA_GPIO_BACKLIGHT_VDD, 1);
 
 	gpio_request(TEGRA_GPIO_HDMI_ENB, "hdmi_5v_en");
 	gpio_direction_output(TEGRA_GPIO_HDMI_ENB, 0);
@@ -393,6 +413,20 @@ static void __init seaboard_panel_gpio_init(void)
 
 	gpio_request(TEGRA_GPIO_HDMI_HPD, "hdmi_hpd");
 	gpio_direction_input(TEGRA_GPIO_HDMI_HPD);
+}
+
+static void __init seaboard_panel_gpio_init(void)
+{
+	seaboard_common_panel_gpio_init();
+	gpio_request(SEABOARD_GPIO_BACKLIGHT_VDD, "bl_vdd");
+	gpio_direction_output(SEABOARD_GPIO_BACKLIGHT_VDD, 1);
+}
+
+static void __init asymptote_panel_gpio_init(void)
+{
+	seaboard_common_panel_gpio_init();
+	gpio_request(ASYMPTOTE_GPIO_BACKLIGHT_VDD, "bl_vdd");
+	gpio_direction_output(ASYMPTOTE_GPIO_BACKLIGHT_VDD, 1);
 }
 
 static int __init seaboard_panel_register_devices(void)
@@ -434,6 +468,16 @@ int __init arthur_panel_init(void)
 	seaboard_disp1_out.modes = arthur_panel_modes;
 	seaboard_disp1_out.depth = 24;
 	seaboard_disp1_pdata.fb = &arthur_fb_data;
+	return seaboard_panel_register_devices();
+}
+#endif
+
+#ifdef CONFIG_MACH_ASYMPTOTE
+int __init asymptote_panel_init(void)
+{
+	asymptote_panel_gpio_init();
+	seaboard_disp1_out.modes = asymptote_panel_modes;
+	seaboard_disp1_pdata.fb = &asymptote_fb_data;
 	return seaboard_panel_register_devices();
 }
 #endif

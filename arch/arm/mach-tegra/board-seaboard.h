@@ -35,7 +35,8 @@
 #define TEGRA_GPIO_BACKLIGHT		TEGRA_GPIO_PD4
 #define TEGRA_GPIO_LVDS_SHUTDOWN	TEGRA_GPIO_PB2
 #define TEGRA_GPIO_BACKLIGHT_PWM	TEGRA_GPIO_PU5
-#define TEGRA_GPIO_BACKLIGHT_VDD	TEGRA_GPIO_PW0
+#define SEABOARD_GPIO_BACKLIGHT_VDD	TEGRA_GPIO_PW0
+#define ASYMPTOTE_GPIO_BACKLIGHT_VDD	TEGRA_GPIO_PU5
 #define TEGRA_GPIO_EN_VDD_PNL		TEGRA_GPIO_PC6
 #define TEGRA_GPIO_MAGNETOMETER		TEGRA_GPIO_PN5
 #define TEGRA_GPIO_NCT1008_THERM2_IRQ	TEGRA_GPIO_PN6
@@ -50,7 +51,9 @@
 #define TEGRA_GPIO_MAX98095_IRQ		TEGRA_GPIO_PX3
 #define TEGRA_GPIO_WM8903_IRQ		TEGRA_GPIO_PX3
 #define TEGRA_GPIO_CYTP_INT		TEGRA_GPIO_PW2
-#define TEGRA_GPIO_MXT_RST		TEGRA_GPIO_PV7
+#define SEABOARD_GPIO_MXT_RST		TEGRA_GPIO_PV7
+#define ASYMPTOTE_GPIO_MXT_RST          TEGRA_GPIO_PK3
+#define ASYMPTOTE_GPIO_MXT_SLEEP	TEGRA_GPIO_PK4
 #define TEGRA_GPIO_MXT_IRQ		TEGRA_GPIO_PV6
 #define TEGRA_GPIO_HDMI_ENB		TEGRA_GPIO_PV5
 #define TEGRA_GPIO_KAEN_HP_MUTE		TEGRA_GPIO_PA5
@@ -122,6 +125,13 @@ int arthur_panel_init(void);
 #else
 static inline void arthur_emc_init(void) { return; }
 static inline int arthur_panel_init(void) { return 0; }
+#endif
+
+void asymptote_pinmux_init(void);
+#ifdef CONFIG_MACH_ASYMPTOTE
+int asymptote_panel_init(void);
+#else
+static inline int asymptote_panel_init(void) { return 0; }
 #endif
 
 void ventana_pinmux_init(void);
