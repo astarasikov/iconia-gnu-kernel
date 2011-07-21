@@ -71,6 +71,7 @@ static __initdata struct tegra_clk_init_table common_clk_init_table[] = {
 	/* name		parent		rate		enabled */
 	{ "clk_m",	NULL,		0,		true },
 	{ "pll_p",	"clk_m",	216000000,	true },
+	{ "pll_m_out1",	"pll_m",	120000000,	true },
 	{ "pll_c",	"clk_m",	600000000,	true },
 	{ "pll_c_out1",	"pll_c",	120000000,	true },
 	{ "pll_p_out1",	"pll_p",	28800000,	true },
