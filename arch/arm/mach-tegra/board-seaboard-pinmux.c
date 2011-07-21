@@ -193,7 +193,7 @@ static __initdata struct tegra_pingroup_config seaboard_pinmux[] = {
 
 
 
-static struct tegra_gpio_table gpio_table[] = {
+static struct tegra_gpio_table common_gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_SD2_CD,		.enable = true },
 	{ .gpio = TEGRA_GPIO_SD2_WP,		.enable = true },
 	{ .gpio = TEGRA_GPIO_SD2_POWER,		.enable = true },
@@ -204,7 +204,6 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_NCT1008_THERM2_IRQ,.enable = true },
 	{ .gpio = TEGRA_GPIO_WLAN_POWER,	.enable = true },
 	{ .gpio = TEGRA_GPIO_AC_ONLINE,		.enable = true },
-	{ .gpio = TEGRA_GPIO_MXT_RST,		.enable = true },
 	{ .gpio = TEGRA_GPIO_MXT_IRQ,		.enable = true },
 	{ .gpio = TEGRA_GPIO_HDMI_ENB,		.enable = true },
 	{ .gpio = TEGRA_GPIO_MPU3050_IRQ,	.enable = true },
@@ -222,7 +221,15 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_CYTP_INT,		.enable = true },
 };
 
-void __init seaboard_pinmux_init(void)
+static struct tegra_gpio_table seaboard_gpio_table[] = {
+	{ .gpio = SEABOARD_GPIO_MXT_RST,	.enable = true },
+};
+
+static struct tegra_gpio_table asymptote_gpio_table[] = {
+	{ .gpio = ASYMPTOTE_GPIO_MXT_RST,	.enable = true },
+};
+
+void __init seaboard_common_pinmux_init(void)
 {
 	/*
 	 * PINGROUP_SPIC contains two pins:
@@ -251,7 +258,13 @@ void __init seaboard_pinmux_init(void)
 	tegra_drive_pinmux_config_table(seaboard_drive_pinmux,
 					ARRAY_SIZE(seaboard_drive_pinmux));
 
-	tegra_gpio_config(gpio_table, ARRAY_SIZE(gpio_table));
+	tegra_gpio_config(common_gpio_table, ARRAY_SIZE(common_gpio_table));
+}
+
+void __init seaboard_pinmux_init(void)
+{
+	seaboard_common_pinmux_init();
+	tegra_gpio_config(seaboard_gpio_table, ARRAY_SIZE(seaboard_gpio_table));
 }
 
 static void __init update_pinmux(struct tegra_pingroup_config *newtbl, int size)
@@ -323,6 +336,13 @@ void __init aebl_pinmux_init(void)
 {
 	seaboard_pinmux_init();
 	fixup_pinmux_for_26Mhz();
+}
+
+void __init asymptote_pinmux_init(void)
+{
+	seaboard_common_pinmux_init();
+	tegra_gpio_config(asymptote_gpio_table,
+			  ARRAY_SIZE(asymptote_gpio_table));
 }
 
 static __initdata struct tegra_pingroup_config ventana_pinmux[] = {

@@ -226,6 +226,22 @@ static struct tegra_dc_mode wario_panel_modes[] = {
 	},
 };
 
+static struct tegra_dc_mode asymptote_panel_modes[] = {
+	{
+		.pclk = 62200000,
+		.h_ref_to_sync = 16,
+		.v_ref_to_sync = 1,
+		.h_sync_width = 58,
+		.v_sync_width = 40,
+		.h_back_porch = 58,
+		.v_back_porch = 20,
+		.h_active = 1024,
+		.v_active = 768,
+		.h_front_porch = 58,
+		.v_front_porch = 1,
+	},
+};
+
 static struct tegra_fb_data seaboard_fb_data = {
 	.win		= 0,
 	.xres		= 1366,
@@ -237,6 +253,13 @@ static struct tegra_fb_data wario_fb_data = {
 	.win		= 0,
 	.xres		= 1280,
 	.yres		= 800,
+	.bits_per_pixel	= 16,
+};
+
+static struct tegra_fb_data asymptote_fb_data = {
+	.win		= 0,
+	.xres		= 1024,
+	.yres		= 768,
 	.bits_per_pixel	= 16,
 };
 
@@ -379,6 +402,9 @@ int __init seaboard_panel_init(void)
 	if (machine_is_wario()) {
 		seaboard_disp1_out.modes = wario_panel_modes;
 		seaboard_disp1_pdata.fb = &wario_fb_data;
+	} else if (machine_is_asymptote()) {
+		seaboard_disp1_out.modes = asymptote_panel_modes;
+		seaboard_disp1_pdata.fb = &asymptote_fb_data;
 	}
 
 	err = platform_add_devices(seaboard_gfx_devices,

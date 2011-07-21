@@ -47,8 +47,10 @@
 #define TEGRA_GPIO_BATT_DETECT		TEGRA_GPIO_PP2
 #define TEGRA_GPIO_WLAN_POWER		TEGRA_GPIO_PK6
 #define TEGRA_GPIO_DISABLE_CHARGER	TEGRA_GPIO_PX2
-#define TEGRA_GPIO_MXT_RST		TEGRA_GPIO_PV7
 #define TEGRA_GPIO_MXT_IRQ		TEGRA_GPIO_PV6
+#define SEABOARD_GPIO_MXT_RST		TEGRA_GPIO_PV7
+#define ASYMPTOTE_GPIO_MXT_RST          TEGRA_GPIO_PK3
+#define ASYMPTOTE_GPIO_MXT_SLEEP	TEGRA_GPIO_PK4
 #define TEGRA_GPIO_RECOVERY_SWITCH	TEGRA_GPIO_PH0
 #define TEGRA_GPIO_DEV_SWITCH		TEGRA_GPIO_PV0
 #define TEGRA_GPIO_WP_STATUS		TEGRA_GPIO_PH3
@@ -102,6 +104,13 @@ static inline void aebl_emc_init(void) { return; }
 static inline int aebl_sensors_init(void) { return 0; }
 #endif
  
+void asymptote_pinmux_init(void);
+#ifdef CONFIG_MACH_ASYMPTOTE
+int asymptote_panel_init(void);
+#else
+static inline int asymptote_panel_init(void) { return 0; }
+#endif
+
 void ventana_pinmux_init(void);
 #ifdef CONFIG_MACH_VENTANA
 void ventana_emc_init(void);
