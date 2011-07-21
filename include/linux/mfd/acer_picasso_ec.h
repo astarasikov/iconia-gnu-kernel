@@ -12,10 +12,13 @@
 #define PICASSO_EC_SYS_ID "acer_picasso_system"
 
 enum picasso_ec_reg {
-	EC_BATT_CAPACITY = 0x0,
+	EC_BATT_CHARGE_NOW = 0x0,
 	EC_BATT_VOLTAGE	= 0x1,
+	EC_BATT_CURRENT_NOW = 0x3,
 	EC_BATT_DESIGN_CAPACITY = 0x8,
+	EC_BATT_CAPACITY = 0x9,
 	EC_BATT_TEMPERATURE = 0xa,
+	EC_BATT_CYCLE_COUNT = 0xb,
 
 	EC_LED_RESET = 0x40, //Let EC manage charging/standby LED state
 	EC_LED_OFF = 0x41,
