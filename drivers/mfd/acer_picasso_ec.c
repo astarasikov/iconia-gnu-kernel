@@ -108,6 +108,28 @@ static struct mfd_cell picasso_ec_funcs[] = {
 	}
 };
 
+static int picasso_ec_check_version(struct i2c_client *client) {
+	int rc = 0;
+	s32 ver_minor, ver_major;
+
+	ver_major = ec_read_word(client, EC_VER_MAJOR);
+	if (ver_major < 0) {
+		dev_err(&client->dev, "failed to read EC major version\n");	
+		return ver_major;
+	}
+
+	ver_minor = ec_read_word(client, EC_VER_MINOR);
+	if (ver_minor < 0) {
+		dev_err(&client->dev, "failed to read EC minor version\n");
+		return ver_minor;
+	}
+
+	ver_major = (ver_major << 16) | (ver_minor & 0xffff);
+	dev_info(&client->dev, "EC version is %x\n", ver_major);
+
+	return rc;
+}
+
 static int picasso_ec_probe(struct i2c_client *client,
 			   const struct i2c_device_id *id)
 {
@@ -126,7 +148,13 @@ static int picasso_ec_probe(struct i2c_client *client,
 	mutex_init(&priv->mutex);
 
 	i2c_set_clientdata(client, priv);
-	
+
+	rc = picasso_ec_check_version(client);
+	if (rc < 0) {
+		dev_err(&client->dev, "Failed to read picasso EC version\n");
+		goto fail;
+	}
+
 	rc = mfd_add_devices(&client->dev, -1,
 		picasso_ec_funcs, ARRAY_SIZE(picasso_ec_funcs),
 		NULL, -1);
@@ -135,6 +163,11 @@ static int picasso_ec_probe(struct i2c_client *client,
 		dev_err(&client->dev, "error adding subdevices");
 	}
 	return 0;
+
+fail:
+	i2c_set_clientdata(client, NULL);
+	mutex_destroy(&priv->mutex);
+	return -ENODEV;
 }
 
 static int picasso_ec_remove(struct i2c_client *client)

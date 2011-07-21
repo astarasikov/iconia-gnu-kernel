@@ -20,6 +20,9 @@ enum picasso_ec_reg {
 	EC_BATT_TEMPERATURE = 0xa,
 	EC_BATT_CYCLE_COUNT = 0xb,
 
+	EC_VER_MAJOR = 0x30,
+	EC_VER_MINOR = 0x31,
+
 	EC_LED_RESET = 0x40, //Let EC manage charging/standby LED state
 	EC_LED_OFF = 0x41,
 	EC_LED_WHITE = 0x42,
