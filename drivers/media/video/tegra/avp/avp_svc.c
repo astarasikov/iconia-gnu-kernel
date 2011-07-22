@@ -722,10 +722,11 @@ struct avp_svc_info *avp_svc_init(struct platform_device *pdev,
 	}
 
 	/*
-	 * The emc is a shared clock, it will be set to the highest
+	 * The sclk/emc is a shared clock, it will be set to the highest
 	 * requested rate from any user.  Set the rate to ULONG_MAX to
 	 * always request the max rate whenever this request is enabled
 	 */
+	clk_set_rate(avp_svc->sclk, ULONG_MAX);
 	clk_set_rate(avp_svc->emcclk, ULONG_MAX);
 
 	avp_svc->rpc_node = rpc_node;

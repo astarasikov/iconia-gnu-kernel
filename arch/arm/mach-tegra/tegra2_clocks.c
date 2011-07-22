@@ -385,12 +385,24 @@ static int tegra2_super_clk_set_rate(struct clk *c, unsigned long rate)
 	return clk_set_rate(c->parent, rate);
 }
 
+/*
+ * When a shared bus clock client calls set_rate(), it needs to call it's
+ * parent clock's round_rate() first. The round_rate() is to check if the rate
+ * is valid, and return a valid rate.  An example is avp.sclk which is a shared
+ * bus clock client whose parent is sclk.
+ */
+static long tegra2_super_clk_round_rate(struct clk *c, unsigned long rate)
+{
+	return clk_round_rate(c->parent, rate);
+}
+
 static struct clk_ops tegra_super_ops = {
 	.init			= tegra2_super_clk_init,
 	.enable			= tegra2_super_clk_enable,
 	.disable		= tegra2_super_clk_disable,
 	.set_parent		= tegra2_super_clk_set_parent,
 	.set_rate		= tegra2_super_clk_set_rate,
+	.round_rate		= tegra2_super_clk_round_rate,
 };
 
 /* virtual cpu clock functions */
