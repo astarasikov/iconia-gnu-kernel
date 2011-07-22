@@ -39,6 +39,7 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/time.h>
 #include <asm/setup.h>
+#include <asm/delay.h>
 
 #include <mach/harmony_audio.h>
 #include <mach/iomap.h>
@@ -420,10 +421,6 @@ static __initdata struct tegra_clk_init_table harmony_clk_init_table[] = {
 	{ "ide",	"clk_m",	12000000,	false},
 	{ "ndflash",	"clk_m",	108000000,	true},
 	{ "vfir",	"clk_m",	12000000,	false},
-	{ "sdmmc1",	"clk_m",	48000000,	true},
-	{ "sdmmc2",	"clk_m",	48000000,	true},
-	{ "sdmmc3",	"clk_m",	48000000,	false},
-	{ "sdmmc4",	"clk_m",	48000000,	true},
 	{ "la",		"clk_m",	12000000,	false},
 	{ "owr",	"clk_m",	12000000,	false},
 	{ "nor",	"clk_m",	12000000,	false},
@@ -483,6 +480,31 @@ static struct tegra_suspend_platform_data harmony_suspend = {
 	.sysclkreq_high = true,
 	.suspend_mode = TEGRA_SUSPEND_LP0,
 };
+
+static void __init harmony_wifi_init(void)
+{
+	int gpio_pwr, gpio_rst;
+
+	/* WLAN - Power up (low) and Reset (low) */
+	gpio_pwr = gpio_request(TEGRA_GPIO_WLAN_PWR_LOW, "wlan_pwr");
+	gpio_rst = gpio_request(TEGRA_GPIO_WLAN_RST_LOW, "wlan_rst");
+	if (gpio_pwr < 0 || gpio_rst < 0)
+		pr_warning("Unable to get gpio for WLAN Power and Reset\n");
+	else {
+		/* toggle in this order as per spec */
+		gpio_direction_output(TEGRA_GPIO_WLAN_PWR_LOW, 0);
+		gpio_direction_output(TEGRA_GPIO_WLAN_RST_LOW, 0);
+		udelay(5);
+		gpio_direction_output(TEGRA_GPIO_WLAN_PWR_LOW, 1);
+		gpio_direction_output(TEGRA_GPIO_WLAN_RST_LOW, 1);
+	}
+}
+/* make harmony_wifi_init to be invoked at subsys_initcall_sync
+ * to ensure the required regulators (LDO3 supply of external
+ * PMU and 1.2V regulator) are properly enabled, and mmc driver
+ * has not yet probed for a device on SDIO bus
+ */
+subsys_initcall_sync(harmony_wifi_init);
 
 static void __init tegra_harmony_init(void)
 {

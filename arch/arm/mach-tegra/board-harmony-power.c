@@ -20,6 +20,7 @@
 #include <linux/gpio.h>
 #include <linux/io.h>
 #include <linux/regulator/machine.h>
+#include <linux/regulator/fixed.h>
 #include <linux/mfd/tps6586x.h>
 
 #include <mach/irqs.h>
@@ -61,7 +62,9 @@ static struct regulator_consumer_supply tps658621_ldo4_supply[] = {
 	REGULATOR_SUPPLY("vddio_sys", NULL),
 };
 static struct regulator_consumer_supply tps658621_ldo5_supply[] = {
-	REGULATOR_SUPPLY("vcore_mmc", NULL),
+	REGULATOR_SUPPLY("vcore_mmc", "sdhci-tegra.0"),
+	REGULATOR_SUPPLY("vcore_mmc", "sdhci-tegra.1"),
+	REGULATOR_SUPPLY("vcore_mmc", "sdhci-tegra.2"),
 };
 static struct regulator_consumer_supply tps658621_ldo6_supply[] = {
 	REGULATOR_SUPPLY("avdd_vdac", NULL),
@@ -76,6 +79,102 @@ static struct regulator_consumer_supply tps658621_ldo9_supply[] = {
 	REGULATOR_SUPPLY("vdd_ddr_rx", NULL),
 	REGULATOR_SUPPLY("avdd_cam", NULL),
 	REGULATOR_SUPPLY("avdd_amp", NULL),
+};
+
+/* regulator supplies power to WWAN - by default disable */
+static struct regulator_consumer_supply vdd_1v5_consumer_supply[] = {
+	REGULATOR_SUPPLY("vdd_1v5", NULL),
+};
+
+static struct regulator_init_data vdd_1v5_initdata = {
+	.consumer_supplies = vdd_1v5_consumer_supply,
+	.num_consumer_supplies = 1,
+	.constraints = {
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+		.always_on = 0,
+	},
+};
+
+static struct fixed_voltage_config vdd_1v5 = {
+	.supply_name		= "vdd_1v5",
+	.microvolts		= 1500000, /* Enable 1.5V */
+	.gpio			= TPS_GPIO_EN_1V5, /* GPIO BASE+0 */
+	.startup_delay		= 0,
+	.enable_high		= 0,
+	.enabled_at_boot	= 0,
+	.init_data		= &vdd_1v5_initdata,
+};
+
+/* regulator supplies power to WLAN - enable here, to satisfy SDIO probing */
+static struct regulator_consumer_supply vdd_1v2_consumer_supply[] = {
+	REGULATOR_SUPPLY("vdd_1v2", NULL),
+};
+
+static struct regulator_init_data vdd_1v2_initdata = {
+	.consumer_supplies = vdd_1v2_consumer_supply,
+	.num_consumer_supplies = 1,
+	.constraints = {
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+		.always_on = 1,
+	},
+};
+
+static struct fixed_voltage_config vdd_1v2 = {
+	.supply_name		= "vdd_1v2",
+	.microvolts		= 1200000, /* Enable 1.2V */
+	.gpio			= TPS_GPIO_EN_1V2, /* GPIO BASE+1 */
+	.startup_delay		= 0,
+	.enable_high		= 1,
+	.enabled_at_boot	= 1,
+	.init_data		= &vdd_1v2_initdata,
+};
+
+/* regulator supplies power to PLL - enable here */
+static struct regulator_consumer_supply vdd_1v05_consumer_supply[] = {
+	REGULATOR_SUPPLY("vdd_1v05", NULL),
+};
+
+static struct regulator_init_data vdd_1v05_initdata = {
+	.consumer_supplies = vdd_1v05_consumer_supply,
+	.num_consumer_supplies = 1,
+	.constraints = {
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+		.always_on = 1,
+	},
+};
+
+static struct fixed_voltage_config vdd_1v05 = {
+	.supply_name		= "vdd_1v05",
+	.microvolts		= 1050000, /* Enable 1.05V */
+	.gpio			= TPS_GPIO_EN_1V05, /* BASE+2 */
+	.startup_delay		= 0,
+	.enable_high		= 1,
+	.enabled_at_boot	= 0,
+	.init_data		= &vdd_1v05_initdata,
+};
+
+/* mode pin for 1.05V regulator - enable here */
+static struct regulator_consumer_supply vdd_1v05_mode_consumer_supply[] = {
+	REGULATOR_SUPPLY("vdd_1v05_mode", NULL),
+};
+
+static struct regulator_init_data vdd_1v05_mode_initdata = {
+	.consumer_supplies = vdd_1v05_mode_consumer_supply,
+	.num_consumer_supplies = 1,
+	.constraints = {
+		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+		.always_on = 1,
+	},
+};
+
+static struct fixed_voltage_config vdd_1v05_mode = {
+	.supply_name		= "vdd_1v05_mode",
+	.microvolts		= 1050000, /* Enable 1.05V */
+	.gpio			= TPS_GPIO_MODE_1V05, /* BASE+3 */
+	.startup_delay		= 0,
+	.enable_high		= 1,
+	.enabled_at_boot	= 0,
+	.init_data		= &vdd_1v05_mode_initdata,
 };
 
 #define REGULATOR_INIT(_id, _minmv, _maxmv, _always_on)			\
@@ -101,7 +200,7 @@ REGULATOR_INIT(sm2, 3000, 4550, true);
 REGULATOR_INIT(ldo0, 1250, 3300, false);
 REGULATOR_INIT(ldo1, 725, 1500, false);
 REGULATOR_INIT(ldo2, 725, 1500, false);
-REGULATOR_INIT(ldo3, 1250, 3300, false);
+REGULATOR_INIT(ldo3, 3300, 3300, true);
 REGULATOR_INIT(ldo4, 1700, 2475, false);
 REGULATOR_INIT(ldo5, 1250, 3300, false);
 REGULATOR_INIT(ldo6, 1250, 3300, false);
@@ -109,10 +208,21 @@ REGULATOR_INIT(ldo7, 1250, 3300, false);
 REGULATOR_INIT(ldo8, 1250, 3300, false);
 REGULATOR_INIT(ldo9, 1250, 3300, false);
 
+static struct tps6586x_rtc_platform_data rtc_data = {
+	.irq = TEGRA_NR_IRQS + TPS6586X_INT_RTC_ALM1,
+};
+
 #define TPS_REG(_id, _data)			\
 	{					\
 		.id = TPS6586X_ID_##_id,	\
 		.name = "tps6586x-regulator",	\
+		.platform_data = _data,		\
+	}
+
+#define TPS_GPIO_FIXED_REG(_id, _data)		\
+	{					\
+		.id = _id,			\
+		.name = "reg-fixed-voltage",	\
 		.platform_data = _data,		\
 	}
 
@@ -130,6 +240,15 @@ static struct tps6586x_subdev_info tps_devs[] = {
 	TPS_REG(LDO_7, &ldo7_data),
 	TPS_REG(LDO_8, &ldo8_data),
 	TPS_REG(LDO_9, &ldo9_data),
+	TPS_GPIO_FIXED_REG(0, &vdd_1v5),
+	TPS_GPIO_FIXED_REG(1, &vdd_1v2),
+	TPS_GPIO_FIXED_REG(2, &vdd_1v05),
+	TPS_GPIO_FIXED_REG(3, &vdd_1v05_mode),
+	{
+		.id	= 0,
+		.name	= "tps6586x-rtc",
+		.platform_data	= &rtc_data,
+	},
 };
 
 static struct tps6586x_platform_data tps_platform = {
