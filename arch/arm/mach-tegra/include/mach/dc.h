@@ -21,6 +21,7 @@
 #define __MACH_TEGRA_DC_H
 
 #include <drm/drm_fixed.h>
+#include <linux/kref.h>
 
 #define TEGRA_MAX_DC		2
 #define DC_N_WINDOWS		3
@@ -224,5 +225,20 @@ unsigned tegra_dc_get_out_width(struct tegra_dc *dc);
 int tegra_dc_hdmi_set_audio_sample_rate(unsigned audio_freq);
 
 int tegra_dc_update_csc(struct tegra_dc *dc, int win_index);
+
+/*
+ * In order to get a dc's current EDID, first call tegra_dc_get_edid() from an
+ * interruptible context.  The returned value (if non-NULL) points to a
+ * snapshot of the current state; after copying data from it, call
+ * tegra_dc_put_edid() on that pointer.  Do not dereference anything through
+ * that pointer after calling tegra_dc_put_edid().
+ */
+struct tegra_dc_edid {
+	size_t		len;
+	struct kref	refcnt;
+	u8		buf[0];
+};
+struct tegra_dc_edid *tegra_dc_get_edid(struct tegra_dc *dc);
+void tegra_dc_put_edid(struct tegra_dc_edid *edid);
 
 #endif
