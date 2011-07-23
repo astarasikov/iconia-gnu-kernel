@@ -347,16 +347,8 @@ static struct i2c_board_info __initdata wm8903_device = {
 };
 
 static void __init picasso_sound_init(void) {
-	int rc;
-	rc = gpio_request(PICASSO_GPIO_WM8903_IRQ, "wm8903 irq");
-	if (rc) {
-		printk(KERN_ERR "%s: unable to request wm8903 gpio\n", __func__);
-	}
-	else {
-		gpio_direction_input(PICASSO_GPIO_WM8903_IRQ);
-		i2c_register_board_info(0, &wm8903_device, 1);
-		platform_device_register(&picasso_audio_device);
-	}
+	i2c_register_board_info(0, &wm8903_device, 1);
+	platform_device_register(&picasso_audio_device);
 }
 
 /******************************************************************************
