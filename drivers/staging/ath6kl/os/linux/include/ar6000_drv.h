@@ -549,15 +549,9 @@ struct ar6_softc {
     s8 arMaxRetries;
     u8 arPhyCapability;
 #ifdef CONFIG_HOST_TCMD_SUPPORT
-    u8 tcmdRxReport;
-    u32 tcmdRxTotalPkt;
-    s32 tcmdRxRssi;
-    u32 tcmdPm;
     u32 arTargetMode;
-    u32 tcmdRxcrcErrPkt;
-    u32 tcmdRxsecErrPkt;
-    u16 tcmdRateCnt[TCMD_MAX_RATES];
-    u16 tcmdRateCntShortGuard[TCMD_MAX_RATES];
+    void *tcmd_rx_report;
+    int tcmd_rx_report_len;
 #endif
     AR6000_WLAN_STATE       arWlanState;
     struct ar_node_mapping  arNodeMap[MAX_NODE_NUM];
@@ -636,14 +630,6 @@ struct ar6_softc {
     u32 smeState;
     u16 arWlanPowerState;
     bool                  arWlanOff;
-#ifdef CONFIG_PM
-    u16 arWowState;
-    bool                  arBTOff;
-    bool                  arBTSharing;
-    u16 arSuspendConfig;
-    u16 arWlanOffConfig;
-    u16 arWow2Config;
-#endif
     u8 scan_triggered;
     WMI_SCAN_PARAMS_CMD     scParams;
 #define AR_MCAST_FILTER_MAC_ADDR_SIZE  4

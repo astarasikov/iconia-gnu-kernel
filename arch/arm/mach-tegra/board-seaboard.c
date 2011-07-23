@@ -196,6 +196,7 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 		.phy_config = &utmi_phy_config[0],
 		.operating_mode = TEGRA_USB_HOST,
 		.power_down_on_bus_suspend = 1,
+		.keep_clock_in_bus_suspend = 1,
 	},
 	[1] = {
 		.phy_config = &ulpi_phy_config,
@@ -206,6 +207,7 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 		.phy_config = &utmi_phy_config[1],
 		.operating_mode = TEGRA_USB_HOST,
 		.power_down_on_bus_suspend = 1,
+		.keep_clock_in_bus_suspend = 1,
 	},
 };
 
@@ -453,17 +455,17 @@ static struct tegra_sdhci_platform_data sdhci_pdata4 = {
 	.is_8bit	= 1,
 };
 
-static struct seaboard_audio_platform_data audio_pdata = {
+static struct seaboard_audio_platform_data seaboard_audio_pdata = {
 	.gpio_spkr_en = TEGRA_GPIO_SPKR_EN,
 	.gpio_hp_det = TEGRA_GPIO_HP_DET,
 	.gpio_hp_mute = -1,
 };
 
-static struct platform_device audio_device = {
+static struct platform_device seaboard_audio_device = {
 	.name = "tegra-snd-seaboard", /* must match DRV_NAME in seaboard.c */
 	.id   = 0,
 	.dev  = {
-		.platform_data = &audio_pdata,
+		.platform_data = &seaboard_audio_pdata,
 	},
 };
 
@@ -504,7 +506,6 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&tegra_sdhci_device3,
 	&tegra_sdhci_device1,
 	&seaboard_gpio_keys_device,
-	&audio_device,
 	&tegra_avp_device,
 	&tegra_i2s_device1,
 	&tegra_das_device,
@@ -514,7 +515,11 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&bt_rfkill_device,
 };
 
-static struct platform_device *arthur_devices[] __initdata = {
+static struct platform_device *seaboard_specific_devices[] __initdata = {
+	&seaboard_audio_device,
+};
+
+static struct platform_device *arthur_specific_devices[] __initdata = {
 	&tegra_pwfm1_device,
 	&arthur_leds_pwm,
 };
@@ -733,7 +738,7 @@ static const u8 mxt_config_data[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-static struct mxt_platform_data mxt_platform_data = {
+static struct mxt_platform_data seaboard_mxt_platform_data = {
 	.x_line			= 27,
 	.y_line			= 42,
 	.x_size			= 768,
@@ -747,11 +752,32 @@ static struct mxt_platform_data mxt_platform_data = {
 	.config_length		= sizeof(mxt_config_data),
 };
 
-static struct i2c_board_info __initdata mxt_device = {
+static struct i2c_board_info __initdata seaboard_mxt_device = {
 	I2C_BOARD_INFO("atmel_mxt_ts", 0x5a),
-	.platform_data = &mxt_platform_data,
+	.platform_data = &seaboard_mxt_platform_data,
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MXT_IRQ),
 };
+
+static struct mxt_platform_data asymptote_mxt_platform_data = {
+	.x_line			= 27,
+	.y_line			= 42,
+	.x_size			= 768,
+	.y_size			= 1024,
+	.blen			= 0x16,
+	.threshold		= 0x28,
+	.voltage		= 3300000,	/* 3.3V */
+	.orient			= MXT_DIAGONAL,
+	.irqflags		= IRQF_TRIGGER_FALLING,
+	.config			= mxt_config_data,
+	.config_length		= sizeof(mxt_config_data),
+};
+
+static struct i2c_board_info __initdata asymptote_mxt_device = {
+	I2C_BOARD_INFO("atmel_mxt_ts", 0x4c),
+	.platform_data = &asymptote_mxt_platform_data,
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MXT_IRQ),
+};
+
 
 static __initdata struct tegra_pingroup_config mxt_pinmux_config[] = {
 	{TEGRA_PINGROUP_LVP0,  TEGRA_MUX_RSVD4,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
@@ -806,12 +832,13 @@ static void __init seaboard_i2c_init(void)
 
 static void __init seaboard_i2c_register_devices(void)
 {
-	tegra_pinmux_config_table(mxt_pinmux_config, ARRAY_SIZE(mxt_pinmux_config));
+	tegra_pinmux_config_table(mxt_pinmux_config,
+				  ARRAY_SIZE(mxt_pinmux_config));
 
-	gpio_request(TEGRA_GPIO_MXT_RST, "TSP_LDO_ON");
-	tegra_gpio_enable(TEGRA_GPIO_MXT_RST);
-	gpio_direction_output(TEGRA_GPIO_MXT_RST, 1);
-	gpio_export(TEGRA_GPIO_MXT_RST, 0);
+	gpio_request(SEABOARD_GPIO_MXT_RST, "TSP_LDO_ON");
+	tegra_gpio_enable(SEABOARD_GPIO_MXT_RST);
+	gpio_direction_output(SEABOARD_GPIO_MXT_RST, 1);
+	gpio_export(SEABOARD_GPIO_MXT_RST, 0);
 
 	gpio_request(TEGRA_GPIO_MXT_IRQ, "TSP_INT");
 	tegra_gpio_enable(TEGRA_GPIO_MXT_IRQ);
@@ -828,7 +855,7 @@ static void __init seaboard_i2c_register_devices(void)
 
 	i2c_register_board_info(0, &wm8903_device, 1);
 	i2c_register_board_info(0, &isl29018_device, 1);
-	i2c_register_board_info(0, &mxt_device, 1);
+	i2c_register_board_info(0, &seaboard_mxt_device, 1);
 	i2c_register_board_info(0, &mpu3050_device, 1);
 
 	i2c_register_board_info(2, &bq20z75_device, 1);
@@ -932,9 +959,51 @@ static void __init arthur_i2c_register_devices(void)
 	i2c_register_board_info(4, &nct1008_device, 1);
 }
 
-static void __init __seaboard_common_init(void)
+static void __init asymptote_i2c_register_devices(void)
 {
+	tegra_pinmux_config_table(mxt_pinmux_config,
+				  ARRAY_SIZE(mxt_pinmux_config));
+
+	gpio_request(ASYMPTOTE_GPIO_MXT_RST, "TSP_LDO_ON");
+	tegra_gpio_enable(ASYMPTOTE_GPIO_MXT_RST);
+	gpio_direction_output(ASYMPTOTE_GPIO_MXT_RST, 1);
+	gpio_export(ASYMPTOTE_GPIO_MXT_RST, 0);
+
+	gpio_request(ASYMPTOTE_GPIO_MXT_SLEEP, "TSP_SLEEP");
+	tegra_gpio_enable(ASYMPTOTE_GPIO_MXT_SLEEP);
+	gpio_direction_output(ASYMPTOTE_GPIO_MXT_SLEEP, 0);
+	gpio_export(ASYMPTOTE_GPIO_MXT_SLEEP, 0);
+
+	gpio_request(TEGRA_GPIO_MXT_IRQ, "TSP_INT");
+	tegra_gpio_enable(TEGRA_GPIO_MXT_IRQ);
+	gpio_direction_input(TEGRA_GPIO_MXT_IRQ);
+
+	gpio_request(TEGRA_GPIO_MPU3050_IRQ, "mpu_int");
+	gpio_direction_input(TEGRA_GPIO_MPU3050_IRQ);
+
+	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
+	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
+
+	i2c_register_board_info(0, &wm8903_device, 1);
+	i2c_register_board_info(0, &mpu3050_device, 1);
+	i2c_register_board_info(2, &bq20z75_device, 1);
+	i2c_register_board_info(3, &asymptote_mxt_device, 1);
+	i2c_register_board_info(4, &nct1008_device, 1);
+}
+
+static void __init __seaboard_common_init(struct platform_device **devices,
+					  int num_devices)
+{
+	struct clk *clk;
+
 	tegra_clk_init_from_table(seaboard_clk_init_table);
+
+	/* Enable 32kHz clock for WLAN */
+	clk = clk_get_sys(NULL, "blink");
+	if (IS_ERR(clk))
+		WARN_ON(1);
+	else
+		clk_enable(clk);
 
 	/* Power up WLAN */
 	gpio_request(TEGRA_GPIO_PK6, "wlan_pwr_rst");
@@ -945,6 +1014,8 @@ static void __init __seaboard_common_init(void)
 	tegra_sdhci_device4.dev.platform_data = &sdhci_pdata4;
 
 	platform_add_devices(seaboard_devices, ARRAY_SIZE(seaboard_devices));
+	if (devices)            /* Add board-specific devices. */
+		platform_add_devices(devices, num_devices);
 
 	seaboard_power_init();
 	seaboard_ehci_init();
@@ -976,25 +1047,43 @@ static void __init tegra_set_clock_readskew(const char *clk_name, int skew)
 static void __init seaboard_common_init(void)
 {
 	seaboard_pinmux_init();
-	__seaboard_common_init();
+	__seaboard_common_init(seaboard_specific_devices,
+			       ARRAY_SIZE(seaboard_specific_devices));
 }
 
 static void __init kaen_common_init(void)
 {
 	kaen_pinmux_init();
-	__seaboard_common_init();
+	__seaboard_common_init(seaboard_specific_devices,
+			       ARRAY_SIZE(seaboard_specific_devices));
 }
 
 static void __init aebl_common_init(void)
 {
 	aebl_pinmux_init();
-	__seaboard_common_init();
+	__seaboard_common_init(seaboard_specific_devices,
+			       ARRAY_SIZE(seaboard_specific_devices));
 }
 
 static void __init arthur_common_init(void)
 {
 	arthur_pinmux_init();
-	__seaboard_common_init();
+	__seaboard_common_init(arthur_specific_devices,
+			       ARRAY_SIZE(arthur_specific_devices));
+}
+
+static void __init ventana_common_init(void)
+{
+	ventana_pinmux_init();
+	__seaboard_common_init(seaboard_specific_devices,
+			       ARRAY_SIZE(seaboard_specific_devices));
+}
+
+static void __init asymptote_common_init(void)
+{
+	asymptote_pinmux_init();
+	__seaboard_common_init(seaboard_specific_devices,
+			       ARRAY_SIZE(seaboard_specific_devices));
 }
 
 static struct tegra_suspend_platform_data seaboard_suspend = {
@@ -1084,7 +1173,7 @@ static void __init tegra_kaen_init(void)
 	gpio_request(TEGRA_GPIO_W_DISABLE, "w_disable");
 	gpio_direction_output(TEGRA_GPIO_W_DISABLE, 1);
 
-	audio_pdata.gpio_hp_mute = TEGRA_GPIO_KAEN_HP_MUTE;
+	seaboard_audio_pdata.gpio_hp_mute = TEGRA_GPIO_KAEN_HP_MUTE;
 	tegra_gpio_enable(TEGRA_GPIO_KAEN_HP_MUTE);
 
 	tegra_gpio_enable(TEGRA_GPIO_BATT_DETECT);
@@ -1189,10 +1278,6 @@ static void __init tegra_arthur_init(void)
 
 	__init_debug_uart_B();
 
-	/* Register arthur specific platform devices. */
-	err = platform_add_devices(arthur_devices, ARRAY_SIZE(arthur_devices));
-	WARN_ON(err);
-
 	/* Set up the GPIO and pingroup controlling the camera's power. */
 	tegra_gpio_enable(TEGRA_GPIO_PV4);
 	err = gpio_request(TEGRA_GPIO_PV4, "cam_3v3_pwr_en");
@@ -1224,6 +1309,83 @@ static void __init tegra_arthur_init(void)
 	}
 
 	arthur_i2c_register_devices();
+	seaboard_i2c_init();
+}
+
+static void __init tegra_asymptote_init(void)
+{
+	struct clk *c, *p;
+
+	tegra_init_suspend(&seaboard_suspend);
+
+	__init_debug_uart_B();
+
+	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
+
+	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
+	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
+
+	asymptote_common_init();
+	asymptote_panel_init();
+	/* asymptote has same memory config as seaboard (for now) */
+	seaboard_emc_init();
+
+	/* Temporary hack to keep eMMC controller at 24MHz */
+	c = tegra_get_clock_by_name("sdmmc4");
+	p = tegra_get_clock_by_name("pll_p");
+	if (c && p) {
+		clk_set_parent(c, p);
+		clk_set_rate(c, 24000000);
+		clk_enable(c);
+	}
+
+	asymptote_i2c_register_devices();
+	seaboard_i2c_init();
+}
+
+#define GPIO_KEY(_id, _gpio, _iswake)		\
+	{					\
+		.code = _id,			\
+		.gpio = TEGRA_GPIO_##_gpio,	\
+		.active_low = 1,		\
+		.desc = #_id,			\
+		.type = EV_KEY,			\
+		.wakeup = _iswake,		\
+		.debounce_interval = 10,	\
+	}
+
+static struct gpio_keys_button ventana_keys[] = {
+	GPIO_KEY(KEY_MENU,		PQ3, 0),
+	GPIO_KEY(KEY_HOME,		PQ1, 0),
+	GPIO_KEY(KEY_BACK,		PQ2, 0),
+	GPIO_KEY(KEY_VOLUMEUP,		PQ5, 0),
+	GPIO_KEY(KEY_VOLUMEDOWN,	PQ4, 0),
+	GPIO_KEY(KEY_POWER,		PV2, 1),
+};
+
+static struct gpio_keys_platform_data ventana_keys_data = {
+	.buttons	= ventana_keys,
+	.nbuttons	= ARRAY_SIZE(ventana_keys),
+};
+
+void __init tegra_ventana_init(void)
+{
+	tegra_init_suspend(&seaboard_suspend);
+
+	__init_debug_uart_D();
+
+	seaboard_gpio_keys_device.dev.platform_data = &ventana_keys_data;
+
+	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
+	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
+	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
+
+	ventana_common_init();
+	seaboard_panel_init();
+	ventana_emc_init();
+
+	seaboard_i2c_register_devices();
 	seaboard_i2c_init();
 }
 
@@ -1272,6 +1434,21 @@ MACHINE_START(AEBL, "aebl")
 	.dt_compat	= aebl_dt_board_compat,
 MACHINE_END
 
+static const char const *asymptote_dt_board_compat[] = {
+	"google,asymptote",
+	NULL
+};
+
+MACHINE_START(ASYMPTOTE, "asymptote")
+	.boot_params    = 0x00000100,
+	.map_io         = tegra_map_common_io,
+	.init_early     = tegra_init_early,
+	.init_irq       = tegra_init_irq,
+	.timer          = &tegra_timer,
+	.init_machine   = tegra_asymptote_init,
+	.dt_compat	= asymptote_dt_board_compat,
+MACHINE_END
+
 static const char *wario_dt_board_compat[] = {
 	"nvidia,wario",
 	NULL
@@ -1300,4 +1477,19 @@ MACHINE_START(ARTHUR, "arthur")
 	.timer          = &tegra_timer,
 	.init_machine   = tegra_arthur_init,
 	.dt_compat	= arthur_dt_board_compat,
+MACHINE_END
+
+static const char *ventana_dt_board_compat[] = {
+	"nvidia,ventana",
+	NULL
+};
+
+MACHINE_START(VENTANA, "ventana")
+	.boot_params    = 0x00000100,
+	.map_io		= tegra_map_common_io,
+	.init_early	= tegra_init_early,
+	.init_irq       = tegra_init_irq,
+	.timer          = &tegra_timer,
+	.init_machine	= tegra_ventana_init,
+	.dt_compat	= ventana_dt_board_compat,
 MACHINE_END

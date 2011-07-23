@@ -634,11 +634,6 @@ ar6000_init_module(void)
     A_MEMZERO(&osdrvCallbacks,sizeof(osdrvCallbacks));
     osdrvCallbacks.deviceInsertedHandler = ar6000_avail_ev;
     osdrvCallbacks.deviceRemovedHandler = ar6000_unavail_ev;
-#ifdef CONFIG_PM
-    osdrvCallbacks.deviceSuspendHandler = ar6000_suspend_ev;
-    osdrvCallbacks.deviceResumeHandler = ar6000_resume_ev;
-    osdrvCallbacks.devicePowerChangeHandler = ar6000_power_change_ev;
-#endif
 
 #ifdef DEBUG
     /* Set the debug flags if specified at load time */
@@ -1705,14 +1700,6 @@ ar6000_avail_ev(void *context, void *hif_handle)
 
     ar->arWlanPowerState     = WLAN_POWER_STATE_ON;
     ar->arWlanOff            = false;   /* We are in ON state */
-#ifdef CONFIG_PM
-    ar->arWowState           = WLAN_WOW_STATE_NONE;
-    ar->arBTOff              = true;   /* BT chip assumed to be OFF */
-    ar->arBTSharing          = WLAN_CONFIG_BT_SHARING; 
-    ar->arWlanOffConfig      = WLAN_CONFIG_WLAN_OFF;
-    ar->arSuspendConfig      = WLAN_CONFIG_PM_SUSPEND;
-    ar->arWow2Config         = WLAN_CONFIG_PM_WOW2;
-#endif /* CONFIG_PM */
 
     A_INIT_TIMER(&ar->arHBChallengeResp.timer, ar6000_detect_error, dev);
     ar->arHBChallengeResp.seqNum = 0;
@@ -2945,12 +2932,6 @@ ar6000_data_tx(struct sk_buff *skb, struct net_device *dev)
     bool            checkAdHocPsMapping = false,bMoreData = false;
     HTC_TX_TAG        htc_tag = AR6K_DATA_PKT_TAG;
     u8 dot11Hdr = processDot11Hdr;
-#ifdef CONFIG_PM
-    if (ar->arWowState != WLAN_WOW_STATE_NONE) {
-        A_NETBUF_FREE(skb);
-        return 0;
-    }
-#endif /* CONFIG_PM */
 
     AR_DEBUG_PRINTF(ATH_DEBUG_WLAN_TX,("ar6000_data_tx start - skb=0x%lx, data=0x%lx, len=0x%x\n",
                      (unsigned long)skb, (unsigned long)A_NETBUF_DATA(skb),
@@ -3669,9 +3650,6 @@ ar6000_rx(void *Context, struct htc_packet *pPacket)
            /*
             * this is a wmi control msg
             */
-#ifdef CONFIG_PM 
-            ar6000_check_wow_status(ar, skb, true);
-#endif /* CONFIG_PM */
             wmi_control_rx(ar->arWmi, skb);
         } else {
                 WMI_DATA_HDR *dhdr = (WMI_DATA_HDR *)A_NETBUF_DATA(skb);
@@ -3694,9 +3672,6 @@ ar6000_rx(void *Context, struct htc_packet *pPacket)
 			return;
 		}
 
-#ifdef CONFIG_PM 
-                ar6000_check_wow_status(ar, NULL, false);
-#endif /* CONFIG_PM */
                 /*
                  * this is a wmi data packet
                  */
@@ -3913,9 +3888,6 @@ ar6000_deliver_frames_to_nw_stack(void *dev, void *osbuf)
     if(skb) {
         skb->dev = dev;
         if ((skb->dev->flags & IFF_UP) == IFF_UP) {
-#ifdef CONFIG_PM 
-            ar6000_check_wow_status((struct ar6_softc *)ar6k_priv(dev), skb, false);
-#endif /* CONFIG_PM */
             skb->protocol = eth_type_trans(skb, skb->dev);
         /*
          * If this routine is called on a ISR (Hard IRQ) or DSR (Soft IRQ)
@@ -5190,12 +5162,7 @@ ar6000_control_tx(void *devt, void *osbuf, HTC_ENDPOINT_ID eid)
     int         status = 0;
     struct ar_cookie *cookie = NULL;
     int i;
-#ifdef CONFIG_PM
-    if (ar->arWowState != WLAN_WOW_STATE_NONE) {
-        A_NETBUF_FREE(osbuf);
-        return A_EACCES;
-    }
-#endif /* CONFIG_PM */
+
         /* take lock to protect ar6000_alloc_cookie() */
     AR6000_SPIN_LOCK(&ar->arLock, 0);
 

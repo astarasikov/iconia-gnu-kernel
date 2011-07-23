@@ -89,7 +89,8 @@ static int seaboard_set_rate(struct snd_pcm_substream *substream,
 
 	BUG_ON(!machine_is_seaboard() && /* WM8903 clock setting. */
 	       !machine_is_aebl()     &&
-	       !machine_is_kaen());
+	       !machine_is_kaen()     &&
+	       !machine_is_asymptote());
 
 	srate = params_rate(params);
 	mclk = seaboard_get_mclk(srate);
@@ -344,7 +345,8 @@ static int seaboard_init_jacks(struct snd_soc_codec *codec)
 
 	BUG_ON(!machine_is_seaboard() && /* Only systems w/ WM8903. */
 	       !machine_is_aebl()     &&
-	       !machine_is_kaen());
+	       !machine_is_kaen()     &&
+	       !machine_is_asymptote());
 	wm8903_mic_detect(codec, &mic, SND_JACK_MICROPHONE, 0);
 	snd_soc_dapm_force_enable_pin(dapm, "Mic Bias");
 	return 0;
@@ -376,7 +378,7 @@ static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
 	if (ret < 0)
 		return ret;
 
-	if (machine_is_seaboard()) {
+	if (machine_is_seaboard() || machine_is_asymptote()) {
 		ret = snd_soc_dapm_add_routes(dapm, seaboard_audio_map,
 					      ARRAY_SIZE(seaboard_audio_map));
 		if (ret)
@@ -450,7 +452,7 @@ static __devinit int tegra_snd_seaboard_probe(struct platform_device *pdev)
 	int ret;
 
 	if (!machine_is_seaboard() && !machine_is_kaen() &&
-	    !machine_is_aebl()) {
+	    !machine_is_aebl() && !machine_is_asymptote()) {
 		dev_err(&pdev->dev, "Not running on a supported board!\n");
 		return -ENODEV;
 	}

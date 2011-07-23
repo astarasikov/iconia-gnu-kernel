@@ -35,6 +35,7 @@ struct tegra_ehci_hcd {
 	int bus_suspended;
 	int port_resuming;
 	int power_down_on_bus_suspend;
+	int keep_clock_in_bus_suspend;
 	enum tegra_usb_phy_port_speed port_speed;
 };
 
@@ -43,7 +44,8 @@ static void tegra_ehci_power_up(struct usb_hcd *hcd)
 	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
 
 	clk_enable(tegra->emc_clk);
-	clk_enable(tegra->clk);
+	if (!tegra->keep_clock_in_bus_suspend)
+		clk_enable(tegra->clk);
 	tegra_usb_phy_power_on(tegra->phy);
 	tegra->host_resumed = 1;
 }
@@ -54,7 +56,8 @@ static void tegra_ehci_power_down(struct usb_hcd *hcd)
 
 	tegra->host_resumed = 0;
 	tegra_usb_phy_power_off(tegra->phy);
-	clk_disable(tegra->clk);
+	if (!tegra->keep_clock_in_bus_suspend)
+		clk_disable(tegra->clk);
 	clk_disable(tegra->emc_clk);
 }
 
@@ -678,6 +681,7 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 
 	tegra->host_resumed = 1;
 	tegra->power_down_on_bus_suspend = pdata->power_down_on_bus_suspend;
+	tegra->keep_clock_in_bus_suspend = pdata->keep_clock_in_bus_suspend;
 	tegra->ehci = hcd_to_ehci(hcd);
 
 	irq = platform_get_irq(pdev, 0);
