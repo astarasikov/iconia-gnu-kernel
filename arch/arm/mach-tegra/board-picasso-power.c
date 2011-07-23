@@ -185,8 +185,12 @@ int __init picasso_regulator_init(void)
 	 * interrupts when low */
 	pmc_ctrl = readl(pmc + PMC_CTRL);
 	writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
-	i2c_register_board_info(4, picasso_regulators, 1);
 
+	regulator_has_full_constraints();
+	/* set initial_mode to MODE_FAST for SM1 */
+	reg_sm1_data.constraints.initial_mode = REGULATOR_MODE_FAST;
+
+	i2c_register_board_info(4, picasso_regulators, 1);
 	return 0;
 }
 
