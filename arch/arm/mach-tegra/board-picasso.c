@@ -139,7 +139,6 @@ static void __init picasso_usb_init(void) {
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];	
 	tegra_otg_device.dev.platform_data = &tegra_ehci1_device;
 
-	tegra_gpio_enable(PICASSO_GPIO_ULPI_RESET);
 	platform_device_register(&tegra_udc_device);
 	platform_device_register(&tegra_ehci2_device);
 	
@@ -225,10 +224,7 @@ static struct i2c_board_info mxt_device = {
 };
 
 static void __init picasso_touch_init(void) {
-	tegra_gpio_enable(PICASSO_GPIO_TS_IRQ);
 	gpio_request(PICASSO_GPIO_TS_IRQ, "atmel_touch_chg");
-
-	tegra_gpio_enable(PICASSO_GPIO_TS_RESET);
 	gpio_request(PICASSO_GPIO_TS_RESET, "atmel_touch_reset");
 
 	gpio_set_value(PICASSO_GPIO_TS_RESET, 0);
@@ -278,8 +274,6 @@ static int picasso_power_init(struct device *dev)
 	if (rc)
 		goto err_ac;
 
-	tegra_gpio_enable(PICASSO_GPIO_CHARGE_DISABLE);
-	tegra_gpio_enable(PICASSO_GPIO_AC_DETECT_IRQ);
 	return 0;
 
 err_ac:
@@ -292,8 +286,6 @@ static void picasso_power_exit(struct device *dev)
 {
 	gpio_free(PICASSO_GPIO_CHARGE_DISABLE);
 	gpio_free(PICASSO_GPIO_AC_DETECT_IRQ);
-	tegra_gpio_disable(PICASSO_GPIO_AC_DETECT_IRQ);
-	tegra_gpio_disable(PICASSO_GPIO_CHARGE_DISABLE);
 }
 
 static struct pda_power_pdata picasso_power_data = {
@@ -359,10 +351,6 @@ static void __init picasso_sound_init(void) {
 		printk(KERN_ERR "%s: unable to request wm8903 gpio\n", __func__);
 	}
 	else {
-		tegra_gpio_enable(PICASSO_GPIO_WM8903_IRQ);
-		tegra_gpio_enable(PICASSO_GPIO_HP_DETECT);
-		tegra_gpio_enable(PICASSO_GPIO_MIC_EN_INT);
-		tegra_gpio_enable(PICASSO_GPIO_MIC_EN_EXT);
 		gpio_direction_input(PICASSO_GPIO_WM8903_IRQ);
 		i2c_register_board_info(0, &wm8903_device, 1);
 		platform_device_register(&picasso_audio_device);
@@ -461,14 +449,9 @@ static struct i2c_board_info __initdata picasso_ec = {
 
 static void __init picasso_sensors_init(void) {
 	gpio_request(PICASSO_GPIO_NCT1008, "nct1008");
-	tegra_gpio_enable(PICASSO_GPIO_NCT1008);
 	gpio_direction_input(PICASSO_GPIO_NCT1008);
 	
-	//The i2c driver will request the gpio.. uhh..
-	tegra_gpio_enable(PICASSO_GPIO_AKM8975_IRQ);
-
 	i2c_register_board_info(2, &picasso_ec, 1);
-	
 	i2c_register_board_info(4, picasso_i2c4_board_info,
 		ARRAY_SIZE(picasso_i2c4_board_info));
 }
@@ -536,14 +519,6 @@ static struct platform_device picasso_keys_device = {
 		.platform_data	= &picasso_keys_platform_data,
 	},
 };
-
-static void picasso_keys_init(void)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(picasso_keys); i++)
-		tegra_gpio_enable(picasso_keys[i].gpio);
-}
 
 /******************************************************************************
  * Bluetooth rfkill
@@ -625,7 +600,6 @@ static void __init tegra_picasso_init(void)
 	picasso_sensors_init();
 	picasso_regulator_init();
 	picasso_usb_init();
-	picasso_keys_init();
 	picasso_panel_init();
 	picasso_touch_init();
 	picasso_sound_init();

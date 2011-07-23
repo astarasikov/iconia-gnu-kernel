@@ -17,8 +17,10 @@
 #ifndef _MACH_TEGRA_BOARD_PICASSO_H
 #define _MACH_TEGRA_BOARD_PICASSO_H
 
+#include "gpio-names.h"
+
 int picasso_regulator_init(void);
-int picasso_pinmux_init(void);
+void picasso_pinmux_init(void);
 int picasso_panel_init(void);
 int picasso_kbc_init(void);
 int picasso_emc_init(void);
