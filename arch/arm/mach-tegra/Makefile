@@ -68,5 +68,5 @@ obj-${CONFIG_MACH_VENTANA}		+= board-ventana-power.o
 obj-${CONFIG_MACH_PICASSO}		+= board-picasso.o
 obj-${CONFIG_MACH_PICASSO}		+= board-seaboard-pinmux.o
 obj-${CONFIG_MACH_PICASSO}		+= board-picasso-power.o
-obj-${CONFIG_MACH_PICASSO}		+= board-picasso-panel.o
+obj-${CONFIG_MACH_PICASSO}		+= board-seaboard-panel.o
 obj-${CONFIG_MACH_PICASSO}		+= board-picasso-memory.o
