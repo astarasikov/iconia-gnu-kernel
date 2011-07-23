@@ -47,6 +47,7 @@
 #include <mach/iomap.h>
 #include <mach/io.h>
 #include <mach/sdhci.h>
+#include <mach/suspend.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -58,6 +59,7 @@
 #include "board-picasso.h"
 #include "clock.h"
 #include "devices.h"
+#include "fuse.h"
 #include "gpio-names.h"
 #include "wakeups-t2.h"
 
@@ -559,6 +561,39 @@ static struct tegra_sdhci_platform_data tegra_sdhci_platform_data4 = {
 	.wp_gpio = -1,
 	.power_gpio = -1,
 };
+
+/******************************************************************************
+ * Suspend
+ *****************************************************************************/
+static struct tegra_suspend_platform_data picasso_suspend_data = {
+	/*
+	 * Check power on time and crystal oscillator start time
+	 * for appropriate settings.
+	 */
+	.cpu_timer = 2000,
+	.cpu_off_timer = 100,
+	.suspend_mode = TEGRA_SUSPEND_LP0,
+	.core_timer = 0x7e7e,
+	.core_off_timer = 0xf,
+	.separate_req = true,
+	.corereq_high = false,
+	.sysclkreq_high = true,
+	.wake_enb =
+		TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_GPIO_PC7 | TEGRA_WAKE_USB1_VBUS |
+		TEGRA_WAKE_GPIO_PV2 | TEGRA_WAKE_GPIO_PS0,
+	.wake_high = TEGRA_WAKE_GPIO_PC7,
+	.wake_low = TEGRA_WAKE_GPIO_PV2,
+	.wake_any =
+		TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_USB1_VBUS | TEGRA_WAKE_GPIO_PS0,
+};
+
+static void __init picasso_suspend_init(void) {
+	/* A03 (but not A03p) chips do not support LP0 */
+	if (tegra_get_revision() == TEGRA_REVISION_A03)
+		picasso_suspend_data.suspend_mode = TEGRA_SUSPEND_LP1;
+	tegra_init_suspend(&picasso_suspend_data);
+}
+
 /******************************************************************************
  * Platform devices
  *****************************************************************************/
@@ -592,6 +627,7 @@ static void __init tegra_picasso_init(void)
 	tegra_sdhci_device1.dev.platform_data = &tegra_sdhci_platform_data1;
 	tegra_sdhci_device3.dev.platform_data = &tegra_sdhci_platform_data3;
 	tegra_sdhci_device4.dev.platform_data = &tegra_sdhci_platform_data4;
+	picasso_suspend_init();
 
 	platform_add_devices(picasso_devices, ARRAY_SIZE(picasso_devices));
 
