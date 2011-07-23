@@ -591,6 +591,8 @@ static void __init picasso_suspend_init(void) {
  *****************************************************************************/
 static struct platform_device *picasso_devices[] __initdata = {
 	&debug_uart,
+	&tegra_uartb_device,
+	&tegra_uartc_device,
 	&tegra_pmu_device,
 	&tegra_gart_device,
 	&tegra_aes_device,
