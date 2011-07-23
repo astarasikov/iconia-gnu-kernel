@@ -28,7 +28,6 @@
 #include <mach/irqs.h>
 
 #include "gpio-names.h"
-#include "fuse.h"
 #include "power.h"
 #include "wakeups-t2.h"
 #include "board.h"

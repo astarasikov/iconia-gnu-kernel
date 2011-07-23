@@ -43,28 +43,28 @@ static struct regulator *picasso_hdmi_pll = NULL;
 static int picasso_backlight_init(struct device *dev) {
 	int ret;
 
-	ret = gpio_request(PICASSO_GPIO_BL_ENABLE, "backlight_enb");
+	ret = gpio_request(TEGRA_GPIO_BACKLIGHT, "backlight_enb");
 	if (ret < 0)
 		return ret;
 
-	ret = gpio_direction_output(PICASSO_GPIO_BL_ENABLE, 1);
+	ret = gpio_direction_output(TEGRA_GPIO_BACKLIGHT, 1);
 	if (ret < 0)
-		gpio_free(PICASSO_GPIO_BL_ENABLE);
+		gpio_free(TEGRA_GPIO_BACKLIGHT);
 	else
-		tegra_gpio_enable(PICASSO_GPIO_BL_ENABLE);
+		tegra_gpio_enable(TEGRA_GPIO_BACKLIGHT);
 
 	return ret;
 };
 
 static void picasso_backlight_exit(struct device *dev) {
-	gpio_set_value(PICASSO_GPIO_BL_ENABLE, 0);
-	gpio_free(PICASSO_GPIO_BL_ENABLE);
-	tegra_gpio_disable(PICASSO_GPIO_BL_ENABLE);
+	gpio_set_value(TEGRA_GPIO_BACKLIGHT, 0);
+	gpio_free(TEGRA_GPIO_BACKLIGHT);
+	tegra_gpio_disable(TEGRA_GPIO_BACKLIGHT);
 }
 
 static int picasso_backlight_notify(struct device *unused, int brightness)
 {
-	gpio_set_value(PICASSO_GPIO_BL_ENABLE, !!brightness);
+	gpio_set_value(TEGRA_GPIO_BACKLIGHT, !!brightness);
 	return brightness;
 }
 
@@ -88,16 +88,16 @@ static struct platform_device picasso_backlight_device = {
 
 static int picasso_panel_enable(void)
 {
-	gpio_set_value(PICASSO_GPIO_PNL_ENABLE, 1);
+	gpio_set_value(TEGRA_GPIO_EN_VDD_PNL, 1);
 	msleep(200);
-	gpio_set_value(PICASSO_GPIO_LVDS_SHUTDOWN, 1);
+	gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
 	return 0;
 }
 
 static int picasso_panel_disable(void)
 {
-	gpio_set_value(PICASSO_GPIO_LVDS_SHUTDOWN, 0);
-	gpio_set_value(PICASSO_GPIO_PNL_ENABLE, 0);
+	gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, 0);
+	gpio_set_value(TEGRA_GPIO_EN_VDD_PNL, 0);
 	return 0;
 }
 
@@ -229,7 +229,7 @@ static struct tegra_dc_out picasso_disp2_out = {
 	.flags		= TEGRA_DC_OUT_HOTPLUG_HIGH,
 
 	.dcc_bus	= 1,
-	.hotplug_gpio	= PICASSO_GPIO_HDMI_HPD,
+	.hotplug_gpio	= TEGRA_GPIO_HDMI_HPD,
 
 	.align		= TEGRA_DC_ALIGN_MSB,
 	.order		= TEGRA_DC_ORDER_RED_BLUE,
@@ -310,17 +310,17 @@ int __init picasso_panel_init(void)
 	int err;
 	struct resource *res;
 
-	gpio_request(PICASSO_GPIO_PNL_ENABLE, "pnl_pwr_enb");
-	gpio_direction_output(PICASSO_GPIO_PNL_ENABLE, 1);
-	tegra_gpio_enable(PICASSO_GPIO_PNL_ENABLE);
+	gpio_request(TEGRA_GPIO_EN_VDD_PNL, "pnl_pwr_enb");
+	gpio_direction_output(TEGRA_GPIO_EN_VDD_PNL, 1);
+	tegra_gpio_enable(TEGRA_GPIO_EN_VDD_PNL);
 
-	gpio_request(PICASSO_GPIO_LVDS_SHUTDOWN, "lvds_shdn");
-	gpio_direction_output(PICASSO_GPIO_LVDS_SHUTDOWN, 1);
-	tegra_gpio_enable(PICASSO_GPIO_LVDS_SHUTDOWN);
+	gpio_request(TEGRA_GPIO_LVDS_SHUTDOWN, "lvds_shdn");
+	gpio_direction_output(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
+	tegra_gpio_enable(TEGRA_GPIO_LVDS_SHUTDOWN);
 
-	tegra_gpio_enable(PICASSO_GPIO_HDMI_HPD);
-	gpio_request(PICASSO_GPIO_HDMI_HPD, "hdmi_hpd");
-	gpio_direction_input(PICASSO_GPIO_HDMI_HPD);
+	tegra_gpio_enable(TEGRA_GPIO_HDMI_HPD);
+	gpio_request(TEGRA_GPIO_HDMI_HPD, "hdmi_hpd");
+	gpio_direction_input(TEGRA_GPIO_HDMI_HPD);
 
 	picasso_carveouts[1].base = tegra_carveout_start;
 	picasso_carveouts[1].size = tegra_carveout_size;
