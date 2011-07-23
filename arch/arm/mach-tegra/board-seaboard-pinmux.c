@@ -252,8 +252,8 @@ void __init seaboard_pinmux_init(void)
 	tegra_gpio_config(gpio_table, ARRAY_SIZE(gpio_table));
 }
 
+#ifdef CONFIG_MACH_PICASSO
 #include "board-picasso.h"
-//FIXME: remove gpios which are common with other boards
 static struct tegra_gpio_table picasso_gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_BACKLIGHT,	.enable = true },
 	{ .gpio = PICASSO_GPIO_ULPI_RESET,	.enable = true },
@@ -287,3 +287,4 @@ void __init picasso_pinmux_init(void)
 					ARRAY_SIZE(seaboard_drive_pinmux));
 	tegra_gpio_config(picasso_gpio_table, ARRAY_SIZE(picasso_gpio_table));
 }
+#endif

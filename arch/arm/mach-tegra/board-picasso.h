@@ -17,7 +17,7 @@
 #ifndef _MACH_TEGRA_BOARD_PICASSO_H
 #define _MACH_TEGRA_BOARD_PICASSO_H
 
-#include "gpio-names.h"
+//include common ventana gpios
 #include "board-seaboard.h"
 
 int picasso_regulator_init(void);
