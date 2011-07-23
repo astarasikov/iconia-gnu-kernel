@@ -50,7 +50,6 @@ static s32 picasso_battery_read_register(enum picasso_ec_reg reg) {
 	s32 ret;
 	ret = priv->read(priv->client, reg);
 	if (!ret) {
-		dev_err(&priv->client->dev, "retrying reading EC register %02x\n", reg);
 		msleep(500);
 		ret = priv->read(priv->client, reg);
 	}
