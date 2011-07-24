@@ -154,6 +154,11 @@ static void __init picasso_usb_init(void) {
  *****************************************************************************/
 static __initdata struct tegra_clk_init_table picasso_clk_init_table[] = {
 	/* name		parent		rate		enabled */
+	{ "clk_m",	NULL,	12000000,	true},
+	{ "pll_c",	"clk_m",	600000000,	true},
+	{ "pll_p",	"clk_m",	216000000,	true},
+	{ "uartb",	"pll_p",	216000000,	true},
+	{ "uartc",	"pll_c",	600000000,	true},
 	{ "uartd",	"pll_p",	216000000,	true},
 	{ "blink",	"clk_32k",	32768,		true},
 	{ "pll_a",	NULL,		11289600,	true},
