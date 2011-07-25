@@ -23,6 +23,7 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/workqueue.h>
+#include <linux/gpio.h>
 
 #include <linux/mfd/acer_picasso_ec.h>
 
@@ -43,13 +44,9 @@ static int picasso_sys_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 	pm_power_off = picasso_shutdown;
-	return 0;
-}
 
-static int picasso_sys_remove(struct platform_device *pdev)
-{
-	pm_power_off = NULL;
-	priv = NULL;
+	gpio_set_value(203, 1);
+	priv->write(priv->client, 0x4a, 0);
 	return 0;
 }
 
@@ -70,7 +67,6 @@ static int picasso_sys_resume(struct platform_device *pdev)
 
 static struct platform_driver picasso_sys_driver = {
 	.probe		= picasso_sys_probe,
-	.remove		= picasso_sys_remove,
 	.suspend	= picasso_sys_suspend,
 	.resume		= picasso_sys_resume,
 	.driver		= {
