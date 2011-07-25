@@ -375,38 +375,6 @@ static void hdmi_dumpregs(struct tegra_dc_hdmi_data *hdmi)
 }
 #endif
 
-static bool tegra_dc_hdmi_mode_filter(const struct tegra_dc *dc,
-				      struct fb_videomode *mode)
-{
-	if (mode->vmode & FB_VMODE_INTERLACED)
-		return false;
-
-	/* ignore modes with a 0 pixel clock */
-	if (!mode->pixclock)
-		return false;
-
-	/* TODO: it would be nice to detect how the clock rate will be rounded
-	 * and then update mode->pixclock with that rate. */
-
-	/* check some of DC's constraints */
-	if (mode->hsync_len > 1 && mode->vsync_len > 1 &&
-		mode->lower_margin + mode->vsync_len + mode->upper_margin > 1 &&
-		mode->xres >= 16 && mode->yres >= 16) {
-
-		dev_vdbg(&dc->ndev->dev, "MODE:%ux%u pclk(%lu)\n",
-			mode->xres, mode->yres,
-			PICOS2KHZ(mode->pixclock) * 1000);
-		return true;
-
-	}
-
-	dev_vdbg(&dc->ndev->dev, "rejecting MODE:%ux%u pclk(%lu)\n",
-		mode->xres, mode->yres, PICOS2KHZ(mode->pixclock) * 1000);
-
-	return false;
-}
-
-
 static bool tegra_dc_hdmi_hpd(struct tegra_dc *dc)
 {
 	int sense;
@@ -444,7 +412,7 @@ static bool tegra_dc_hdmi_detect(struct tegra_dc *dc)
 
 	hdmi->dvi = !(specs.misc & FB_MISC_HDMI);
 
-	tegra_fb_update_monspecs(dc->fb, &specs, tegra_dc_hdmi_mode_filter);
+	tegra_fb_update_monspecs(dc->fb, &specs, tegra_dc_mode_filter);
 	dev_info(&dc->ndev->dev, "display detected\n");
 
 	dc->connected = true;

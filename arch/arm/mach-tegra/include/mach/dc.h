@@ -21,6 +21,7 @@
 #define __MACH_TEGRA_DC_H
 
 #include <drm/drm_fixed.h>
+#include <linux/fb.h>
 #include <linux/kref.h>
 
 #define TEGRA_MAX_DC		2
@@ -214,6 +215,7 @@ void tegra_dc_incr_syncpt_min(struct tegra_dc *dc, int i, u32 val);
 int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n);
 int tegra_dc_sync_windows(struct tegra_dc_win *windows[], int n);
 
+bool tegra_dc_mode_filter(const struct tegra_dc *dc, struct fb_videomode *mode);
 int tegra_dc_set_mode(struct tegra_dc *dc, const struct tegra_dc_mode *mode);
 
 unsigned tegra_dc_get_out_height(struct tegra_dc *dc);

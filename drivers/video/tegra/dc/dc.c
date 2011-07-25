@@ -897,6 +897,37 @@ static int tegra_dc_program_mode(struct tegra_dc *dc, struct tegra_dc_mode *mode
 	return 0;
 }
 
+bool tegra_dc_mode_filter(const struct tegra_dc *dc,
+			  struct fb_videomode *mode)
+{
+	if (mode->vmode & FB_VMODE_INTERLACED)
+		return false;
+
+	/* ignore modes with a 0 pixel clock */
+	if (!mode->pixclock)
+		return false;
+
+	/* TODO: it would be nice to detect how the clock rate will be rounded
+	 * and then update mode->pixclock with that rate. */
+
+	/* check some of DC's constraints */
+	if (mode->hsync_len > 1 && mode->vsync_len > 1 &&
+		mode->lower_margin + mode->vsync_len + mode->upper_margin > 1 &&
+		mode->xres >= 16 && mode->yres >= 16) {
+
+		dev_vdbg(&dc->ndev->dev, "MODE:%ux%u pclk(%lu)\n",
+			mode->xres, mode->yres,
+			PICOS2KHZ(mode->pixclock) * 1000);
+		return true;
+
+	}
+
+	dev_vdbg(&dc->ndev->dev, "rejecting MODE:%ux%u pclk(%lu)\n",
+		mode->xres, mode->yres, PICOS2KHZ(mode->pixclock) * 1000);
+
+	return false;
+}
+EXPORT_SYMBOL(tegra_dc_mode_filter);
 
 int tegra_dc_set_mode(struct tegra_dc *dc, const struct tegra_dc_mode *mode)
 {
