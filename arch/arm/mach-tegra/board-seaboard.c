@@ -448,9 +448,6 @@ static struct platform_device *seaboard_devices[] __initdata = {
 	&tegra_spdif_device,
 	&spdif_dit_device,
 	&bt_rfkill_device,
-};
-
-static struct platform_device *seaboard_specific_devices[] __initdata = {
 	&seaboard_audio_device,
 };
 
@@ -893,7 +890,7 @@ static void __init arthur_i2c_register_devices(void)
 	i2c_register_board_info(2, &bq20z75_device, 1);
 
 	i2c_register_board_info(3, &isl29018_device, 1);
-
+	i2c_register_board_info(0, &max98095_device, 1);
 	i2c_register_board_info(4, &nct1008_device, 1);
 }
 
@@ -943,7 +940,7 @@ static void __init __seaboard_common_init(struct platform_device **devices,
 	tegra_sdhci_device4.dev.platform_data = &sdhci_pdata4;
 
 	platform_add_devices(seaboard_devices, ARRAY_SIZE(seaboard_devices));
-	if (devices)            /* Add board-specific devices. */
+	if (devices)		/* Add board-specific devices. */
 		platform_add_devices(devices, num_devices);
 
 	seaboard_power_init();
@@ -976,22 +973,19 @@ static void __init tegra_set_clock_readskew(const char *clk_name, int skew)
 static void __init seaboard_common_init(void)
 {
 	seaboard_pinmux_init();
-	__seaboard_common_init(seaboard_specific_devices,
-			       ARRAY_SIZE(seaboard_specific_devices));
+	__seaboard_common_init(NULL, 0);
 }
 
 static void __init kaen_common_init(void)
 {
 	kaen_pinmux_init();
-	__seaboard_common_init(seaboard_specific_devices,
-			       ARRAY_SIZE(seaboard_specific_devices));
+	__seaboard_common_init(NULL, 0);
 }
 
 static void __init aebl_common_init(void)
 {
 	aebl_pinmux_init();
-	__seaboard_common_init(seaboard_specific_devices,
-			       ARRAY_SIZE(seaboard_specific_devices));
+	__seaboard_common_init(NULL, 0);
 }
 
 static void __init arthur_common_init(void)
@@ -1004,15 +998,13 @@ static void __init arthur_common_init(void)
 static void __init ventana_common_init(void)
 {
 	ventana_pinmux_init();
-	__seaboard_common_init(seaboard_specific_devices,
-			       ARRAY_SIZE(seaboard_specific_devices));
+	__seaboard_common_init(NULL, 0);
 }
 
 static void __init asymptote_common_init(void)
 {
 	asymptote_pinmux_init();
-	__seaboard_common_init(seaboard_specific_devices,
-			       ARRAY_SIZE(seaboard_specific_devices));
+	__seaboard_common_init(NULL, 0);
 }
 
 static struct tegra_suspend_platform_data seaboard_suspend = {
@@ -1217,6 +1209,7 @@ static void __init tegra_arthur_init(void)
 
 	__init_debug_uart_B();
 
+	seaboard_audio_pdata.gpio_spkr_en = -1; /* No spkr_en on max98095. */
 	/* Set up the GPIO and pingroup controlling the camera's power. */
 	tegra_gpio_enable(TEGRA_GPIO_PV4);
 	err = gpio_request(TEGRA_GPIO_PV4, "cam_3v3_pwr_en");
