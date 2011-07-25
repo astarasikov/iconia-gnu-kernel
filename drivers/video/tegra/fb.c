@@ -58,9 +58,18 @@ static u32 pseudo_palette[16];
 static int tegra_fb_check_var(struct fb_var_screeninfo *var,
 			      struct fb_info *info)
 {
+	struct tegra_fb_info *tegra_fb = info->par;
+	struct fb_videomode mode;
+
 	if ((var->yres * var->xres * var->bits_per_pixel / 8) >
 	    info->screen_size)
 		return -EINVAL;
+
+	fb_var_to_videomode(&mode, var);
+	if (!tegra_dc_mode_filter(tegra_fb->win->dc, &mode))
+		return -EINVAL;
+	/* tegra_dc_mode_filter may have modified the mode */
+	fb_videomode_to_var(var, &mode);
 
 	return 0;
 }
