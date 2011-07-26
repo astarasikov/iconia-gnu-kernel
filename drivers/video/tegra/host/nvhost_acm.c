@@ -32,7 +32,7 @@
 
 #define ACM_TIMEOUT (25*HZ/1000)
 
-#define DISABLE_3D_POWERGATING
+
 #define DISABLE_MPE_POWERGATING
 
 void nvhost_module_busy(struct nvhost_module *mod)
@@ -153,7 +153,7 @@ int nvhost_module_init(struct nvhost_module *mod, const char *name,
 	mod->powered = false;
 	mod->powergate_id = get_module_powergate_id(name);
 
-#ifdef DISABLE_3D_POWERGATING
+#ifdef CONFIG_DISABLE_3D_POWERGATING
 	/*
 	 * It is possible for the 3d block to generate an invalid memory
 	 * request during the power up sequence in some cases.  Workaround
