@@ -71,6 +71,7 @@ struct tegra_dc_out {
 	unsigned		align;
 	unsigned		depth;
 	unsigned		dither;
+	unsigned long		max_pclk_khz;
 
 	unsigned		height; /* mm */
 	unsigned		width; /* mm */

@@ -780,6 +780,12 @@ int tegra_dc_sync_windows(struct tegra_dc_win *windows[], int n)
 }
 EXPORT_SYMBOL(tegra_dc_sync_windows);
 
+static bool tegra_dc_valid_pixclock(const struct tegra_dc *dc,
+				    const struct fb_videomode *mode)
+{
+	return PICOS2KHZ(mode->pixclock) <= dc->out->max_pclk_khz;
+}
+
 static unsigned long tegra_dc_pclk_round_rate(struct tegra_dc *dc, int pclk)
 {
 	unsigned long rate;
@@ -910,6 +916,13 @@ bool tegra_dc_mode_filter(const struct tegra_dc *dc,
 	/* TODO: it would be nice to detect how the clock rate will be rounded
 	 * and then update mode->pixclock with that rate. */
 
+	if (!tegra_dc_valid_pixclock(dc, mode)) {
+		dev_vdbg(&dc->ndev->dev, "MODE:%ux%u pclk(%lu) out of range\n",
+			 mode->xres, mode->yres,
+			 PICOS2KHZ(mode->pixclock) * 1000);
+		return false;
+	}
+
 	/* check some of DC's constraints */
 	if (mode->hsync_len > 1 && mode->vsync_len > 1 &&
 		mode->lower_margin + mode->vsync_len + mode->upper_margin > 1 &&
@@ -961,6 +974,8 @@ static void tegra_dc_set_out(struct tegra_dc *dc, struct tegra_dc_out *out)
 	if (dc->out_ops && dc->out_ops->init)
 		dc->out_ops->init(dc);
 
+	if (!dc->out->max_pclk_khz)
+		dc->out->max_pclk_khz = ULONG_MAX;
 }
 
 unsigned tegra_dc_get_out_height(struct tegra_dc *dc)
