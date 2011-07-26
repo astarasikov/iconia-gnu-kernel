@@ -626,6 +626,11 @@ static int tegra_dc_hdmi_init(struct tegra_dc *dc)
 		tegra_nvhdcp_set_policy(hdmi->nvhdcp,
 			TEGRA_NVHDCP_POLICY_ALWAYS_ON);
 	}
+
+	/* HDMI maximum is 165MHz per specification */
+	if (!dc->out->max_pclk_khz || dc->out->max_pclk_khz > 165000)
+		dc->out->max_pclk_khz = 165000;
+
 	return 0;
 
 err_edid_destroy:
