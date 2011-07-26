@@ -127,7 +127,9 @@ void tegra_init_cache(void)
 static void __init tegra_init_power(void)
 {
 	tegra_powergate_power_off(TEGRA_POWERGATE_MPE);
+#ifndef CONFIG_DISABLE_3D_POWERGATING
 	tegra_powergate_power_off(TEGRA_POWERGATE_3D);
+#endif
 }
 
 static bool console_flushed;
