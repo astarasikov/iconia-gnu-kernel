@@ -245,17 +245,17 @@ static struct tegra_dc_mode arthur_panel_modes[] = {
 
 static struct tegra_dc_mode asymptote_panel_modes[] = {
 	{
-		.pclk = 62200000,
-		.h_ref_to_sync = 16,
+		.pclk = 100030000,
+		.h_ref_to_sync = 11,
 		.v_ref_to_sync = 1,
-		.h_sync_width = 58,
-		.v_sync_width = 40,
-		.h_back_porch = 58,
-		.v_back_porch = 20,
+		.h_sync_width = 320,
+		.v_sync_width = 10,
+		.h_back_porch = 480,
+		.v_back_porch = 6,
 		.h_active = 1024,
 		.v_active = 768,
-		.h_front_porch = 58,
-		.v_front_porch = 1,
+		.h_front_porch = 260,
+		.v_front_porch = 16,
 	},
 };
 
