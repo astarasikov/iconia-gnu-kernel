@@ -620,6 +620,20 @@ static void __init tegra_picasso_reserve(void)
 	tegra_reserve(SZ_128M - (12 << 20), SZ_8M, SZ_16M);
 }
 
+static void __init tegra_limit_wifi_clock(void) {
+	/* Temporary hack to keep SDIO for wifi capped at 43.2MHz due to
+	 * stability issues with brcmfmac at 48MHz.
+	 */
+	struct clk *c, *p;
+	c = tegra_get_clock_by_name("sdmmc1");
+	p = tegra_get_clock_by_name("pll_p");
+	if (c && p) {
+		clk_set_parent(c, p);
+		clk_set_rate(c, 43200000);
+		clk_enable(c);
+	}
+}
+
 static void __init tegra_picasso_init(void)
 {
 	picasso_pinmux_init();
@@ -632,6 +646,7 @@ static void __init tegra_picasso_init(void)
 
 	platform_add_devices(picasso_devices, ARRAY_SIZE(picasso_devices));
 
+	tegra_limit_wifi_clock();
 	picasso_emc_init();
 	picasso_i2c_init();
 	picasso_sensors_init();
