@@ -220,6 +220,7 @@ int tegra_dc_set_mode(struct tegra_dc *dc, const struct tegra_dc_mode *mode);
 
 unsigned tegra_dc_get_out_height(struct tegra_dc *dc);
 unsigned tegra_dc_get_out_width(struct tegra_dc *dc);
+const struct tegra_dc_mode *tegra_dc_get_current_mode(const struct tegra_dc *);
 /*
  * This sets the sample rate for all display controllers at once,
  * since there is a single audio source routed to themn all.

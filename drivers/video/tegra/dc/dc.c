@@ -981,6 +981,12 @@ unsigned tegra_dc_get_out_width(struct tegra_dc *dc)
 }
 EXPORT_SYMBOL(tegra_dc_get_out_width);
 
+const struct tegra_dc_mode *tegra_dc_get_current_mode(const struct tegra_dc *dc)
+{
+	return &dc->mode;
+}
+EXPORT_SYMBOL(tegra_dc_get_current_mode);
+
 static irqreturn_t tegra_dc_irq(int irq, void *ptr)
 {
 	struct tegra_dc *dc = ptr;
