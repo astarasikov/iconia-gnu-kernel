@@ -738,8 +738,10 @@ static int tegra_ehci_resume(struct platform_device *pdev)
 	struct tegra_ehci_hcd *tegra = platform_get_drvdata(pdev);
 	struct usb_hcd *hcd = ehci_to_hcd(tegra->ehci);
 
-	if (tegra->bus_suspended)
+	if (tegra->bus_suspended) {
+		tegra_usb_phy_vbus_on(tegra->phy);
 		return 0;
+	}
 
 	return tegra_usb_resume(hcd);
 }
@@ -749,8 +751,15 @@ static int tegra_ehci_suspend(struct platform_device *pdev, pm_message_t state)
 	struct tegra_ehci_hcd *tegra = platform_get_drvdata(pdev);
 	struct usb_hcd *hcd = ehci_to_hcd(tegra->ehci);
 
-	if (tegra->bus_suspended)
+	if (tegra->bus_suspended) {
+		/*
+		 * We turn off vbus for those platforms which are really care
+		 * about USB power consumption, i.e. for those have the flag
+		 * power_down_on_bus_suspend set.
+		 */
+		tegra_usb_phy_vbus_off(tegra->phy);
 		return 0;
+	}
 
 	if (time_before(jiffies, tegra->ehci->next_statechange))
 		msleep(10);

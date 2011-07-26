@@ -211,6 +211,11 @@ static inline bool phy_is_ulpi(struct tegra_usb_phy *phy)
 	return (phy->instance == 1);
 }
 
+static inline bool phy_is_utmi(struct tegra_usb_phy *phy)
+{
+	return (phy->instance != 1);
+}
+
 static int utmip_pad_open(struct tegra_usb_phy *phy)
 {
 	phy->pad_clk = clk_get_sys("utmip-pad", NULL);
@@ -284,6 +289,44 @@ static int utmip_pad_power_off(struct tegra_usb_phy *phy)
 	clk_disable(phy->pad_clk);
 
 	return 0;
+}
+
+void utmi_phy_vbus_on(struct tegra_usb_phy *phy)
+{
+	struct tegra_utmip_config *config = phy->config;
+
+	if (config->vbus_gpio) {
+		/*
+		 * For those platforms vbus_en and oc are shared, we
+		 * need to change that gpio back to input signal
+		 * for handling the over current event.
+		 */
+		if (config->shared_pin_vbus_en_oc)
+			gpio_direction_input(config->vbus_gpio);
+		else
+			gpio_set_value(config->vbus_gpio, 1);
+	}
+}
+
+void utmi_phy_vbus_off(struct tegra_usb_phy *phy)
+{
+	struct tegra_utmip_config *config = phy->config;
+
+	if (config->vbus_gpio) {
+		/*
+		 * For those platforms vbus_en and oc are shared, the default
+		 * state of the signal should be logic '1' meaning it works
+		 * as host port and the over current event should be active
+		 * low. In order to turn off vbus in suspend and also support
+		 * over current event in USB working state, that gpio direction
+		 * should be programmed as input signal except when turning off
+		 * vbus in suspend.
+		 */
+		if (config->shared_pin_vbus_en_oc)
+			gpio_direction_output(config->vbus_gpio, 0);
+		else
+			gpio_set_value(config->vbus_gpio, 0);
+	}
 }
 
 static int utmi_wait_register(void __iomem *reg, u32 mask, u32 result)
@@ -760,6 +803,50 @@ void tegra_usb_phy_power_off(struct tegra_usb_phy *phy)
 		ulpi_phy_power_off(phy);
 	else
 		utmi_phy_power_off(phy);
+}
+
+void tegra_usb_phy_utmi_vbus_init(struct tegra_utmip_config *utmi_config,
+					const char *label)
+{
+	int gpio_status;
+
+	gpio_status = gpio_request(utmi_config->vbus_gpio, label);
+	if (gpio_status < 0) {
+		pr_err("%s request GPIO FAILED\n", label);
+		goto vbus_gpio_init_exit;
+	}
+
+	if (utmi_config->shared_pin_vbus_en_oc)
+		gpio_status = gpio_direction_input(utmi_config->vbus_gpio);
+	else
+		gpio_status = gpio_direction_output(utmi_config->vbus_gpio, 1);
+
+	if (gpio_status < 0) {
+		pr_err("%s request GPIO DIRECTION FAILED\n", label);
+		gpio_free(utmi_config->vbus_gpio);
+		goto vbus_gpio_init_exit;
+	}
+
+	if (!utmi_config->shared_pin_vbus_en_oc)
+		gpio_set_value(utmi_config->vbus_gpio, 1);
+
+vbus_gpio_init_exit:
+	if (gpio_status < 0) {
+		WARN_ON(1);
+		utmi_config->vbus_gpio = 0;
+	}
+}
+
+void tegra_usb_phy_vbus_on(struct tegra_usb_phy *phy)
+{
+	if (phy_is_utmi(phy))
+		utmi_phy_vbus_on(phy);
+}
+
+void tegra_usb_phy_vbus_off(struct tegra_usb_phy *phy)
+{
+	if (phy_is_utmi(phy))
+		utmi_phy_vbus_off(phy);
 }
 
 void tegra_usb_phy_preresume(struct tegra_usb_phy *phy)
