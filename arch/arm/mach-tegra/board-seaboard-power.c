@@ -296,36 +296,15 @@ int __init seaboard_ac_power_init(void)
 	return err;
 }
 
-static void reg_off(const char *reg)
-{
-	int rc;
-	struct regulator *regulator;
-
-	regulator = regulator_get(NULL, reg);
-
-	if (IS_ERR(regulator)) {
-		pr_err("%s: regulator_get returned %ld\n", __func__,
-		       PTR_ERR(regulator));
-		return;
-	}
-
-	rc = regulator_force_disable(regulator);
-	if (rc)
-		pr_err("%s: regulator_force_disable returned %d\n", __func__,
-			rc);
-	regulator_put(regulator);
-}
-
 static void seaboard_power_off(void)
 {
-	reg_off("vdd_sm2");
-	reg_off("vdd_core");
-	reg_off("vdd_cpu");
-	local_irq_disable();
-	while (1) {
-		dsb();
-		__asm__ ("wfi");
-	}
+	int ret;
+
+	ret = tps6586x_power_off();
+	if (ret)
+		pr_err("Failed to power off\n");
+
+	while(1);
 }
 
 int __init seaboard_power_init(void)
