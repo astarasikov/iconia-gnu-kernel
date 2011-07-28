@@ -2123,6 +2123,7 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 		touch->polling_mode_enabled = false;
 		touch->bl_irq_enable = true;
 		touch->irq_enabled = true;
+		enable_irq_wake(touch->irq);
 		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 	}
 
@@ -2174,8 +2175,10 @@ static int __devexit cyapa_i2c_remove(struct i2c_client *client)
 
 	cancel_delayed_work_sync(&touch->dwork);
 
-	if (!touch->polling_mode_enabled)
-		free_irq(client->irq, touch);
+	if (!touch->polling_mode_enabled) {
+		disable_irq_wake(touch->irq);
+		free_irq(touch->irq, touch);
+	}
 
 	if (touch->input) {
 		if (touch->input->mt)
