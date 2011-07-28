@@ -352,6 +352,9 @@ static int tegra_pm_notify(struct notifier_block *nb, unsigned long event,
 		tegra_update_cpu_speed(freq_table[0].frequency);
 	} else if (event == PM_POST_SUSPEND) {
 		is_suspended = false;
+		tegra_update_cpu_speed(tegra_cpu_highest_speed());
+		pr_info("Tegra cpufreq resume: restoring frequency to %d kHz\n",
+			tegra_cpu_highest_speed());
 	}
 	mutex_unlock(&tegra_cpu_lock);
 
