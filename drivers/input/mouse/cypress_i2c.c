@@ -296,7 +296,8 @@ struct cyapa_i2c {
 	int open_count;
 
 	int irq;
-	bool down_to_polling_mode;
+	/* driver using polling mode if failed to request irq. */
+	bool polling_mode_enabled;
 	struct cyapa_platform_data *pdata;
 	unsigned short data_base_offset;
 	unsigned short control_base_offset;
@@ -334,6 +335,8 @@ static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch);
 static void cyapa_get_reg_offset(struct cyapa_i2c *touch);
 static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch);
 static int cyapa_create_input_dev(struct cyapa_i2c *touch);
+static void cyapa_i2c_reschedule_work(struct cyapa_i2c *touch,
+		unsigned long delay);
 
 
 #if DBG_CYAPA_READ_BLOCK_DATA
@@ -407,7 +410,7 @@ static void cyapa_enable_irq(struct cyapa_i2c *touch)
 	unsigned long flags;
 
 	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (!touch->down_to_polling_mode &&
+	if (!touch->polling_mode_enabled &&
 		touch->bl_irq_enable &&
 		!touch->irq_enabled) {
 		touch->irq_enabled = true;
@@ -421,7 +424,7 @@ static void cyapa_disable_irq(struct cyapa_i2c *touch)
 	unsigned long flags;
 
 	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (!touch->down_to_polling_mode &&
+	if (!touch->polling_mode_enabled &&
 		touch->bl_irq_enable &&
 		touch->irq_enabled) {
 		touch->irq_enabled = false;
@@ -435,7 +438,7 @@ static void cyapa_bl_enable_irq(struct cyapa_i2c *touch)
 	unsigned long flags;
 
 	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (touch->down_to_polling_mode)
+	if (touch->polling_mode_enabled)
 		goto out;
 
 	touch->bl_irq_enable = true;
@@ -453,7 +456,7 @@ static void cyapa_bl_disable_irq(struct cyapa_i2c *touch)
 	unsigned long flags;
 
 	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (touch->down_to_polling_mode)
+	if (touch->polling_mode_enabled)
 		goto out;
 
 	touch->bl_irq_enable = false;
@@ -1747,11 +1750,13 @@ static unsigned long cyapa_i2c_adjust_delay(struct cyapa_i2c *touch,
 {
 	unsigned long delay, nodata_count_thres;
 
-	if (!touch->down_to_polling_mode) {
+	if (!touch->polling_mode_enabled) {
 		delay = msecs_to_jiffies(CYAPA_THREAD_IRQ_SLEEP_MSECS);
 		return round_jiffies_relative(delay);
 	}
 
+	if (touch->scan_ms <= 0)
+		touch->scan_ms = CYAPA_POLLING_REPORTRATE_DEFAULT;
 	delay = touch->pdata->polling_interval_time_active;
 	if (have_data) {
 		touch->no_data_count = 0;
@@ -1797,6 +1802,8 @@ static void cyapa_i2c_work_handler(struct work_struct *work)
 		 * we try to reset and reconfigure the trackpad.
 		 */
 		delay = cyapa_i2c_adjust_delay(touch, have_data);
+		if (touch->polling_mode_enabled)
+			cyapa_i2c_reschedule_work(touch, delay);
 	}
 
 	return;
@@ -1814,14 +1821,13 @@ static void cyapa_i2c_reschedule_work(struct cyapa_i2c *touch,
 	 * change the scheduled time that's why we have to cancel it first.
 	 */
 	__cancel_delayed_work(&touch->dwork);
-	if (touch->bl_irq_enable) {
-		/*
-		 * check bl_irq_enable value to avoid mistriggered interrupt
-		 * when switching from operational mode
-		 * to bootloader mode.
-		 */
+	/*
+	 * check bl_irq_enable value to avoid mistriggered interrupt
+	 * when switching from operational mode
+	 * to bootloader mode.
+	 */
+	if (touch->polling_mode_enabled || touch->bl_irq_enable)
 		schedule_delayed_work(&touch->dwork, delay);
-	}
 
 	spin_unlock_irqrestore(&touch->lock, flags);
 }
@@ -1849,7 +1855,7 @@ static int cyapa_i2c_open(struct input_dev *input)
 	}
 	touch->open_count++;
 
-	if (touch->down_to_polling_mode) {
+	if (touch->polling_mode_enabled) {
 		/*
 		 * In polling mode, by default, initialize the polling interval
 		 * to CYAPA_NO_DATA_SLEEP_MSECS,
@@ -1891,7 +1897,7 @@ static struct cyapa_i2c *cyapa_i2c_touch_create(struct i2c_client *client)
 		(1000 / touch->pdata->report_rate) : 0;
 	touch->open_count = 0;
 	touch->client = client;
-	touch->down_to_polling_mode = false;
+	touch->polling_mode_enabled = false;
 	global_touch = touch;
 	touch->fw_work_mode = CYAPA_BOOTLOAD_MODE;
 	touch->misc_open_count = 0;
@@ -2108,13 +2114,13 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 			"falling back to polling mode.\n", ret);
 
 		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-		touch->down_to_polling_mode = true;
+		touch->polling_mode_enabled = true;
 		touch->bl_irq_enable = false;
 		touch->irq_enabled = false;
 		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 	} else {
 		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-		touch->down_to_polling_mode = false;
+		touch->polling_mode_enabled = false;
 		touch->bl_irq_enable = true;
 		touch->irq_enabled = true;
 		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
@@ -2168,7 +2174,7 @@ static int __devexit cyapa_i2c_remove(struct i2c_client *client)
 
 	cancel_delayed_work_sync(&touch->dwork);
 
-	if (!touch->down_to_polling_mode)
+	if (!touch->polling_mode_enabled)
 		free_irq(client->irq, touch);
 
 	if (touch->input) {
