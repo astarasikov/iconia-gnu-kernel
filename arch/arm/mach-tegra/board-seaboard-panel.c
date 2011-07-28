@@ -35,6 +35,39 @@
 #include "devices.h"
 #include "gpio-names.h"
 #include "board-seaboard.h"
+#include "power.h"
+
+static int panel_is_enabled;
+static u64 rtc_ms_at_panel_off;
+/**
+ * struct panel_power_sequence_timing - Required timings for panel
+ * power sequence.
+ *
+ * en_lcdvdd_en_data_ms: delay between panel_vdd-rising and data-rising
+ * en_lvds_en_blvdd_ms: delay between data-rising and backlight_vdd-rising
+ * en_blvdd_en_pwm_ms: delay between backlight_vdd-rising and pwm-rising
+ * en_pwm_en_bl_ms: delay between pwm-rising and backlight_en-rising
+ * dis_lvds_dis_lcdvdd_ms: delay between data-falling and panel_vdd-falling
+ * dis_bl_dis_lvds_ms: delay between backlight_en-falling and data-falling
+ * dis_pwm_dis_blvdd_ms: delay between pwm-falling and backlight_vdd-falling
+ * lcdvdd_off_on_ms: delay between turning panel_vdd off and on
+ */
+struct panel_power_sequence_timing {
+	int en_lcdvdd_en_data_ms;
+	int en_lvds_en_blvdd_ms;
+	int en_blvdd_en_pwm_ms;
+	int en_pwm_en_bl_ms;
+	int dis_lvds_dis_lcdvdd_ms;
+	int dis_bl_dis_lvds_ms;
+	int dis_pwm_dis_blvdd_ms;
+	unsigned int lcdvdd_off_on_ms;
+};
+
+static const struct panel_power_sequence_timing panel_timings_kaen_aebl = {
+	4, 203, 20, 20, 4, 203, 20, 500,
+};
+
+static struct panel_power_sequence_timing panel_timings;
 
 static int seaboard_backlight_init(struct device *dev) {
 	int ret;
@@ -57,12 +90,65 @@ static void seaboard_backlight_exit(struct device *dev) {
 	gpio_free(TEGRA_GPIO_BACKLIGHT);
 }
 
+static void tegra_msleep(int ms)
+{
+	if (ms) {
+		if (ms<20)
+			usleep_range(ms*1000, 20000);
+		else
+			msleep(ms);
+	}
+}
+
 static int seaboard_backlight_notify(struct device *unused, int brightness)
 {
-	gpio_set_value(TEGRA_GPIO_EN_VDD_PNL, !!brightness);
-	gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, !!brightness);
-	gpio_set_value(TEGRA_GPIO_BACKLIGHT, !!brightness);
+	u64 time_panel_was_off;
+
+	if (panel_is_enabled && !brightness) {
+		gpio_set_value(TEGRA_GPIO_BACKLIGHT, 0);
+		tegra_msleep(panel_timings.dis_bl_dis_lvds_ms);
+
+		gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, 0);
+		tegra_msleep(panel_timings.dis_lvds_dis_lcdvdd_ms);
+
+		gpio_set_value(TEGRA_GPIO_EN_VDD_PNL, 0);
+	} else if (!panel_is_enabled && brightness) {
+		time_panel_was_off = tegra_rtc_read_ms() - rtc_ms_at_panel_off;
+		if (time_panel_was_off < panel_timings.lcdvdd_off_on_ms ) {
+			/*
+			 * According to panel specification, the delay should
+			 * be at least 500ms between panel_vdd OFF and ON
+			 * to aviod abnormal display.
+			 */
+			tegra_msleep(panel_timings.lcdvdd_off_on_ms -
+				time_panel_was_off);
+		}
+
+		gpio_set_value(TEGRA_GPIO_EN_VDD_PNL, 1);
+		tegra_msleep(panel_timings.en_lcdvdd_en_data_ms);
+
+		gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
+		tegra_msleep(panel_timings.en_lvds_en_blvdd_ms);
+
+		gpio_set_value(SEABOARD_GPIO_BACKLIGHT_VDD, 1);
+		tegra_msleep(panel_timings.en_blvdd_en_pwm_ms);
+	}
+
 	return brightness;
+}
+
+static void seaboard_bl_notify_after(struct device *unused, int brightness)
+{
+	if (panel_is_enabled && !brightness) {
+		tegra_msleep(panel_timings.dis_pwm_dis_blvdd_ms);
+		gpio_set_value(SEABOARD_GPIO_BACKLIGHT_VDD, 0);
+		rtc_ms_at_panel_off = tegra_rtc_read_ms();
+		panel_is_enabled = 0;
+	} else if (!panel_is_enabled && brightness) {
+		tegra_msleep(panel_timings.en_pwm_en_bl_ms);
+		gpio_set_value(TEGRA_GPIO_BACKLIGHT, 1);
+		panel_is_enabled = 1;
+	}
 }
 
 static int seaboard_disp1_check_fb(struct device *dev, struct fb_info *info);
@@ -75,6 +161,7 @@ static struct platform_pwm_backlight_data seaboard_backlight_data = {
 	.init		= seaboard_backlight_init,
 	.exit		= seaboard_backlight_exit,
 	.notify		= seaboard_backlight_notify,
+	.notify_after	= seaboard_bl_notify_after,
 	/* Only toggle backlight on fb blank notifications for disp1 */
 	.check_fb	= seaboard_disp1_check_fb,
 };
@@ -86,18 +173,6 @@ static struct platform_device seaboard_backlight_device = {
 		.platform_data = &seaboard_backlight_data,
 	},
 };
-
-static int seaboard_panel_enable(void)
-{
-	gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
-	return 0;
-}
-
-static int seaboard_panel_disable(void)
-{
-	gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, 0);
-	return 0;
-}
 
 static int seaboard_set_hdmi_power(bool enable)
 {
@@ -306,9 +381,6 @@ static struct tegra_dc_out seaboard_disp1_out = {
 
 	.modes		= seaboard_panel_modes,
 	.n_modes	= ARRAY_SIZE(seaboard_panel_modes),
-
-	.enable		= seaboard_panel_enable,
-	.disable	= seaboard_panel_disable,
 };
 
 static struct tegra_dc_out seaboard_disp2_out = {
@@ -419,6 +491,8 @@ static void __init seaboard_common_panel_gpio_init(void)
 
 	gpio_request(TEGRA_GPIO_HDMI_HPD, "hdmi_hpd");
 	gpio_direction_input(TEGRA_GPIO_HDMI_HPD);
+
+	panel_is_enabled = 1;
 }
 
 static void __init seaboard_panel_gpio_init(void)
@@ -453,6 +527,8 @@ static int __init seaboard_panel_register_devices(void)
 
 int __init seaboard_panel_init(void)
 {
+	if (machine_is_aebl() || machine_is_kaen())
+		panel_timings = panel_timings_kaen_aebl;
 	seaboard_panel_gpio_init();
 	return seaboard_panel_register_devices();
 }
