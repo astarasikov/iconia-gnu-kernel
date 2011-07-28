@@ -156,6 +156,14 @@
 #define CYAPA_GEN2_OFFSET_SOFT_RESET  GEN2_REG_OFFSET_COMMAND_BASE
 #define CYAPA_GEN3_OFFSET_SOFT_RESET  GEN3_REG_OFFSET_COMMAND_BASE
 
+#define REG_OFFSET_POWER_MODE (GEN3_REG_OFFSET_COMMAND_BASE + 1)
+#define OP_POWER_MODE_MASK   0xC0
+#define OP_POWER_MODE_SHIFT  6
+#define PWR_MODE_FULL_ACTIVE 3
+#define PWR_MODE_LIGHT_SLEEP 2
+#define PWR_MODE_DEEP_SLEEP  0
+#define SET_POWER_MODE_DELAY 10000  /* unit: us */
+
 /*
  * Status of the cyapa device detection worker.
  * The worker is started at driver initialization and
@@ -2079,6 +2087,25 @@ static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch)
 	return 0;
 }
 
+static int cyapa_set_power_mode(struct cyapa_i2c *touch, u8 power_mode)
+{
+	int ret;
+	u8 power;
+	int tries = 3;
+
+	power = cyapa_i2c_reg_read_byte(touch, REG_OFFSET_POWER_MODE);
+	power &= ~OP_POWER_MODE_MASK;
+	power |= ((power_mode << OP_POWER_MODE_SHIFT) & OP_POWER_MODE_MASK);
+	do {
+		ret = cyapa_i2c_reg_write_byte(touch,
+				REG_OFFSET_POWER_MODE, power);
+		/* sleep at least 10 ms. */
+		usleep_range(SET_POWER_MODE_DELAY, 2 * SET_POWER_MODE_DELAY);
+	} while ((ret != 0) && (tries-- > 0));
+
+	return ret;
+}
+
 static void cyapa_probe_detect_work_handler(struct work_struct *work)
 {
 	int ret;
@@ -2206,12 +2233,13 @@ static void cyapa_resume_detect_work_handler(struct work_struct *work)
 	 * when waking up, the first step that driver should do is to
 	 * set trackpad device to full active mode. Do other read/write
 	 * operations may get invalid data or get failed.
+	 * And if set power mode failed, maybe the reason is that trackpad
+	 * is working in bootloader mode, so do not check the return
+	 * result here.
 	 */
 	ret = cyapa_set_power_mode(touch, PWR_MODE_FULL_ACTIVE);
-	if (ret < 0) {
-		pr_err("wake up cyapa trackpad device failed\n");
-		goto out_resume_err;
-	}
+	if (ret < 0)
+		pr_warning("set wake up power mode to trackpad failed\n");
 
 	ret = cyapa_check_exit_bootloader(touch);
 	if (ret < 0) {
@@ -2341,12 +2369,30 @@ static int __devexit cyapa_i2c_remove(struct i2c_client *client)
 #ifdef CONFIG_PM
 static int cyapa_i2c_suspend(struct device *dev)
 {
+	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
 	struct cyapa_i2c *touch = i2c_get_clientdata(client);
 
+	/*
+	 * When cyapa driver probing failed and haven't been removed,
+	 * then when system do suspending, the value of touch is NULL.
+	 * e.g.: this situation will happen when system booted
+	 * without trackpad connected.
+	 */
+	if (!touch)
+		return 0;
+
+	if (touch->detect_wq)
+		flush_workqueue(touch->detect_wq);
+
 	cancel_delayed_work_sync(&touch->dwork);
 
-	return 0;
+	/* set trackpad device to light sleep mode. */
+	ret = cyapa_set_power_mode(touch, PWR_MODE_LIGHT_SLEEP);
+	if (ret < 0)
+		pr_err("suspend cyapa trackpad device failed, %d\n", ret);
+
+	return ret;
 }
 
 static int cyapa_i2c_resume(struct device *dev)
@@ -2354,6 +2400,15 @@ static int cyapa_i2c_resume(struct device *dev)
 	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
 	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+
+	/*
+	 * When cyapa driver probing failed and haven't been removed,
+	 * then when system do suspending, the value of touch is NULL.
+	 * e.g.: this situation will happen when system booted
+	 * without trackpad connected.
+	 */
+	if (!touch)
+		return 0;
 
 	if (touch->pdata->wakeup) {
 		ret = touch->pdata->wakeup();
@@ -2363,14 +2418,11 @@ static int cyapa_i2c_resume(struct device *dev)
 		}
 	}
 
-	ret = cyapa_i2c_reset_config(touch);
-	if (ret) {
-		pr_err("reset and config trackpad device failed: %d\n", ret);
+	ret = cyapa_resume_detect(touch);
+	if (ret < 0) {
+		pr_err("cyapa i2c trackpad device detect failed, %d\n", ret);
 		return ret;
 	}
-
-	cyapa_i2c_reschedule_work(touch,
-		msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
 
 	return 0;
 }
