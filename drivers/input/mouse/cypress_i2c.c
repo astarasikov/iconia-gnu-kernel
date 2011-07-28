@@ -480,7 +480,7 @@ out:
 	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 }
 
-static int cyapa_wait_for_i2c_bus_ready(struct cyapa_i2c *touch)
+static int cyapa_acquire_i2c_bus(struct cyapa_i2c *touch)
 {
 	cyapa_disable_irq(touch);
 	if (down_interruptible(&touch->reg_io_sem)) {
@@ -489,6 +489,27 @@ static int cyapa_wait_for_i2c_bus_ready(struct cyapa_i2c *touch)
 	}
 
 	return 0;
+}
+
+static void cyapa_release_i2c_bus(struct cyapa_i2c *touch)
+{
+	up(&touch->reg_io_sem);
+	cyapa_enable_irq(touch);
+}
+
+static s32 cyapa_i2c_reg_read_byte(struct cyapa_i2c *touch, u16 reg)
+{
+	int ret;
+
+	ret = cyapa_acquire_i2c_bus(touch);
+	if (ret < 0)
+		return ret;
+
+	ret = i2c_smbus_read_byte_data(touch->client, (u8)reg);
+
+	cyapa_release_i2c_bus(touch);
+
+	return ret;
 }
 
 /*
@@ -503,14 +524,13 @@ static s32 cyapa_i2c_reg_write_byte(struct cyapa_i2c *touch, u16 reg, u8 val)
 {
 	int ret;
 
-	ret = cyapa_wait_for_i2c_bus_ready(touch);
+	ret = cyapa_acquire_i2c_bus(touch);
 	if (ret < 0)
 		return ret;
 
 	ret = i2c_smbus_write_byte_data(touch->client, (u8)reg, val);
 
-	up(&touch->reg_io_sem);
-	cyapa_enable_irq(touch);
+	cyapa_release_i2c_bus(touch);
 
 	return ret;
 }
@@ -536,7 +556,7 @@ static s32 cyapa_i2c_reg_read_block(struct cyapa_i2c *touch, u16 reg,
 	int ret;
 	u8 buf[1];
 
-	ret = cyapa_wait_for_i2c_bus_ready(touch);
+	ret = cyapa_acquire_i2c_bus(touch);
 	if (ret < 0)
 		return ret;
 
@@ -564,8 +584,7 @@ static s32 cyapa_i2c_reg_read_block(struct cyapa_i2c *touch, u16 reg,
 	cyapa_dump_data_block(__func__, (u8)reg, ret, values);
 
 error:
-	up(&touch->reg_io_sem);
-	cyapa_enable_irq(touch);
+	cyapa_release_i2c_bus(touch);
 
 	return ret;
 }
@@ -593,7 +612,7 @@ static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
 
 	cyapa_dump_data_block(__func__, reg, length, (void *)values);
 
-	ret = cyapa_wait_for_i2c_bus_ready(touch);
+	ret = cyapa_acquire_i2c_bus(touch);
 	if (ret < 0)
 		return ret;
 
@@ -615,8 +634,7 @@ static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
 			ret, length);
 
 error:
-	up(&touch->reg_io_sem);
-	cyapa_enable_irq(touch);
+	cyapa_release_i2c_bus(touch);
 
 	return (ret < 0) ? ret : (ret - 1);
 }
