@@ -156,6 +156,15 @@
 #define CYAPA_GEN2_OFFSET_SOFT_RESET  GEN2_REG_OFFSET_COMMAND_BASE
 #define CYAPA_GEN3_OFFSET_SOFT_RESET  GEN3_REG_OFFSET_COMMAND_BASE
 
+/*
+ * Status of the cyapa device detection worker.
+ * The worker is started at driver initialization and
+ * resume from system sleep.
+ */
+enum cyapa_detect_status {
+	CYAPA_DETECT_DONE_SUCCESS,
+	CYAPA_DETECT_DONE_FAILED,
+};
 
 /*
  * APA trackpad device states.
@@ -289,6 +298,9 @@ struct cyapa_i2c {
 	struct i2c_client	*client;
 	struct input_dev	*input;
 	struct delayed_work dwork;
+	struct work_struct detect_work;
+	struct workqueue_struct *detect_wq;
+	enum cyapa_detect_status detect_status;
 	/* synchronize access to dwork. */
 	spinlock_t lock;
 	int no_data_count;
@@ -331,7 +343,6 @@ static struct cyapa_i2c *global_touch;
 
 static int cyapa_get_query_data(struct cyapa_i2c *touch);
 static int cyapa_i2c_reconfig(struct cyapa_i2c *touch, int boot);
-static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch);
 static void cyapa_get_reg_offset(struct cyapa_i2c *touch);
 static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch);
 static int cyapa_create_input_dev(struct cyapa_i2c *touch);
@@ -1785,6 +1796,11 @@ static void cyapa_i2c_work_handler(struct work_struct *work)
 	 * when firmware switching into bootloader mode.
 	 */
 	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+	if (touch->detect_status != CYAPA_DETECT_DONE_SUCCESS) {
+		/* still detecting trackpad device in work queue. */
+		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		return;
+	}
 	if (touch->fw_work_mode == CYAPA_BOOTLOAD_MODE) {
 		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 		cyapa_update_firmware_dispatch(touch);
@@ -2045,41 +2061,19 @@ static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch)
 	return 0;
 }
 
-static int __devinit cyapa_i2c_probe(struct i2c_client *client,
-			       const struct i2c_device_id *dev_id)
+static void cyapa_probe_detect_work_handler(struct work_struct *work)
 {
 	int ret;
-	struct cyapa_i2c *touch;
 	unsigned long flags;
+	struct cyapa_i2c *touch =
+		container_of(work, struct cyapa_i2c, detect_work);
+	struct i2c_client *client = touch->client;
 
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
-		return -EIO;
-
-	touch = cyapa_i2c_touch_create(client);
-	if (!touch) {
-		pr_err("allocate memory for touch failed.\n");
-		return -ENOMEM;
-	}
-
-	/* First, initialize pdata */
-	if (touch->pdata->init) {
-		ret = touch->pdata->init();
-		if (ret) {
-			pr_err("board initialize failed: %d\n", ret);
-			goto err_mem_free;
-		}
-	}
-
-	/*
-	 * when firmware waiting in bootloader mode,
-	 * the trackpad is unusable.
-	 * so driver must send commands to make firmware
-	 * switch to operational mode.
-	 */
 	ret = cyapa_check_exit_bootloader(touch);
-	if (ret < 0)
-		pr_warning("cyapa exit bootloader mode failed, %d,"
-			"continue.\n", ret);
+	if (ret < 0) {
+		pr_err("cyapa check and exit bootloader failed.\n");
+		goto out_probe_err;
+	}
 
 	/*
 	 * set irq number for interrupt mode.
@@ -2087,20 +2081,15 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 	 * when special platform that do not support slave interrupt.
 	 * or allocate irq number to it failed.
 	 */
-	if (touch->pdata->irq_gpio <= 0) {
-		if (client->irq) {
-			touch->irq = client->irq;
-		} else {
-			/* irq mode is not supported by platform. */
-			touch->irq = -1;
-		}
-	} else {
+	if (touch->pdata->irq_gpio <= 0)
+		touch->irq = client->irq ? client->irq : -1;
+	else
 		touch->irq = gpio_to_irq(touch->pdata->irq_gpio);
-	}
 
 	if (touch->irq <= 0) {
 		pr_err("failed to allocate irq\n");
-		goto err_mem_free;
+		ret = -EBUSY;
+		goto out_probe_err;
 	}
 
 	set_irq_type(touch->irq, IRQF_TRIGGER_FALLING);
@@ -2110,7 +2099,7 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 			CYAPA_I2C_NAME,
 			touch);
 	if (ret) {
-		pr_warning("IRQ request failed: %d," \
+		pr_warning("IRQ request failed: %d, "
 			"falling back to polling mode.\n", ret);
 
 		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
@@ -2121,7 +2110,7 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 	} else {
 		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
 		touch->polling_mode_enabled = false;
-		touch->bl_irq_enable = true;
+		touch->bl_irq_enable = false;
 		touch->irq_enabled = true;
 		enable_irq_wake(touch->irq);
 		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
@@ -2141,7 +2130,7 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 	if (ret) {
 		free_irq(touch->irq, touch);
 		pr_err("create input_dev instance failed.\n");
-		goto err_mem_free;
+		goto out_probe_err;
 	}
 
 	i2c_set_clientdata(client, touch);
@@ -2150,9 +2139,19 @@ static int __devinit cyapa_i2c_probe(struct i2c_client *client,
 	if (ret)
 		pr_warning("error creating sysfs entries.\n");
 
-	return 0;
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+	touch->detect_status = CYAPA_DETECT_DONE_SUCCESS;
+	if (touch->irq_enabled)
+		touch->bl_irq_enable = true;
+	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
 
-err_mem_free:
+	return;
+
+out_probe_err:
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+	touch->detect_status = CYAPA_DETECT_DONE_FAILED;
+	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+
 	/* release previous allocated input_dev instances. */
 	if (touch->input) {
 		if (touch->input->mt)
@@ -2161,6 +2160,133 @@ err_mem_free:
 		touch->input = NULL;
 	}
 
+	kfree(touch);
+	global_touch = NULL;
+}
+
+static int cyapa_probe_detect(struct cyapa_i2c *touch)
+{
+	/*
+	 * Maybe trackpad device is not connected,
+	 * or firmware is doing sensor calibration,
+	 * it will take max 2 seconds to be completed.
+	 * So use work queue to wait for it ready
+	 * to avoid block system booting or resuming.
+	 */
+	INIT_WORK(&touch->detect_work, cyapa_probe_detect_work_handler);
+	return queue_work(touch->detect_wq, &touch->detect_work);
+}
+
+static void cyapa_resume_detect_work_handler(struct work_struct *work)
+{
+	int ret;
+	unsigned long flags;
+	struct cyapa_i2c *touch =
+		container_of(work, struct cyapa_i2c, detect_work);
+
+	/*
+	 * when waking up, the first step that driver should do is to
+	 * set trackpad device to full active mode. Do other read/write
+	 * operations may get invalid data or get failed.
+	 */
+	ret = cyapa_set_power_mode(touch, PWR_MODE_FULL_ACTIVE);
+	if (ret < 0) {
+		pr_err("wake up cyapa trackpad device failed\n");
+		goto out_resume_err;
+	}
+
+	ret = cyapa_check_exit_bootloader(touch);
+	if (ret < 0) {
+		pr_err("cyapa check and exit bootloader failed.\n");
+		goto out_resume_err;
+	}
+
+	/* re-enable interrupt work handler routine. */
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+	if (touch->irq_enabled)
+		touch->bl_irq_enable = true;
+	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+
+	ret = cyapa_i2c_reset_config(touch);
+	if (ret < 0) {
+		pr_err("reset and config trackpad device failed.\n");
+		goto out_resume_err;
+	}
+
+	cyapa_i2c_reschedule_work(touch,
+		msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
+
+out_resume_err:
+	/* trackpad device resumed from sleep state successfully. */
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+	touch->detect_status = ret ? CYAPA_DETECT_DONE_FAILED :
+					CYAPA_DETECT_DONE_SUCCESS;
+	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+
+	return;
+}
+
+static int cyapa_resume_detect(struct cyapa_i2c *touch)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
+	touch->bl_irq_enable = false;
+	touch->fw_work_mode = CYAPA_BOOTLOAD_MODE;
+	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+
+	/*
+	 * Maybe trackpad device is not connected,
+	 * or firmware is doing sensor calibration,
+	 * it will take max 2 seconds to be completed.
+	 * So use work queue to wait for it ready
+	 * to avoid block system booting or resuming.
+	 */
+	INIT_WORK(&touch->detect_work, cyapa_resume_detect_work_handler);
+	return queue_work(touch->detect_wq, &touch->detect_work);
+}
+
+static int __devinit cyapa_i2c_probe(struct i2c_client *client,
+			       const struct i2c_device_id *dev_id)
+{
+	int ret;
+	struct cyapa_i2c *touch;
+
+	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
+		return -EIO;
+
+	touch = cyapa_i2c_touch_create(client);
+	if (!touch) {
+		pr_err("allocate memory for touch failed.\n");
+		return -ENOMEM;
+	}
+
+	/* First, initialize pdata */
+	if (touch->pdata->init) {
+		ret = touch->pdata->init();
+		if (ret) {
+			pr_err("board initialize failed: %d\n", ret);
+			goto err_mem_free;
+		}
+	}
+
+	touch->detect_wq = create_singlethread_workqueue("cyapa_detect_wq");
+	if (!touch->detect_wq) {
+		pr_err("failed to create cyapa trackpad detect workqueue.\n");
+		goto err_mem_free;
+	}
+
+	ret = cyapa_probe_detect(touch);
+	if (ret < 0) {
+		pr_err("cyapa i2c trackpad device detect failed, %d\n", ret);
+		goto err_mem_free;
+	}
+
+	return 0;
+
+err_mem_free:
+	if (touch->detect_wq)
+		destroy_workqueue(touch->detect_wq);
 	kfree(touch);
 	global_touch = NULL;
 
@@ -2185,6 +2311,9 @@ static int __devexit cyapa_i2c_remove(struct i2c_client *client)
 			input_mt_destroy_slots(touch->input);
 		input_unregister_device(touch->input);
 	}
+
+	if (touch->detect_wq)
+		destroy_workqueue(touch->detect_wq);
 	kfree(touch);
 	global_touch = NULL;
 
