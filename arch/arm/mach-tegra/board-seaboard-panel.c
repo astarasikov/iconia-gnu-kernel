@@ -323,6 +323,9 @@ static struct tegra_dc_out seaboard_disp2_out = {
 	.disable	= seaboard_hdmi_disable,
 	.hotplug_init	= seaboard_hdmi_hotplug_init,
 	.postsuspend	= seaboard_hdmi_postsuspend,
+
+	/* DVFS tables only updated up to 148.5MHz for HDMI currently */
+	.max_pclk_khz	= 148500,
 };
 
 static struct tegra_dc_platform_data seaboard_disp1_pdata = {
