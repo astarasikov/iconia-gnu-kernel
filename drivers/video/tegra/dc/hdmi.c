@@ -940,7 +940,19 @@ static void tegra_dc_hdmi_enable(struct tegra_dc *dc)
 	clk_enable(hdmi->disp1_clk);
 	clk_enable(hdmi->disp2_clk);
 	tegra_dc_setup_clk(dc, hdmi->clk);
-	clk_set_rate(hdmi->clk, dc->mode.pclk);
+	/*
+	 * Bias the pixel clock upwards by 1Hz, although we've already adjusted
+	 * it to be a value that we can drive.  The Tegra clock code by design
+	 * always rounds the divider up (i.e., it rounds down to the next
+	 * available rate).  For rates that aren't exactly divisible by the
+	 * divider such as 1 GHz / 7 == 166666666.66...Hz, passing the
+	 * truncated value 166666666 to the clock API will give us 1 GHz / 6,
+	 * which is not even close to what we want.
+	 *
+	 * Adding 1 here will ensure that the clock API will use the desired
+	 * divider.
+	 */
+	clk_set_rate(hdmi->clk, dc->mode.pclk + 1);
 
 	clk_enable(hdmi->clk);
 	tegra_periph_reset_assert(hdmi->clk);
