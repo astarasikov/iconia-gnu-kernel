@@ -1,0 +1,6 @@
+config ASUSEC
+       tristate "ASUS embedded controller"
+       depends on I2C && EXPERIMENTAL
+       default N
+       help
+            KB, battery and dock station controller for asus tf101
