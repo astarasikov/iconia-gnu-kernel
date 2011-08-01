@@ -219,7 +219,7 @@ static struct mxt_platform_data mxt_platform_data = {
 };
 
 static struct i2c_board_info mxt_device = {
-	I2C_BOARD_INFO("atmel_mxt_ts", 0x4c),
+	I2C_BOARD_INFO("atmel_mxt_ts", 0x5b),
 	.platform_data = &mxt_platform_data,
 	.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_TS_IRQ),
 };
@@ -459,6 +459,12 @@ static struct i2c_board_info __initdata picasso_ec = {
 	I2C_BOARD_INFO(PICASSO_EC_ID, 0x58),
 };
 
+static struct i2c_board_info __initdata tf101_asusec = {
+	I2C_BOARD_INFO("asusec", 0x19),
+        .irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PS2),
+};
+
+
 static void __init picasso_sensors_init(void) {
 	gpio_request(PICASSO_GPIO_NCT1008, "nct1008");
 	tegra_gpio_enable(PICASSO_GPIO_NCT1008);
@@ -467,8 +473,9 @@ static void __init picasso_sensors_init(void) {
 	//The i2c driver will request the gpio.. uhh..
 	tegra_gpio_enable(PICASSO_GPIO_AKM8975_IRQ);
 
-	i2c_register_board_info(2, &picasso_ec, 1);
-	
+	//i2c_register_board_info(2, &picasso_ec, 1);
+	i2c_register_board_info(2, &tf101_asusec, 1);
+
 	i2c_register_board_info(4, picasso_i2c4_board_info,
 		ARRAY_SIZE(picasso_i2c4_board_info));
 }
