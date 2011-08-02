@@ -21,14 +21,11 @@
 #include <linux/input.h>
 #include <linux/workqueue.h>
 #include <linux/cdev.h>
-//#include <linux/gpio_event.h>
 #include <linux/slab.h>
-//#include <linux/switch.h>
 #include <asm/gpio.h>
 #include <asm/ioctl.h>
 #include <asm/uaccess.h>
 #include <linux/power_supply.h>
-//#include <mach/board-ventana-misc.h>
 
 #include "asusec.h"
 
