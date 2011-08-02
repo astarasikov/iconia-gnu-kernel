@@ -142,10 +142,10 @@ static unsigned short code_tab_102us[] = {
 	0,
 	0,
 	0,
+	KEY_PAGEDOWN,
 	0,
 	0,
-	0,
-	KEY_KP9,
+	KEY_PAGEUP,
 };
 
 static unsigned short extcode_tf101[] = {
