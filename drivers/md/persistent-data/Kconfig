@@ -1,0 +1,7 @@
+config DM_PERSISTENT_DATA
+       tristate "Persistent data library (EXPERIMENTAL)"
+       depends on BLK_DEV_DM && EXPERIMENTAL
+       select LIBCRC32C
+       ---help---
+	 Library providing immutable on-disk data structure support for
+	 device-mapper targets such as the thin provisioning target.
