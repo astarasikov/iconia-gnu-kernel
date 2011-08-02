@@ -37,9 +37,8 @@ static struct asusec_keys keys_dev;
 static int asusec_keys_notifier(struct notifier_block *nb,
 				unsigned long event_type, void *data)
 {
-	int state=1, ext=0;
+	int state=1;
 	unsigned char *msg = (unsigned char *)data;
-	printk("asusec kbd data: %x %x %x %x\n", msg[0], msg[1], msg[2], msg[3]);
 
 	msg++;
 
@@ -48,7 +47,6 @@ static int asusec_keys_notifier(struct notifier_block *nb,
 
 		if(*msg == 0xE0) {
 			msg++;
-			ext = 1;
 		}
 
 		if(*msg == 0xF0) {
@@ -58,7 +56,6 @@ static int asusec_keys_notifier(struct notifier_block *nb,
 
 		input_report_key(keys_dev.input, code_tab_102us[*msg], state);
 
-		printk("asusec key %x %d %d\n", *msg, ext, state);
 
 		input_sync(keys_dev.input);
 
@@ -71,7 +68,6 @@ static int asusec_keys_notifier(struct notifier_block *nb,
 		input_report_key(keys_dev.input, extcode_tf101[*msg], 0);
 		input_sync(keys_dev.input);
 
-		printk("asusec f key %x\n", *msg);
 
 		return NOTIFY_STOP;
 
@@ -138,14 +134,6 @@ static int __devinit asusec_kbd_probe(struct platform_device *pdev)
 	keys_dev.notifier.notifier_call = asusec_keys_notifier;
 	keys_dev.asusec = asusec;
 	asusec_register_notifier(asusec, &keys_dev.notifier, 0);
-
-	/* Enable keyboard */
-	asusec_write_async(asusec, "\x05\xf4", 2);
-
-	/* keyboard reset? */
-	asusec_write_async(asusec, "\x05\x03\x01\x01", 4);
-	asusec_write_async(asusec, "\x05\x04\x01", 3);
-	asusec_write_async(asusec, "\x06\x01\xff\x03", 4);
 
 	return 0;
 

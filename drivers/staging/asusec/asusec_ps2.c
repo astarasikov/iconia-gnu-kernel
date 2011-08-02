@@ -16,12 +16,14 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include "asusec.h"
+#include <linux/i2c.h>
 
 #define START_STREAMING	{'\x06', '\x03', '\x01'}
 #define STOP_STREAMING	{'\x06', '\x04'}
 #define SEND_COMMAND	{'\x06', '\x01', '\xf4', '\x01'}
 
 #define asusec_write_async(__x, __y, __sz) {}
+extern struct asusec_chip *ec_chip;
 
 static unsigned char MOUSE_RESET[] = {'\x06', '\x01', '\xff', '\x03'};
 
@@ -48,13 +50,17 @@ static void ps2_stopstreaming(struct serio *ser_dev)
 
 static int ps2_sendcommand(struct serio *ser_dev, unsigned char cmd)
 {
-	unsigned char buf[] = SEND_COMMAND;
-
-	buf[2] = cmd & 0xff;
+	u16 asus_ec_cmd;
+	int ret;
+	asus_ec_cmd = (((cmd & 0x00ff) << 8) | 0xD4);
 
 	dev_dbg(&ser_dev->dev, "Sending ps2 cmd %02x\n", cmd);
-	asusec_write_async(ps2_dev.asusec, buf, sizeof(buf));
-
+	ret = i2c_smbus_write_word_data(ec_chip->client, 0x64, asus_ec_cmd);
+	if (ret < 0) {
+		dev_err(&ser_dev->dev, "Write to device fails status %x\n",ret);
+		return ret;
+	}
+	
 	return 0;
 }
 
@@ -64,26 +70,17 @@ static int asusec_ps2_notifier(struct notifier_block *nb,
 	int i;
 	unsigned char *msg = (unsigned char *)data;
 
-	printk("asusec ps2 data: %x %x %x\n", msg[0], msg[1], msg[2]);
+	msg++;
 
-	/*
-	switch (event_type) {
-	case asusec_PS2_EVT:
+	if(*msg == 0x21) {
+		msg++;
+
+		serio_interrupt(ps2_dev.ser_dev, msg[0], 0);
+		serio_interrupt(ps2_dev.ser_dev, msg[1], 0);
 		serio_interrupt(ps2_dev.ser_dev, msg[2], 0);
-		return NOTIFY_STOP;
 
-	case asusec_PS2:
-		if (msg[2] == 1)
-			for (i = 0; i < (msg[1] - 2); i++)
-				serio_interrupt(ps2_dev.ser_dev, msg[i+4], 0);
-		else if (msg[1] != 2) { // !ack
-			printk(KERN_WARNING "asusec_ps2: unhandled mouse event ");
-			for (i = 0; i <= (msg[1]+1); i++)
-				printk(KERN_WARNING "%02x ", msg[i]);
-			printk(KERN_WARNING ".\n");
-		}
 		return NOTIFY_STOP;
-	}*/
+	}
 
 	return NOTIFY_DONE;
 }
