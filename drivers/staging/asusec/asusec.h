@@ -257,7 +257,6 @@ struct asusec_touchpad_absolute{
 };
 
 struct asusec_chip {
-	struct input_dev	*indev;
 	struct input_dev	*tpdev;
 //	struct switch_dev 	dock_sdev;
 	struct i2c_client	*client;
@@ -306,6 +305,12 @@ struct asusec_chip {
 	int re_init;		// 0 : first time init, not re-init, 1: in re-init procedure
 	int ec_wakeup;		// 0 : ec shutdown when PAD in LP0, 1 : keep ec active when PAD in LP0,
 	int ap_wake_wakeup;	// 0 : no ap_wake wakeup signal, 1: get ap_wake wakeup signal
+	struct atomic_notifier_head notifier_list;
+
 };
+
+extern int asusec_register_notifier(struct asusec_chip *asusec,
+		struct notifier_block *nb, unsigned int events);
+
 
 #endif
