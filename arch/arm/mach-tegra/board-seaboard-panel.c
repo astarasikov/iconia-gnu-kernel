@@ -406,7 +406,7 @@ static void __init seaboard_panel_gpio_init(void)
 	gpio_request(TEGRA_GPIO_BACKLIGHT_VDD, "bl_vdd");
 	gpio_direction_output(TEGRA_GPIO_BACKLIGHT_VDD, 1);
 
-	if (!machine_is_picasso()) {
+	if (!(machine_is_picasso() || machine_is_tf101())) {
 		//This gpio is connected to a vibrator on picasso
 		gpio_request(TEGRA_GPIO_HDMI_ENB, "hdmi_5v_en");
 		gpio_direction_output(TEGRA_GPIO_HDMI_ENB, 0);
