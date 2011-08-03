@@ -195,7 +195,7 @@ static __initdata struct tegra_pingroup_config seaboard_pinmux[] = {
 
 
 
-static struct tegra_gpio_table gpio_table[] = {
+static struct tegra_gpio_table common_gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_SD2_CD,		.enable = true },
 	{ .gpio = TEGRA_GPIO_SD2_WP,		.enable = true },
 	{ .gpio = TEGRA_GPIO_SD2_POWER,		.enable = true },
@@ -207,12 +207,10 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_WLAN_POWER,	.enable = true },
 	{ .gpio = TEGRA_GPIO_BACKLIGHT,		.enable = true },
 	{ .gpio = TEGRA_GPIO_LVDS_SHUTDOWN,	.enable = true },
-	{ .gpio = TEGRA_GPIO_BACKLIGHT_VDD,	.enable = true },
 	{ .gpio = TEGRA_GPIO_EN_VDD_PNL,	.enable = true },
 	{ .gpio = TEGRA_GPIO_AC_ONLINE,		.enable = true },
 	{ .gpio = TEGRA_GPIO_HP_DET,		.enable = true },
 	{ .gpio = TEGRA_GPIO_CYTP_INT,		.enable = true },
-	{ .gpio = TEGRA_GPIO_MXT_RST,		.enable = true },
 	{ .gpio = TEGRA_GPIO_MXT_IRQ,		.enable = true },
 	{ .gpio = TEGRA_GPIO_HDMI_ENB,		.enable = true },
 	{ .gpio = TEGRA_GPIO_MPU3050_IRQ,	.enable = true },
@@ -223,6 +221,17 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_DEV_SWITCH,	.enable = true },
 	{ .gpio = TEGRA_GPIO_WP_STATUS,		.enable = true },
 };
+
+static struct tegra_gpio_table seaboard_gpio_table[] = {
+	{ .gpio = SEABOARD_GPIO_BACKLIGHT_VDD,	.enable = true },
+	{ .gpio = SEABOARD_GPIO_MXT_RST,	.enable = true },
+};
+
+static struct tegra_gpio_table asymptote_gpio_table[] = {
+	{ .gpio = ASYMPTOTE_GPIO_BACKLIGHT_VDD,	.enable = true },
+	{ .gpio = ASYMPTOTE_GPIO_MXT_RST,	.enable = true },
+};
+
 
 static void __init sound_codec_gpio_init(int gpio, const char *name)
 {
@@ -259,7 +268,10 @@ static void __init wm8903_gpio_init(void)
 {
 	BUG_ON(!machine_is_seaboard() &&
 	       !machine_is_kaen()     &&
-	       !machine_is_aebl());
+	       !machine_is_aebl()     &&
+	       !machine_is_asymptote() &&
+	       !machine_is_ventana() &&
+		   !machine_is_picasso());
 	sound_codec_gpio_init(TEGRA_GPIO_WM8903_IRQ, "wm8903");
 }
 
@@ -275,7 +287,27 @@ static void __init seaboard_common_pinmux_init(void)
 	tegra_drive_pinmux_config_table(seaboard_drive_pinmux,
 					ARRAY_SIZE(seaboard_drive_pinmux));
 
-	tegra_gpio_config(gpio_table, ARRAY_SIZE(gpio_table));
+	tegra_gpio_config(common_gpio_table, ARRAY_SIZE(common_gpio_table));
+}
+
+static void __init update_pinmux(struct tegra_pingroup_config *newtbl, int size)
+{
+	int i, j;
+	struct tegra_pingroup_config *new_pingroup, *base_pingroup;
+
+	/* Update base seaboard pinmux table with secondary board
+	 * specific pinmux table table.
+	 */
+	for (i = 0; i < size; i++) {
+		new_pingroup = &newtbl[i];
+		for (j = 0; j < ARRAY_SIZE(seaboard_pinmux); j++) {
+			base_pingroup = &seaboard_pinmux[j];
+			if (new_pingroup->pingroup == base_pingroup->pingroup) {
+				*base_pingroup = *new_pingroup;
+				break;
+			}
+		}
+	}
 }
 
 #define STRAP_OPT 0x008
@@ -298,6 +330,8 @@ void __init seaboard_pinmux_init(void)
 {
 	wm8903_gpio_init();
 	seaboard_common_pinmux_init();
+	tegra_gpio_config(seaboard_gpio_table,
+			  ARRAY_SIZE(seaboard_gpio_table));
 }
 
 void __init kaen_pinmux_init(void)
@@ -343,3 +377,78 @@ void __init arthur_pinmux_init(void)
 	max98095_gpio_init();
 	seaboard_common_pinmux_init();
 }
+
+void __init asymptote_pinmux_init(void)
+{
+	wm8903_gpio_init();
+	seaboard_common_pinmux_init();
+	tegra_gpio_config(asymptote_gpio_table,
+			  ARRAY_SIZE(asymptote_gpio_table));
+}
+
+static __initdata struct tegra_pingroup_config ventana_pinmux[] = {
+	{TEGRA_PINGROUP_DAP3, TEGRA_MUX_DAP3,     TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_DDC,  TEGRA_MUX_RSVD2,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTA,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTB,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTC,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTD,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_GMD,  TEGRA_MUX_SFLASH,   TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_LPW0, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_LPW2, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_LSC1, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_LSCK, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_LSDA, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_PTA,  TEGRA_MUX_RSVD2,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_SLXC, TEGRA_MUX_SDIO3,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_SLXK, TEGRA_MUX_SDIO3,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_SPIA, TEGRA_MUX_GMI,      TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_SPIC, TEGRA_MUX_GMI,      TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_SPIG, TEGRA_MUX_SPI2_ALT, TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+};
+
+void __init ventana_pinmux_init(void)
+{
+	wm8903_gpio_init();
+	update_pinmux(ventana_pinmux, ARRAY_SIZE(ventana_pinmux));
+	seaboard_common_pinmux_init();
+}
+
+#ifdef CONFIG_MACH_PICASSO
+#include "board-picasso.h"
+static struct tegra_gpio_table picasso_gpio_table[] = {
+	{ .gpio = TEGRA_GPIO_BACKLIGHT,	.enable = true },
+	{ .gpio = PICASSO_GPIO_ULPI_RESET,	.enable = true },
+	{ .gpio = TEGRA_GPIO_MXT_IRQ,	.enable = true },
+	{ .gpio = TEGRA_GPIO_VENTANA_TS_RST,	.enable = true },
+	{ .gpio = TEGRA_GPIO_AC_ONLINE,	.enable = true },
+	{ .gpio = TEGRA_GPIO_VENTANA_DISABLE_CHARGER,	.enable = true },
+	{ .gpio = PICASSO_GPIO_HP_DETECT,	.enable = true },
+	{ .gpio = PICASSO_GPIO_MIC_EN_INT,	.enable = true },
+	{ .gpio = TEGRA_GPIO_VENTANA_EN_MIC_EXT,	.enable = true },
+	{ .gpio = TEGRA_GPIO_WM8903_IRQ,	.enable = true },
+	{ .gpio = TEGRA_GPIO_NCT1008_THERM2_IRQ,	.enable = true },
+	{ .gpio = PICASSO_GPIO_KEY_nVOLUMEUP,	.enable = true },
+	{ .gpio = PICASSO_GPIO_KEY_nVOLUMEDOWN,	.enable = true },
+	{ .gpio = PICASSO_GPIO_KEY_POWER,	.enable = true },
+	{ .gpio = PICASSO_GPIO_KEY_POWER2,	.enable = true },
+	{ .gpio = PICASSO_GPIO_SWITCH_LOCK,	.enable = true },
+	{ .gpio = PICASSO_GPIO_SWITCH_DOCK,	.enable = true },
+	{ .gpio = TEGRA_GPIO_BT_RESET,	.enable = true },
+	{ .gpio = TEGRA_GPIO_WLAN_POWER,	.enable = true },
+	{ .gpio = TEGRA_GPIO_SD2_CD,	.enable = true },
+	{ .gpio = TEGRA_GPIO_SD2_POWER,	.enable = true },
+	{ .gpio = PICASSO_GPIO_GPS,	.enable = true },
+};
+
+void __init picasso_pinmux_init(void)
+{
+	wm8903_gpio_init();
+	update_pinmux(ventana_pinmux, ARRAY_SIZE(ventana_pinmux));
+	tegra_pinmux_config_table(seaboard_pinmux, ARRAY_SIZE(seaboard_pinmux));
+
+	tegra_drive_pinmux_config_table(seaboard_drive_pinmux,
+					ARRAY_SIZE(seaboard_drive_pinmux));
+	tegra_gpio_config(picasso_gpio_table, ARRAY_SIZE(picasso_gpio_table));
+}
+#endif

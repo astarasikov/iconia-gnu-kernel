@@ -191,6 +191,9 @@ int __init aebl_sensors_init(void)
 	if (!clk_csus)
 		pr_warn("Failed to get csus clock\n");
 
+	clk_set_rate(clk_vi, 150000000);
+	clk_set_rate(clk_vi_sensor, 24000000);
+
 	nvhost_device_register(&tegra_camera_device);
 
 	platform_device_register(&soc_camera);

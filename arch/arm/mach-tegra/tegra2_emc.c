@@ -195,6 +195,13 @@ void tegra_init_emc(const struct tegra_emc_table *table, int table_size)
 
 	c->max_rate = max * 2 * 1000;
 
+	if (!c->ops->round_rate(c, c->max_rate)) {
+		emc_enable = false;
+		c->max_rate = clk_get_rate(c);
+		WARN(1, "EMC scaling has been disabled due to bad EMC table. "
+			"Please check BCT file.");
+	}
+
 	list_for_each_entry(user, &c->shared_bus_list, u.shared_bus_user.node)
 		user->max_rate = c->max_rate;
 }

@@ -47,6 +47,7 @@
 #include <mach/iomap.h>
 #include <mach/io.h>
 #include <mach/sdhci.h>
+#include <mach/suspend.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -58,6 +59,7 @@
 #include "board-picasso.h"
 #include "clock.h"
 #include "devices.h"
+#include "fuse.h"
 #include "gpio-names.h"
 #include "wakeups-t2.h"
 
@@ -117,19 +119,21 @@ static struct tegra_ulpi_config ulpi_phy_config = {
 
 static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 	[0] = {
-			.phy_config = &utmi_phy_config[0],
-			.operating_mode = TEGRA_USB_HOST,
-			.power_down_on_bus_suspend = 0,
+		.phy_config = &utmi_phy_config[0],
+		.operating_mode = TEGRA_USB_HOST,
+		.power_down_on_bus_suspend = 1,
+		.keep_clock_in_bus_suspend = 1,
 	},
 	[1] = {
-			.phy_config = &ulpi_phy_config,
-			.operating_mode = TEGRA_USB_HOST,
-			.power_down_on_bus_suspend = 0,
+		.phy_config = &ulpi_phy_config,
+		.operating_mode = TEGRA_USB_HOST,
+		.power_down_on_bus_suspend = 1,
 	},
 	[2] = {
-			.phy_config = &utmi_phy_config[1],
-			.operating_mode = TEGRA_USB_HOST,
-			.power_down_on_bus_suspend = 0,
+		.phy_config = &utmi_phy_config[1],
+		.operating_mode = TEGRA_USB_HOST,
+		.power_down_on_bus_suspend = 1,
+		.keep_clock_in_bus_suspend = 1,
 	},
 };
 
@@ -139,7 +143,6 @@ static void __init picasso_usb_init(void) {
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];	
 	tegra_otg_device.dev.platform_data = &tegra_ehci1_device;
 
-	tegra_gpio_enable(PICASSO_GPIO_ULPI_RESET);
 	platform_device_register(&tegra_udc_device);
 	platform_device_register(&tegra_ehci2_device);
 	
@@ -151,6 +154,11 @@ static void __init picasso_usb_init(void) {
  *****************************************************************************/
 static __initdata struct tegra_clk_init_table picasso_clk_init_table[] = {
 	/* name		parent		rate		enabled */
+	{ "clk_m",	NULL,	12000000,	true},
+	{ "pll_c",	"clk_m",	600000000,	true},
+	{ "pll_p",	"clk_m",	216000000,	true},
+	{ "uartb",	"pll_p",	216000000,	true},
+	{ "uartc",	"pll_c",	600000000,	true},
 	{ "uartd",	"pll_p",	216000000,	true},
 	{ "blink",	"clk_32k",	32768,		true},
 	{ "pll_a",	NULL,		11289600,	true},
@@ -221,19 +229,16 @@ static struct mxt_platform_data mxt_platform_data = {
 static struct i2c_board_info mxt_device = {
 	I2C_BOARD_INFO("atmel_mxt_ts", 0x5b),
 	.platform_data = &mxt_platform_data,
-	.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_TS_IRQ),
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MXT_IRQ),
 };
 
 static void __init picasso_touch_init(void) {
-	tegra_gpio_enable(PICASSO_GPIO_TS_IRQ);
-	gpio_request(PICASSO_GPIO_TS_IRQ, "atmel_touch_chg");
+	gpio_request(TEGRA_GPIO_MXT_IRQ, "atmel_touch_chg");
+	gpio_request(TEGRA_GPIO_VENTANA_TS_RST, "atmel_touch_reset");
 
-	tegra_gpio_enable(PICASSO_GPIO_TS_RESET);
-	gpio_request(PICASSO_GPIO_TS_RESET, "atmel_touch_reset");
-
-	gpio_set_value(PICASSO_GPIO_TS_RESET, 0);
+	gpio_set_value(TEGRA_GPIO_VENTANA_TS_RST, 0);
 	msleep(1);
-	gpio_set_value(PICASSO_GPIO_TS_RESET, 1);
+	gpio_set_value(TEGRA_GPIO_VENTANA_TS_RST, 1);
 	msleep(100);
 
 	i2c_register_board_info(0, &mxt_device, 1);
@@ -251,49 +256,45 @@ static struct resource picasso_power_resources[] = {
 		.name = "ac",
 		.flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE |
 		IORESOURCE_IRQ_LOWEDGE,
-		.start = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_AC_DETECT_IRQ),
-		.end = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_AC_DETECT_IRQ),
+		.start = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_AC_ONLINE),
+		.end = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_AC_ONLINE),
 	},
 };
 
 static int picasso_is_ac_online(void)
 {
-	return !gpio_get_value(PICASSO_GPIO_AC_DETECT_IRQ);
+	return !gpio_get_value(TEGRA_GPIO_AC_ONLINE);
 }
 
 static void picasso_set_charge(int flags)
 {
-	gpio_direction_output(PICASSO_GPIO_CHARGE_DISABLE, !flags);
+	gpio_direction_output(TEGRA_GPIO_VENTANA_DISABLE_CHARGER, !flags);
 }
 
 static int picasso_power_init(struct device *dev)
 {
 	int rc = 0;
 
-	rc = gpio_request(PICASSO_GPIO_CHARGE_DISABLE, "Charger Disable");
+	rc = gpio_request(TEGRA_GPIO_VENTANA_DISABLE_CHARGER, "Charger Disable");
 	if (rc)
 		goto err_chg;
 
-	rc = gpio_request(PICASSO_GPIO_AC_DETECT_IRQ, "Charger Detection");
+	rc = gpio_request(TEGRA_GPIO_AC_ONLINE, "Charger Detection");
 	if (rc)
 		goto err_ac;
 
-	tegra_gpio_enable(PICASSO_GPIO_CHARGE_DISABLE);
-	tegra_gpio_enable(PICASSO_GPIO_AC_DETECT_IRQ);
 	return 0;
 
 err_ac:
-	gpio_free(PICASSO_GPIO_CHARGE_DISABLE);
+	gpio_free(TEGRA_GPIO_VENTANA_DISABLE_CHARGER);
 err_chg:
 	return rc;
 }
 
 static void picasso_power_exit(struct device *dev)
 {
-	gpio_free(PICASSO_GPIO_CHARGE_DISABLE);
-	gpio_free(PICASSO_GPIO_AC_DETECT_IRQ);
-	tegra_gpio_disable(PICASSO_GPIO_AC_DETECT_IRQ);
-	tegra_gpio_disable(PICASSO_GPIO_CHARGE_DISABLE);
+	gpio_free(TEGRA_GPIO_VENTANA_DISABLE_CHARGER);
+	gpio_free(TEGRA_GPIO_AC_ONLINE);
 }
 
 static struct pda_power_pdata picasso_power_data = {
@@ -323,7 +324,7 @@ static struct tegra_wm8903_platform_data picasso_audio_pdata = {
 	.gpio_hp_mute		= -1,
 	.gpio_hp_det		= PICASSO_GPIO_HP_DETECT,
 	.gpio_int_mic_en	= PICASSO_GPIO_MIC_EN_INT,
-	.gpio_ext_mic_en	= PICASSO_GPIO_MIC_EN_EXT,
+	.gpio_ext_mic_en	= TEGRA_GPIO_VENTANA_EN_MIC_EXT,
 };
 
 static struct platform_device picasso_audio_device = {
@@ -348,25 +349,13 @@ static struct wm8903_platform_data picasso_wm8903_pdata = {
 
 static struct i2c_board_info __initdata wm8903_device = {
 	I2C_BOARD_INFO("wm8903", 0x1a),
-	.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_WM8903_IRQ),
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_WM8903_IRQ),
 	.platform_data = &picasso_wm8903_pdata,
 };
 
 static void __init picasso_sound_init(void) {
-	int rc;
-	rc = gpio_request(PICASSO_GPIO_WM8903_IRQ, "wm8903 irq");
-	if (rc) {
-		printk(KERN_ERR "%s: unable to request wm8903 gpio\n", __func__);
-	}
-	else {
-		tegra_gpio_enable(PICASSO_GPIO_WM8903_IRQ);
-		tegra_gpio_enable(PICASSO_GPIO_HP_DETECT);
-		tegra_gpio_enable(PICASSO_GPIO_MIC_EN_INT);
-		tegra_gpio_enable(PICASSO_GPIO_MIC_EN_EXT);
-		gpio_direction_input(PICASSO_GPIO_WM8903_IRQ);
-		i2c_register_board_info(0, &wm8903_device, 1);
-		platform_device_register(&picasso_audio_device);
-	}
+	i2c_register_board_info(0, &wm8903_device, 1);
+	platform_device_register(&picasso_audio_device);
 }
 
 /******************************************************************************
@@ -446,12 +435,12 @@ static struct nct1008_platform_data ventana_nct1008_pdata = {
 static struct i2c_board_info __initdata picasso_i2c4_board_info[] = {
 	{
 		I2C_BOARD_INFO("nct1008", 0x4C),
-		.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_NCT1008),
+		.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_NCT1008_THERM2_IRQ),
 		.platform_data = &ventana_nct1008_pdata,
 	},
 	{
 		I2C_BOARD_INFO("ak8975", 0x0c),
-		.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_AKM8975_IRQ),
+		.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MAGNETOMETER),
 	},
 };
 
@@ -466,13 +455,9 @@ static struct i2c_board_info __initdata tf101_asusec = {
 
 
 static void __init picasso_sensors_init(void) {
-	gpio_request(PICASSO_GPIO_NCT1008, "nct1008");
-	tegra_gpio_enable(PICASSO_GPIO_NCT1008);
-	gpio_direction_input(PICASSO_GPIO_NCT1008);
+	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "nct1008");
+	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
 	
-	//The i2c driver will request the gpio.. uhh..
-	tegra_gpio_enable(PICASSO_GPIO_AKM8975_IRQ);
-
 	//i2c_register_board_info(2, &picasso_ec, 1);
 	i2c_register_board_info(2, &tf101_asusec, 1);
 
@@ -544,20 +529,12 @@ static struct platform_device picasso_keys_device = {
 	},
 };
 
-static void picasso_keys_init(void)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(picasso_keys); i++)
-		tegra_gpio_enable(picasso_keys[i].gpio);
-}
-
 /******************************************************************************
  * Bluetooth rfkill
  *****************************************************************************/
 static struct rfkill_gpio_platform_data bt_rfkill_platform_data = {
 	.name		= "bt_rfkill",
-	.reset_gpio	= PICASSO_GPIO_nBT_SHUTDOWN,
+	.reset_gpio	= TEGRA_GPIO_BT_RESET,
 	.power_clk_name	= "blink",
 	.type		= RFKILL_TYPE_BLUETOOTH,
 };
@@ -576,14 +553,14 @@ static struct platform_device bt_rfkill_device = {
 static struct tegra_sdhci_platform_data tegra_sdhci_platform_data1 = {
 	.cd_gpio = -1,
 	.wp_gpio = -1,
-	.power_gpio = PICASSO_GPIO_WLAN_RESET,
+	.power_gpio = TEGRA_GPIO_WLAN_POWER,
 	.pm_flags = MMC_PM_KEEP_POWER,
 };
 
 static struct tegra_sdhci_platform_data tegra_sdhci_platform_data3 = {
-	.cd_gpio = PICASSO_GPIO_SDHCI2_CD,
+	.cd_gpio = TEGRA_GPIO_SD2_CD,
 	.wp_gpio = -1,
-	.power_gpio = PICASSO_GPIO_SDHCI2_PWR,
+	.power_gpio = TEGRA_GPIO_SD2_POWER,
 };
 
 static struct tegra_sdhci_platform_data tegra_sdhci_platform_data4 = {
@@ -591,11 +568,46 @@ static struct tegra_sdhci_platform_data tegra_sdhci_platform_data4 = {
 	.wp_gpio = -1,
 	.power_gpio = -1,
 };
+
+/******************************************************************************
+ * Suspend
+ *****************************************************************************/
+static struct tegra_suspend_platform_data picasso_suspend_data = {
+	/*
+	 * Check power on time and crystal oscillator start time
+	 * for appropriate settings.
+	 */
+	.cpu_timer = 2000,
+	.cpu_off_timer = 100,
+	.suspend_mode = TEGRA_SUSPEND_LP0,
+	.core_timer = 0x7e7e,
+	.core_off_timer = 0xf,
+	.separate_req = true,
+	.corereq_high = false,
+	.sysclkreq_high = true,
+	.wake_enb =
+		TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_GPIO_PC7 | TEGRA_WAKE_USB1_VBUS |
+		TEGRA_WAKE_GPIO_PV2 | TEGRA_WAKE_GPIO_PS0,
+	.wake_high = TEGRA_WAKE_GPIO_PC7,
+	.wake_low = TEGRA_WAKE_GPIO_PV2,
+	.wake_any =
+		TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_USB1_VBUS | TEGRA_WAKE_GPIO_PS0,
+};
+
+static void __init picasso_suspend_init(void) {
+	/* A03 (but not A03p) chips do not support LP0 */
+	if (tegra_get_revision() == TEGRA_REVISION_A03)
+		picasso_suspend_data.suspend_mode = TEGRA_SUSPEND_LP1;
+	tegra_init_suspend(&picasso_suspend_data);
+}
+
 /******************************************************************************
  * Platform devices
  *****************************************************************************/
 static struct platform_device *picasso_devices[] __initdata = {
 	&debug_uart,
+	&tegra_uartb_device,
+	&tegra_uartc_device,
 	&tegra_pmu_device,
 	&tegra_gart_device,
 	&tegra_aes_device,
@@ -616,6 +628,20 @@ static void __init tegra_picasso_reserve(void)
 	tegra_reserve(SZ_128M - (12 << 20), SZ_8M, SZ_16M);
 }
 
+static void __init tegra_limit_wifi_clock(void) {
+	/* Temporary hack to keep SDIO for wifi capped at 43.2MHz due to
+	 * stability issues with brcmfmac at 48MHz.
+	 */
+	struct clk *c, *p;
+	c = tegra_get_clock_by_name("sdmmc1");
+	p = tegra_get_clock_by_name("pll_p");
+	if (c && p) {
+		clk_set_parent(c, p);
+		clk_set_rate(c, 43200000);
+		clk_enable(c);
+	}
+}
+
 static void __init tegra_picasso_init(void)
 {
 	picasso_pinmux_init();
@@ -624,15 +650,16 @@ static void __init tegra_picasso_init(void)
 	tegra_sdhci_device1.dev.platform_data = &tegra_sdhci_platform_data1;
 	tegra_sdhci_device3.dev.platform_data = &tegra_sdhci_platform_data3;
 	tegra_sdhci_device4.dev.platform_data = &tegra_sdhci_platform_data4;
+	picasso_suspend_init();
 
 	platform_add_devices(picasso_devices, ARRAY_SIZE(picasso_devices));
 
+	tegra_limit_wifi_clock();
 	picasso_emc_init();
 	picasso_i2c_init();
 	picasso_sensors_init();
 	picasso_regulator_init();
 	picasso_usb_init();
-	picasso_keys_init();
 	picasso_panel_init();
 	picasso_touch_init();
 	picasso_sound_init();

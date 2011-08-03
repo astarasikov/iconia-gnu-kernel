@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux/arm 2.6.38.3 Kernel Configuration
-# Thu Jul 21 17:33:15 2011
+# Sun Jul 24 00:43:33 2011
 #
 CONFIG_ARM=y
 CONFIG_HAVE_PWM=y
@@ -287,6 +287,7 @@ CONFIG_ARCH_TEGRA_2x_SOC=y
 # Tegra board type
 #
 # CONFIG_MACH_AEBL is not set
+# CONFIG_MACH_ASYMPTOTE is not set
 # CONFIG_MACH_HARMONY is not set
 # CONFIG_MACH_VENTANA is not set
 CONFIG_MACH_PICASSO=y
@@ -421,7 +422,7 @@ CONFIG_ALIGNMENT_TRAP=y
 # CONFIG_USE_OF is not set
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="nvmem=64M@960M mem=1024M@0M vmalloc=256M lp0_vec=8192@0x1840c000 console=tty0 usbcore.old_scheme_first=1 root=/dev/mmcblk1p2 rootwait rootfstype=ext4"
+CONFIG_CMDLINE="nvmem=128M@384M mem=1024M@0M vmalloc=256M lp0_vec=8192@0x1840c000 console=tty0 usbcore.old_scheme_first=1 root=/dev/mmcblk1p2 rootwait rootfstype=ext4"
 CONFIG_CMDLINE_FORCE=y
 # CONFIG_XIP_KERNEL is not set
 # CONFIG_KEXEC is not set
@@ -923,7 +924,7 @@ CONFIG_SERIAL_8250_RUNTIME_UARTS=4
 #
 # Non-8250 serial port support
 #
-# CONFIG_SERIAL_TEGRA is not set
+CONFIG_SERIAL_TEGRA=y
 # CONFIG_SERIAL_MAX3100 is not set
 # CONFIG_SERIAL_MAX3107 is not set
 CONFIG_SERIAL_CORE=y

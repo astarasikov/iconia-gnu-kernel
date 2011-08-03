@@ -22,14 +22,12 @@
 #include <linux/regulator/machine.h>
 #include <linux/mfd/tps6586x.h>
 #include <linux/gpio.h>
-#include <mach/suspend.h>
 #include <linux/io.h>
 
 #include <mach/iomap.h>
 #include <mach/irqs.h>
 
 #include "gpio-names.h"
-#include "fuse.h"
 #include "power.h"
 #include "wakeups-t2.h"
 #include "board.h"
@@ -178,47 +176,21 @@ static struct i2c_board_info __initdata picasso_regulators[] = {
 	 },
 };
 
-static struct tegra_suspend_platform_data picasso_suspend_data = {
-	/*
-	 * Check power on time and crystal oscillator start time
-	 * for appropriate settings.
-	 */
-	.cpu_timer = 2000,
-	.cpu_off_timer = 100,
-	.suspend_mode = TEGRA_SUSPEND_LP0,
-	.core_timer = 0x7e7e,
-	.core_off_timer = 0xf,
-	.separate_req = true,
-	.corereq_high = false,
-	.sysclkreq_high = true,
-	.wake_enb =
-		TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_GPIO_PC7 | TEGRA_WAKE_USB1_VBUS |
-		TEGRA_WAKE_GPIO_PV2 | TEGRA_WAKE_GPIO_PS0,
-	.wake_high = TEGRA_WAKE_GPIO_PC7,
-	.wake_low = TEGRA_WAKE_GPIO_PV2,
-	.wake_any =
-		TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_USB1_VBUS | TEGRA_WAKE_GPIO_PS0,
-};
-
 int __init picasso_regulator_init(void)
 {
 	void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
-	void __iomem *chip_id = IO_ADDRESS(TEGRA_APB_MISC_BASE) + 0x804;
 	u32 pmc_ctrl;
-	u32 minor;
-
-	minor = (readl(chip_id) >> 16) & 0xf;
-	/* A03 (but not A03p) chips do not support LP0 */
-	if (tegra_get_revision() == TEGRA_REVISION_A03)
-		picasso_suspend_data.suspend_mode = TEGRA_SUSPEND_LP1;
 
 	/* configure the power management controller to trigger PMU
 	 * interrupts when low */
 	pmc_ctrl = readl(pmc + PMC_CTRL);
 	writel(pmc_ctrl | PMC_CTRL_INTR_LOW, pmc + PMC_CTRL);
-	i2c_register_board_info(4, picasso_regulators, 1);
-	tegra_init_suspend(&picasso_suspend_data);
 
+	regulator_has_full_constraints();
+	/* set initial_mode to MODE_FAST for SM1 */
+	reg_sm1_data.constraints.initial_mode = REGULATOR_MODE_FAST;
+
+	i2c_register_board_info(4, picasso_regulators, 1);
 	return 0;
 }
 

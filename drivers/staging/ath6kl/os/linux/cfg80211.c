@@ -24,8 +24,13 @@
 #include <linux/wireless.h>
 #include <linux/ieee80211.h>
 #include <net/cfg80211.h>
+#include <net/netlink.h>
+#include <linux/mmc/pm.h>
+#include <linux/mmc/sdio_func.h>
 
 #include "ar6000_drv.h"
+
+#include "../../hif/sdio/linux_sdio/include/hif_internal.h"
 
 
 extern A_WAITQUEUE_HEAD arEvent;
@@ -1457,6 +1462,159 @@ ar6k_cfg80211_leave_ibss(struct wiphy *wiphy, struct net_device *dev)
     return 0;
 }
 
+#ifdef CONFIG_NL80211_TESTMODE
+enum ar6k_testmode_attr {
+	__AR6K_TM_ATTR_INVALID	= 0,
+	AR6K_TM_ATTR_CMD	= 1,
+	AR6K_TM_ATTR_DATA	= 2,
+
+	/* keep last */
+	__AR6K_TM_ATTR_AFTER_LAST,
+	AR6K_TM_ATTR_MAX	= __AR6K_TM_ATTR_AFTER_LAST - 1
+};
+
+enum ar6k_testmode_cmd {
+	AR6K_TM_CMD_TCMD		= 0,
+	AR6K_TM_CMD_RX_REPORT		= 1,
+};
+
+#define AR6K_TM_DATA_MAX_LEN 5000
+
+static const struct nla_policy ar6k_testmode_policy[AR6K_TM_ATTR_MAX + 1] = {
+	[AR6K_TM_ATTR_CMD] = { .type = NLA_U32 },
+	[AR6K_TM_ATTR_DATA] = { .type = NLA_BINARY,
+				.len = AR6K_TM_DATA_MAX_LEN },
+};
+
+void ar6000_testmode_rx_report_event(struct ar6_softc *ar, void *buf,
+				     int buf_len)
+{
+	if (down_interruptible(&ar->arSem))
+		return;
+
+	kfree(ar->tcmd_rx_report);
+
+	ar->tcmd_rx_report = kmemdup(buf, buf_len, GFP_KERNEL);
+	ar->tcmd_rx_report_len = buf_len;
+
+	up(&ar->arSem);
+
+	wake_up(&arEvent);
+}
+
+static int ar6000_testmode_rx_report(struct ar6_softc *ar, void *buf,
+				     int buf_len, struct sk_buff *skb)
+{
+	int ret = 0;
+	long left;
+
+	if (down_interruptible(&ar->arSem))
+		return -ERESTARTSYS;
+
+	if (ar->arWmiReady == false) {
+		ret = -EIO;
+		goto out;
+	}
+
+	if (ar->bIsDestroyProgress) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	WARN_ON(ar->tcmd_rx_report != NULL);
+	WARN_ON(ar->tcmd_rx_report_len > 0);
+
+	if (wmi_test_cmd(ar->arWmi, buf, buf_len) < 0) {
+		up(&ar->arSem);
+		return -EIO;
+	}
+
+	left = wait_event_interruptible_timeout(arEvent,
+					       ar->tcmd_rx_report != NULL,
+					       wmitimeout * HZ);
+
+	if (left == 0) {
+		ret = -ETIMEDOUT;
+		goto out;
+	} else if (left < 0) {
+		ret = left;
+		goto out;
+	}
+
+	if (ar->tcmd_rx_report == NULL || ar->tcmd_rx_report_len == 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	NLA_PUT(skb, AR6K_TM_ATTR_DATA, ar->tcmd_rx_report_len,
+		ar->tcmd_rx_report);
+
+	kfree(ar->tcmd_rx_report);
+	ar->tcmd_rx_report = NULL;
+
+out:
+	up(&ar->arSem);
+
+	return ret;
+
+nla_put_failure:
+	ret = -ENOBUFS;
+	goto out;
+}
+
+static int ar6k_testmode_cmd(struct wiphy *wiphy, void *data, int len)
+{
+	struct ar6_softc *ar = wiphy_priv(wiphy);
+	struct nlattr *tb[AR6K_TM_ATTR_MAX + 1];
+	int err, buf_len, reply_len;
+	struct sk_buff *skb;
+	void *buf;
+
+	err = nla_parse(tb, AR6K_TM_ATTR_MAX, data, len,
+			ar6k_testmode_policy);
+	if (err)
+		return err;
+
+	if (!tb[AR6K_TM_ATTR_CMD])
+		return -EINVAL;
+
+	switch (nla_get_u32(tb[AR6K_TM_ATTR_CMD])) {
+	case AR6K_TM_CMD_TCMD:
+		if (!tb[AR6K_TM_ATTR_DATA])
+			return -EINVAL;
+
+		buf = nla_data(tb[AR6K_TM_ATTR_DATA]);
+		buf_len = nla_len(tb[AR6K_TM_ATTR_DATA]);
+
+		wmi_test_cmd(ar->arWmi, buf, buf_len);
+
+		return 0;
+
+		break;
+	case AR6K_TM_CMD_RX_REPORT:
+		if (!tb[AR6K_TM_ATTR_DATA])
+			return -EINVAL;
+
+		buf = nla_data(tb[AR6K_TM_ATTR_DATA]);
+		buf_len = nla_len(tb[AR6K_TM_ATTR_DATA]);
+
+		reply_len = nla_total_size(AR6K_TM_DATA_MAX_LEN);
+		skb = cfg80211_testmode_alloc_reply_skb(wiphy, reply_len);
+		if (!skb)
+			return -ENOMEM;
+
+		err = ar6000_testmode_rx_report(ar, buf, buf_len, skb);
+		if (err < 0) {
+			kfree_skb(skb);
+			return err;
+		}
+
+		return cfg80211_testmode_reply(skb);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+#endif
 
 static const
 u32 cipher_suites[] = {
@@ -1611,6 +1769,87 @@ static int ar6k_get_station(struct wiphy *wiphy, struct net_device *dev,
 	return 0;
 }
 
+static int ar6k_set_pmksa(struct wiphy *wiphy, struct net_device *netdev,
+			  struct cfg80211_pmksa *pmksa)
+{
+	struct ar6_softc *ar = ar6k_priv(netdev);
+	return wmi_setPmkid_cmd(ar->arWmi, pmksa->bssid, pmksa->pmkid, true);
+}
+
+static int ar6k_del_pmksa(struct wiphy *wiphy, struct net_device *netdev,
+			  struct cfg80211_pmksa *pmksa)
+{
+	struct ar6_softc *ar = ar6k_priv(netdev);
+	return wmi_setPmkid_cmd(ar->arWmi, pmksa->bssid, pmksa->pmkid, false);
+}
+
+static int ar6k_flush_pmksa(struct wiphy *wiphy, struct net_device *netdev)
+{
+	struct ar6_softc *ar = ar6k_priv(netdev);
+	if (ar->arConnected)
+		return wmi_setPmkid_cmd(ar->arWmi, ar->arBssid, NULL, false);
+	return 0;
+}
+
+#ifdef CONFIG_PM
+static int ar6k_cfg80211_suspend(struct wiphy *wiphy,
+				 struct cfg80211_wowlan *wow)
+{
+	struct ar6_softc *ar = wiphy_priv(wiphy);
+	struct hif_device *hif_dev = ar->arHifDevice;
+	struct sdio_func *func = hif_dev->func;
+	mmc_pm_flag_t flags;
+	int ret;
+
+	flags = sdio_get_host_pm_caps(func);
+
+	if (!(flags & MMC_PM_KEEP_POWER))
+		/* as host doesn't support keep power we need to bail out */
+		return -EINVAL;
+
+	ret = sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
+
+	if (ret) {
+		printk(KERN_ERR "ath6kl: set sdio pm flags failed: %d\n",
+		       ret);
+		return ret;
+	}
+
+	switch (ar->smeState) {
+	case SME_CONNECTING:
+		cfg80211_connect_result(ar->arNetDev, ar->arBssid, NULL, 0,
+					NULL, 0,
+					WLAN_STATUS_UNSPECIFIED_FAILURE,
+					GFP_KERNEL);
+		break;
+	case SME_CONNECTED:
+	default:
+		/*
+		 * FIXME: oddly enough smeState is in DISCONNECTED during
+		 * suspend, why? Need to send disconnected event in that
+		 * state.
+		 */
+		cfg80211_disconnected(ar->arNetDev, 0, NULL, 0, GFP_KERNEL);
+		break;
+	}
+
+	if (ar->arConnected || ar->arConnectPending)
+		wmi_disconnect_cmd(ar->arWmi);
+
+	ar->smeState = SME_DISCONNECTED;
+
+	/* disable scanning */
+	if (wmi_scanparams_cmd(ar->arWmi, 0xFFFF, 0, 0, 0, 0, 0, 0, 0,
+			       0, 0) != 0)
+		printk(KERN_WARNING "ath6kl: failed to disable scan "
+		       "during suspend\n");
+
+	ar6k_cfg80211_scanComplete_event(ar, A_ECANCELED);
+
+	return 0;
+}
+#endif
+
 static struct
 cfg80211_ops ar6k_cfg80211_ops = {
     .change_virtual_intf = ar6k_cfg80211_change_iface,
@@ -1632,6 +1871,13 @@ cfg80211_ops ar6k_cfg80211_ops = {
     .join_ibss = ar6k_cfg80211_join_ibss,
     .leave_ibss = ar6k_cfg80211_leave_ibss,
     .get_station = ar6k_get_station,
+    .set_pmksa = ar6k_set_pmksa,
+    .del_pmksa = ar6k_del_pmksa,
+    .flush_pmksa = ar6k_flush_pmksa,
+    CFG80211_TESTMODE_CMD(ar6k_testmode_cmd)
+#ifdef CONFIG_PM
+    .suspend = ar6k_cfg80211_suspend,
+#endif
 };
 
 struct wireless_dev *

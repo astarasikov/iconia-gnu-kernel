@@ -46,13 +46,6 @@ static int picasso_sys_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int picasso_sys_remove(struct platform_device *pdev)
-{
-	pm_power_off = NULL;
-	priv = NULL;
-	return 0;
-}
-
 #if CONFIG_PM
 static int picasso_sys_suspend(struct platform_device *pdev, pm_message_t mesg)
 {
@@ -70,7 +63,6 @@ static int picasso_sys_resume(struct platform_device *pdev)
 
 static struct platform_driver picasso_sys_driver = {
 	.probe		= picasso_sys_probe,
-	.remove		= picasso_sys_remove,
 	.suspend	= picasso_sys_suspend,
 	.resume		= picasso_sys_resume,
 	.driver		= {

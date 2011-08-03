@@ -75,7 +75,9 @@ static __initdata struct tegra_clk_init_table common_clk_init_table[] = {
 	{ "pll_p_out2",	"pll_p",	48000000,	true },
 	{ "pll_p_out3",	"pll_p",	72000000,	true },
 	{ "pll_m_out1",	"pll_m",	120000000,	true },
-	{ "sclk",	"pll_m_out1",	120000000,	true },
+	{ "pll_c",	"clk_m",	600000000,	true },
+	{ "pll_c_out1",	"pll_c",	120000000,	true },
+	{ "sclk",	"pll_c_out1",	120000000,	true },
 	{ "hclk",	"sclk",		120000000,	true },
 	{ "pclk",	"hclk",		60000000,	true },
 	{ "pll_x",	NULL,		0,		true },
@@ -85,6 +87,15 @@ static __initdata struct tegra_clk_init_table common_clk_init_table[] = {
 	{ "timer",	NULL,		0,		true },
 	{ "kfuse",	NULL,		0,		true },
 	{ "rtc",	NULL,		0,		true },
+
+	/* reparent some clocks originally on pll_m */
+	{ "3d",		"pll_c",	0,		false},
+	{ "2d",		"pll_c",	0,		false},
+	{ "vi",		"pll_c",	0,		false},
+	{ "vi_sensor",	"pll_c",	0,		false},
+	{ "epp",	"pll_c",	0,		false},
+	{ "mpe",	"pll_c",	0,		false},
+	{ "vde",	"pll_c",	0,		false},
 
 	/* set frequencies of some device clocks */
 	{ "pll_u",	"clk_m",	480000000,	false },

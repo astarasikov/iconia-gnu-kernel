@@ -171,13 +171,6 @@ int ar6000_update_wlan_pwr_state(struct ar6_softc *ar, AR6000_WLAN_STATE state, 
 int ar6000_set_wlan_state(struct ar6_softc *ar, AR6000_WLAN_STATE state);
 int ar6000_set_bt_hw_state(struct ar6_softc *ar, u32 state);
 
-#ifdef CONFIG_PM
-int ar6000_suspend_ev(void *context);
-int ar6000_resume_ev(void *context);
-int ar6000_power_change_ev(void *context, u32 config);
-void ar6000_check_wow_status(struct ar6_softc *ar, struct sk_buff *skb, bool isEvent);
-#endif
-
 #ifdef CONFIG_AP_VIRTUAL_ADAPTER_SUPPORT
 int ar6000_add_ap_interface(struct ar6_softc *ar, char *ifname);
 int ar6000_remove_ap_interface(struct ar6_softc *ar);

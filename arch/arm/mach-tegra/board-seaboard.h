@@ -35,7 +35,8 @@
 #define TEGRA_GPIO_BACKLIGHT		TEGRA_GPIO_PD4
 #define TEGRA_GPIO_LVDS_SHUTDOWN	TEGRA_GPIO_PB2
 #define TEGRA_GPIO_BACKLIGHT_PWM	TEGRA_GPIO_PU5
-#define TEGRA_GPIO_BACKLIGHT_VDD	TEGRA_GPIO_PW0
+#define SEABOARD_GPIO_BACKLIGHT_VDD	TEGRA_GPIO_PW0
+#define ASYMPTOTE_GPIO_BACKLIGHT_VDD	TEGRA_GPIO_PU5
 #define TEGRA_GPIO_EN_VDD_PNL		TEGRA_GPIO_PC6
 #define TEGRA_GPIO_MAGNETOMETER		TEGRA_GPIO_PN5
 #define TEGRA_GPIO_NCT1008_THERM2_IRQ	TEGRA_GPIO_PN6
@@ -50,7 +51,9 @@
 #define TEGRA_GPIO_MAX98095_IRQ		TEGRA_GPIO_PX3
 #define TEGRA_GPIO_WM8903_IRQ		TEGRA_GPIO_PX3
 #define TEGRA_GPIO_CYTP_INT		TEGRA_GPIO_PW2
-#define TEGRA_GPIO_MXT_RST		TEGRA_GPIO_PV7
+#define SEABOARD_GPIO_MXT_RST		TEGRA_GPIO_PV7
+#define ASYMPTOTE_GPIO_MXT_RST          TEGRA_GPIO_PK3
+#define ASYMPTOTE_GPIO_MXT_SLEEP	TEGRA_GPIO_PK4
 #define TEGRA_GPIO_MXT_IRQ		TEGRA_GPIO_PV6
 #define TEGRA_GPIO_HDMI_ENB		TEGRA_GPIO_PV5
 #define TEGRA_GPIO_KAEN_HP_MUTE		TEGRA_GPIO_PA5
@@ -61,7 +64,23 @@
 #define TEGRA_GPIO_RESET		TEGRA_GPIO_PG3
 #define TEGRA_GPIO_W_DISABLE		TEGRA_GPIO_PU4
 
-#define TPS_GPIO_BASE			TEGRA_NR_GPIOS
+/*
+ * GPIO differences between Ventana and Seaboard:
+ *
+ *			Ventana	Seaboard	Comment
+ * TS_RESET:		PQ7	PV7		not used
+ * DISABLE_CHARGER:	PR6	PX2		extra but no harm
+ * CAM_IO_INT:		PR7	PK5		not used
+ * WI_HOST_WAKE:	PS0	PW1		not used
+ * EN_MIC_EXT:		PX1	none		ext mic.
+ * HEAD_DET:		PW2	PX1		not used
+ */
+#define TEGRA_GPIO_VENTANA_TS_RST		TEGRA_GPIO_PQ7
+#define TEGRA_GPIO_VENTANA_DISABLE_CHARGER	TEGRA_GPIO_PR6
+#define TEGRA_GPIO_VENTANA_CAM_IO_INT		TEGRA_GPIO_PR7
+#define TEGRA_GPIO_VENTANA_WI_HOST_WAKE		TEGRA_GPIO_PS0
+#define TEGRA_GPIO_VENTANA_EN_MIC_EXT		TEGRA_GPIO_PX1
+#define TEGRA_GPIO_VENTANA_HEAD_DET		TEGRA_GPIO_PW2
 
 #define TPS_GPIO_WWAN_PWR		(TPS_GPIO_BASE + 2)
 
@@ -106,6 +125,20 @@ int arthur_panel_init(void);
 #else
 static inline void arthur_emc_init(void) { return; }
 static inline int arthur_panel_init(void) { return 0; }
+#endif
+
+void asymptote_pinmux_init(void);
+#ifdef CONFIG_MACH_ASYMPTOTE
+int asymptote_panel_init(void);
+#else
+static inline int asymptote_panel_init(void) { return 0; }
+#endif
+
+void ventana_pinmux_init(void);
+#ifdef CONFIG_MACH_VENTANA
+void ventana_emc_init(void);
+#else
+static inline void ventana_emc_init(void) { return; }
 #endif
 
 #endif
