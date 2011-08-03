@@ -226,7 +226,13 @@ static struct mxt_platform_data mxt_platform_data = {
 	.config_length	= sizeof(mxt_config_data),
 };
 
-static struct i2c_board_info mxt_device = {
+static struct i2c_board_info mxt_device_picasso = {
+	I2C_BOARD_INFO("atmel_mxt_ts", 0x4c),
+	.platform_data = &mxt_platform_data,
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MXT_IRQ),
+};
+
+static struct i2c_board_info mxt_device_tf101 = {
 	I2C_BOARD_INFO("atmel_mxt_ts", 0x5b),
 	.platform_data = &mxt_platform_data,
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MXT_IRQ),
@@ -241,7 +247,11 @@ static void __init picasso_touch_init(void) {
 	gpio_set_value(TEGRA_GPIO_VENTANA_TS_RST, 1);
 	msleep(100);
 
-	i2c_register_board_info(0, &mxt_device, 1);
+	if(machine_is_picasso())
+		i2c_register_board_info(0, &mxt_device_picasso, 1);
+
+	if(machine_is_tf101())
+		i2c_register_board_info(0, &mxt_device_tf101, 1);
 }
 
 /******************************************************************************
@@ -461,8 +471,11 @@ static void __init picasso_sensors_init(void) {
 	//The i2c driver will request the gpio.. uhh..
 	tegra_gpio_enable(PICASSO_GPIO_AKM8975_IRQ);
 
-	//i2c_register_board_info(2, &picasso_ec, 1);
-	i2c_register_board_info(2, &tf101_asusec, 1);
+	if(machine_is_picasso())
+		i2c_register_board_info(2, &picasso_ec, 1);
+
+	if(machine_is_tf101())
+		i2c_register_board_info(2, &tf101_asusec, 1);
 
 	i2c_register_board_info(4, picasso_i2c4_board_info,
 		ARRAY_SIZE(picasso_i2c4_board_info));
