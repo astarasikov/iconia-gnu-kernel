@@ -47,6 +47,8 @@ static int seaboard_backlight_init(struct device *dev) {
 	if (ret < 0)
 		gpio_free(TEGRA_GPIO_BACKLIGHT);
 
+	gpio_export(TEGRA_GPIO_BACKLIGHT, 0);
+
 	return ret;
 };
 
@@ -413,6 +415,7 @@ static void __init seaboard_common_panel_gpio_init(void)
 
 	gpio_request(TEGRA_GPIO_LVDS_SHUTDOWN, "lvds_shdn");
 	gpio_direction_output(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
+	gpio_export(TEGRA_GPIO_LVDS_SHUTDOWN, 0);
 
 	gpio_request(TEGRA_GPIO_HDMI_HPD, "hdmi_hpd");
 	gpio_direction_input(TEGRA_GPIO_HDMI_HPD);
