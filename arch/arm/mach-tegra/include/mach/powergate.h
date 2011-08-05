@@ -29,6 +29,8 @@
 #define TEGRA_POWERGATE_MPE	6
 #define TEGRA_NUM_POWERGATE	7
 
+struct clk;
+
 int tegra_powergate_power_on(int id);
 int tegra_powergate_power_off(int id);
 bool tegra_powergate_is_powered(int id);
