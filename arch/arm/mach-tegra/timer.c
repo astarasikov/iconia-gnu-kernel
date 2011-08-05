@@ -231,6 +231,9 @@ static void __init tegra_init_timer(void)
 	unsigned long rate = clk_measure_input_freq();
 	int ret;
 
+	printk(KERN_INFO "Initial usec timer %llu\n",
+		tegra_clocksource_read(NULL));
+
 	clk = clk_get_sys("timer", NULL);
 	BUG_ON(IS_ERR(clk));
 	clk_enable(clk);
