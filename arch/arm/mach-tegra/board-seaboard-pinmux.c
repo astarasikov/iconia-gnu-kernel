@@ -266,12 +266,6 @@ static void __init max98095_gpio_init(void)
 
 static void __init wm8903_gpio_init(void)
 {
-	BUG_ON(!machine_is_seaboard() &&
-	       !machine_is_kaen()     &&
-	       !machine_is_aebl()     &&
-	       !machine_is_asymptote() &&
-	       !machine_is_ventana() &&
-		   !machine_is_picasso());
 	sound_codec_gpio_init(TEGRA_GPIO_WM8903_IRQ, "wm8903");
 }
 
