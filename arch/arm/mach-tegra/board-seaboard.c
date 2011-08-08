@@ -67,7 +67,8 @@ static void (*legacy_arm_pm_restart)(char mode, const char *cmd);
 static struct plat_serial8250_port debug_uart_platform_data[] = {
 	{
 		/* Memory and IRQ filled in before registration */
-		.flags		= UPF_BOOT_AUTOCONF,
+		.flags		= UPF_BOOT_AUTOCONF | UPF_FIXED_TYPE,
+		.type		= PORT_TEGRA,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
 		.uartclk	= 216000000,
