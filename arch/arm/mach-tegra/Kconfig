@@ -56,6 +56,10 @@ config MACH_PICASSO
 		bool "Acer Picasso board"
 		help
 			Support for Acer Iconia Tab A500 tablet
+config MACH_TF101
+		bool "Asus TF101 board"
+		help
+			Support for Asus EEPad Transformer tablet
 
 config MACH_KAEN
        bool "Kaen board"

@@ -226,8 +226,14 @@ static struct mxt_platform_data mxt_platform_data = {
 	.config_length	= sizeof(mxt_config_data),
 };
 
-static struct i2c_board_info mxt_device = {
+static struct i2c_board_info mxt_device_picasso = {
 	I2C_BOARD_INFO("atmel_mxt_ts", 0x4c),
+	.platform_data = &mxt_platform_data,
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MXT_IRQ),
+};
+
+static struct i2c_board_info mxt_device_tf101 = {
+	I2C_BOARD_INFO("atmel_mxt_ts", 0x5b),
 	.platform_data = &mxt_platform_data,
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_MXT_IRQ),
 };
@@ -241,7 +247,11 @@ static void __init picasso_touch_init(void) {
 	gpio_set_value(TEGRA_GPIO_VENTANA_TS_RST, 1);
 	msleep(100);
 
-	i2c_register_board_info(0, &mxt_device, 1);
+	if(machine_is_picasso())
+		i2c_register_board_info(0, &mxt_device_picasso, 1);
+
+	if(machine_is_tf101())
+		i2c_register_board_info(0, &mxt_device_tf101, 1);
 }
 
 /******************************************************************************
@@ -448,11 +458,22 @@ static struct i2c_board_info __initdata picasso_ec = {
 	I2C_BOARD_INFO(PICASSO_EC_ID, 0x58),
 };
 
+static struct i2c_board_info __initdata tf101_asusec = {
+	I2C_BOARD_INFO("asusec", 0x19),
+        .irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PS2),
+};
+
+
 static void __init picasso_sensors_init(void) {
 	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "nct1008");
 	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
 	
-	i2c_register_board_info(2, &picasso_ec, 1);
+	if(machine_is_picasso())
+		i2c_register_board_info(2, &picasso_ec, 1);
+
+	if(machine_is_tf101())
+		i2c_register_board_info(2, &tf101_asusec, 1);
+
 	i2c_register_board_info(4, picasso_i2c4_board_info,
 		ARRAY_SIZE(picasso_i2c4_board_info));
 }
@@ -658,6 +679,16 @@ static void __init tegra_picasso_init(void)
 }
 
 MACHINE_START(PICASSO, "picasso")
+	.boot_params    = 0x00000100,
+	.map_io		= tegra_map_common_io,
+	.init_early	= tegra_init_early,
+	.init_irq       = tegra_init_irq,
+	.timer          = &tegra_timer,
+	.reserve		= tegra_picasso_reserve,
+	.init_machine	= tegra_picasso_init,
+MACHINE_END
+
+MACHINE_START(TF101, "tf101")
 	.boot_params    = 0x00000100,
 	.map_io		= tegra_map_common_io,
 	.init_early	= tegra_init_early,
