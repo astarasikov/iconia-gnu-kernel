@@ -69,12 +69,14 @@ static int pin_locked(struct nvmap_client *client, struct nvmap_handle *h)
 	struct tegra_iovmm_area *area;
 	BUG_ON(!h->alloc);
 
+	nvmap_mru_lock(client->share);
 	if (atomic_inc_return(&h->pin) == 1) {
 		if (h->heap_pgalloc && !h->pgalloc.contig) {
-			area = nvmap_handle_iovmm(client, h);
+			area = nvmap_handle_iovmm_locked(client, h);
 			if (!area) {
 				/* no race here, inside the pin mutex */
 				atomic_dec(&h->pin);
+				nvmap_mru_unlock(client->share);
 				return -ENOMEM;
 			}
 			if (area != h->pgalloc.area)
@@ -82,6 +84,7 @@ static int pin_locked(struct nvmap_client *client, struct nvmap_handle *h)
 			h->pgalloc.area = area;
 		}
 	}
+	nvmap_mru_unlock(client->share);
 	return 0;
 }
 
