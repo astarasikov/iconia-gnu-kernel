@@ -271,6 +271,7 @@ static const u32 cros_kbd_keymap[] = {
 	KEY(5, 6, KEY_2),
 	KEY(5, 7, KEY_W),
 
+	KEY(6, 0, KEY_RO),
 	KEY(6, 2, KEY_RIGHTBRACE),
 	KEY(6, 4, KEY_K),
 	KEY(6, 5, KEY_COMMA),
@@ -286,6 +287,7 @@ static const u32 cros_kbd_keymap[] = {
 	KEY(8, 6, KEY_7),
 	KEY(8, 7, KEY_U),
 
+	KEY(9, 2, KEY_102ND),
 	KEY(9, 5, KEY_LEFTSHIFT),
 	KEY(9, 7, KEY_RIGHTSHIFT),
 
@@ -306,6 +308,9 @@ static const u32 cros_kbd_keymap[] = {
 	KEY(11, 7, KEY_O),
 
 	KEY(13, 0, KEY_RIGHTALT),
+	KEY(13, 2, KEY_YEN),
+	KEY(13, 4, KEY_BACKSLASH),
+
 	KEY(13, 6, KEY_LEFTALT),
 
 	KEY(14, 1, KEY_BACKSPACE),
@@ -315,6 +320,8 @@ static const u32 cros_kbd_keymap[] = {
 	KEY(14, 6, KEY_DOWN),
 	KEY(14, 7, KEY_UP),
 
+	KEY(15, 1, KEY_MUHENKAN),
+	KEY(15, 3, KEY_HENKAN),
 	KEY(15, 6, KEY_RIGHT),
 	KEY(15, 7, KEY_LEFT),
 };
