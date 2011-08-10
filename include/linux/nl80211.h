@@ -128,6 +128,9 @@
  * @NL80211_CMD_SET_BEACON: set the beacon on an access point interface
  *	using the %NL80211_ATTR_BEACON_INTERVAL, %NL80211_ATTR_DTIM_PERIOD,
  *	%NL80211_ATTR_BEACON_HEAD and %NL80211_ATTR_BEACON_TAIL attributes.
+ *	Following attributes are provided for drivers that generate full Beacon
+ *	and Probe Response frames internally: %NL80211_ATTR_SSID,
+ *	%NL80211_ATTR_HIDDEN_SSID.
  * @NL80211_CMD_NEW_BEACON: add a new beacon to an access point interface,
  *	parameters are like for %NL80211_CMD_SET_BEACON.
  * @NL80211_CMD_DEL_BEACON: remove the beacon, stop sending it
@@ -889,6 +892,10 @@ enum nl80211_commands {
  *
  * @NL80211_ATTR_SCAN_FLAGS: scan request control flags (u32)
  *
+ * @NL80211_ATTR_HIDDEN_SSID: indicates whether SSID is to be hidden from Beacon
+ *	and Probe Response (when response to wildcard Probe Request); see
+ *	&enum nl80211_hidden_ssid, represented as a u32
+ *
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
  */
@@ -1077,6 +1084,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_WIPHY_ANTENNA_AVAIL_RX,
 
 	NL80211_ATTR_SCAN_FLAGS,
+
+	NL80211_ATTR_HIDDEN_SSID,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -2049,6 +2058,21 @@ enum nl80211_tx_power_setting {
  */
 enum nl80211_scan_flags {
 	NL80211_SCAN_FLAG_TX_ABORT	= 1<<0,
+};
+
+/**
+ * enum nl80211_hidden_ssid - values for %NL80211_ATTR_HIDDEN_SSID
+ * @NL80211_HIDDEN_SSID_NOT_IN_USE: do not hide SSID (i.e., broadcast it in
+ *	Beacon frames)
+ * @NL80211_HIDDEN_SSID_ZERO_LEN: hide SSID by using zero-length SSID element
+ *	in Beacon frames
+ * @NL80211_HIDDEN_SSID_ZERO_CONTENTS: hide SSID by using correct length of SSID
+ *	element in Beacon frames but zero out each byte in the SSID
+ */
+enum nl80211_hidden_ssid {
+	NL80211_HIDDEN_SSID_NOT_IN_USE,
+	NL80211_HIDDEN_SSID_ZERO_LEN,
+	NL80211_HIDDEN_SSID_ZERO_CONTENTS
 };
 
 #endif /* __LINUX_NL80211_H */
