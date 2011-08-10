@@ -458,9 +458,14 @@ static struct i2c_board_info __initdata picasso_ec = {
 	I2C_BOARD_INFO(PICASSO_EC_ID, 0x58),
 };
 
-static struct i2c_board_info __initdata tf101_asusec = {
-	I2C_BOARD_INFO("asusec", 0x19),
-        .irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PS2),
+static struct i2c_board_info __initdata tf101_asusec[] = {
+	{
+		I2C_BOARD_INFO("asusec", 0x19),
+		.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_PS2),
+	},
+	{
+		I2C_BOARD_INFO("bq20z45", 0x0B),
+	},
 };
 
 
@@ -475,7 +480,7 @@ static void __init picasso_sensors_init(void) {
 		i2c_register_board_info(2, &picasso_ec, 1);
 
 	if(machine_is_tf101())
-		i2c_register_board_info(2, &tf101_asusec, 1);
+		i2c_register_board_info(2, tf101_asusec, ARRAY_SIZE(tf101_asusec));
 
 	i2c_register_board_info(4, picasso_i2c4_board_info,
 		ARRAY_SIZE(picasso_i2c4_board_info));
