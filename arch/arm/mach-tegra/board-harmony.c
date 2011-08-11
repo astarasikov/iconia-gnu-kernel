@@ -481,7 +481,7 @@ static struct tegra_suspend_platform_data harmony_suspend = {
 	.suspend_mode = TEGRA_SUSPEND_LP0,
 };
 
-static void __init harmony_wifi_init(void)
+static int __init harmony_wifi_init(void)
 {
 	int gpio_pwr, gpio_rst;
 
@@ -498,6 +498,8 @@ static void __init harmony_wifi_init(void)
 		gpio_direction_output(TEGRA_GPIO_WLAN_PWR_LOW, 1);
 		gpio_direction_output(TEGRA_GPIO_WLAN_RST_LOW, 1);
 	}
+
+	return 0;
 }
 /* make harmony_wifi_init to be invoked at subsys_initcall_sync
  * to ensure the required regulators (LDO3 supply of external
