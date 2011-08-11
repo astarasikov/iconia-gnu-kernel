@@ -743,12 +743,22 @@ struct tegra_board_emc_table aebl_emc[] = {
 	{
 		.table		= aebl_emc_tables_Micron_380Mhz,
 		.table_size	= ARRAY_SIZE(aebl_emc_tables_Micron_380Mhz),
-		.name		= "Micron 380MHz",
+		.name		= "0: Micron 380MHz",
 	},
 	{
 		.table		= aebl_emc_tables_Hynix_380Mhz,
 		.table_size	= ARRAY_SIZE(aebl_emc_tables_Hynix_380Mhz),
-		.name		= "Hynix 380MHz",
+		.name		= "1: Hynix 380MHz",
+	},
+	{
+		.table		= aebl_emc_tables_Micron_380Mhz,
+		.table_size	= ARRAY_SIZE(aebl_emc_tables_Micron_380Mhz),
+		.name		= "2: Micron 380MHz",
+	},
+	{
+		.table		= aebl_emc_tables_Hynix_380Mhz,
+		.table_size	= ARRAY_SIZE(aebl_emc_tables_Hynix_380Mhz),
+		.name		= "3: Hynix 380MHz",
 	},
 };
 
