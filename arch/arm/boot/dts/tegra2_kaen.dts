@@ -4,5 +4,13 @@
 
 / {
         model = "Google Kaen";
-        compatible = "google,kaen", "nvidia,tegra20";
+        compatible = "google,kaen", "nvidia,tegra250";
+
+	sdhci@c8000600 {
+		status = "ok";
+		wlan {
+			compatible = "atheros,ath6kl";
+			atheros,board-id = "SD32";
+		};
+	};
 };
