@@ -485,6 +485,9 @@ static int __init harmony_wifi_init(void)
 {
 	int gpio_pwr, gpio_rst;
 
+	if (!machine_is_harmony())
+	  return 0;
+
 	/* WLAN - Power up (low) and Reset (low) */
 	gpio_pwr = gpio_request(TEGRA_GPIO_WLAN_PWR_LOW, "wlan_pwr");
 	gpio_rst = gpio_request(TEGRA_GPIO_WLAN_RST_LOW, "wlan_rst");
