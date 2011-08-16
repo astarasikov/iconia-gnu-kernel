@@ -105,9 +105,11 @@ void kaen_pinmux_init(void);
 #ifdef CONFIG_MACH_KAEN
 int kaen_sensors_init(void);
 void kaen_emc_init(void);
+int kaen_panel_init(void);
 #else
 static inline int kaen_sensors_init(void) { return 0; }
 static inline void kaen_emc_init(void) { return; }
+static inline int kaen_panel_init(void) { return 0; }
 #endif
 
 void aebl_pinmux_init(void);

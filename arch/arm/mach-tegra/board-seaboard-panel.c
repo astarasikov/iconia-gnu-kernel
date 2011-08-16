@@ -563,3 +563,12 @@ int __init asymptote_panel_init(void)
 	return seaboard_panel_register_devices();
 }
 #endif
+
+#ifdef CONFIG_MACH_KAEN
+int __init kaen_panel_init(void)
+{
+	/* Run kaen's panel backlight at around 210Hz. */
+	seaboard_backlight_data.pwm_period_ns = 4750000;
+	return seaboard_panel_init();
+}
+#endif

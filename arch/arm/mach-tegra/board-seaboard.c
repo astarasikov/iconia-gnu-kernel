@@ -1165,7 +1165,7 @@ static void __init tegra_kaen_init(void)
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
 
 	kaen_common_init();
-	seaboard_panel_init();
+	kaen_panel_init();
 	kaen_emc_init();
 
 	kaen_i2c_register_devices();
