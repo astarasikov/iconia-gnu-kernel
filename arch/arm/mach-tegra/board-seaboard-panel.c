@@ -458,6 +458,10 @@ int __init seaboard_panel_init(void)
 	if (machine_is_aebl() || machine_is_kaen())
 		panel_timings = panel_timings_kaen_aebl;
 
+	/* Run kaen's panel backlight at around 210Hz. */
+	if (machine_is_kaen())
+		seaboard_backlight_data.pwm_period_ns = 4750000;
+
 	gpio_request(TEGRA_GPIO_EN_VDD_PNL, "en_vdd_pnl");
 	gpio_direction_output(TEGRA_GPIO_EN_VDD_PNL, 1);
 
