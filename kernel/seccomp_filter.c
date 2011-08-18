@@ -17,6 +17,7 @@
  * Copyright (C) 2011 The Chromium OS Authors <chromium-os-dev@chromium.org>
  */
 
+#include <linux/capability.h>
 #include <linux/compat.h>
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -26,6 +27,7 @@
 #include <linux/perf_event.h>
 #include <linux/prctl.h>
 #include <linux/seccomp.h>
+#include <linux/security.h>
 #include <linux/seq_file.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -377,6 +379,18 @@ static void seccomp_filters_drop(struct seccomp_filters *filters, int nr)
 	free_event_filter(filter);
 }
 
+static void seccomp_filters_drop_exec(struct seccomp_filters *filters)
+{
+	int nr = __NR_execve;
+	if (has_capability_noaudit(current, CAP_SYS_ADMIN))
+		return;
+#ifdef CONFIG_COMPAT
+	if (filters->flags.compat)
+		nr = __NR_seccomp_execve_32;
+#endif
+	seccomp_filters_drop(filters, nr);
+}
+
 /**
  * seccomp_filters_copy - copies filters from src to dst.
  *
@@ -659,10 +673,6 @@ int seccomp_test_filters(int syscall)
 		goto out;
 	}
 
-	/* execve is never allowed. */
-	if (syscall_is_execve(syscall))
-		goto out;
-
 	filter = btree_lookup32(&filters->tree, syscall);
 	if (!filter)
 		goto out;
@@ -796,6 +806,7 @@ long seccomp_clear_filter(int syscall_nr)
 	if (ret)
 		goto out;
 	seccomp_filters_drop(filters, syscall_nr);
+	seccomp_filters_drop_exec(filters);
 	get_seccomp_filters(filters);  /* simplify the out: path */
 
 	current->seccomp.filters = filters;
@@ -826,9 +837,14 @@ long seccomp_set_filter(int syscall_nr, char *filter)
 {
 	struct seccomp_filters *filters = NULL, *orig_filters = NULL;
 	struct event_filter *ef = NULL;
-	long ret = -EINVAL;
+	long ret = -EPERM;
+
+	/* execve is only allowed for privileged processes. */
+	if (!capable(CAP_SYS_ADMIN) && syscall_is_execve(syscall_nr))
+		goto out;
 
 	mutex_lock(&current->seccomp.filters_guard);
+	ret = -EINVAL;
 	if (!filter)
 		goto out;
 
@@ -865,6 +881,7 @@ long seccomp_set_filter(int syscall_nr, char *filter)
 		ret = seccomp_filters_copy(filters, orig_filters);
 		if (ret)
 			goto out;
+		seccomp_filters_drop_exec(filters);
 	}
 
 	if (!ef)
