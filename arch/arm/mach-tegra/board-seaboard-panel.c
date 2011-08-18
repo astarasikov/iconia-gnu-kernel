@@ -34,6 +34,7 @@
 
 #include "devices.h"
 #include "gpio-names.h"
+#include "board.h"
 #include "board-seaboard.h"
 #include "pm.h"
 
@@ -242,8 +243,6 @@ static struct resource seaboard_disp1_resources[] = {
 	},
 	{
 		.name	= "fbmem",
-		.start	= 0x18012000,
-		.end	= 0x18012000 + 0x402000 - 1, /* enough for 1368*768 16bpp */
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -425,8 +424,6 @@ static struct nvmap_platform_carveout seaboard_carveouts[] = {
 	[1] = {
 		.name		= "generic-0",
 		.usage_mask	= NVMAP_HEAP_CARVEOUT_GENERIC,
-		.base		= 0x18C00000,
-		.size		= SZ_128M - 0xC00000,
 		.buddy_size	= SZ_32K,
 	},
 };
@@ -454,6 +451,10 @@ static struct platform_device *seaboard_gfx_devices[] __initdata = {
 int __init seaboard_panel_init(void)
 {
 	int err;
+	struct resource *res;
+
+	seaboard_carveouts[1].base = tegra_carveout_start;
+	seaboard_carveouts[1].size = tegra_carveout_size;
 
 	if (machine_is_aebl() || machine_is_kaen())
 		panel_timings = panel_timings_kaen_aebl;
@@ -490,12 +491,24 @@ int __init seaboard_panel_init(void)
 
 	err = platform_add_devices(seaboard_gfx_devices,
 				   ARRAY_SIZE(seaboard_gfx_devices));
+	if (err)
+		goto fail;
 
-	if (!err)
-		err = nvhost_device_register(&seaboard_disp1_device);
+	err = nvhost_device_register(&seaboard_disp1_device);
+	if (err)
+		goto fail;
 
-	if (!err)
-		err = nvhost_device_register(&seaboard_disp2_device);
+	res = nvhost_get_resource_byname(&seaboard_disp1_device, IORESOURCE_MEM,
+					 "fbmem");
+	if (!res) {
+		pr_err("Failed to get fbmem resource!\n");
+		err = -ENXIO;
+		goto fail;
+	}
+	res->start = tegra_fb_start;
+	res->end = tegra_fb_start + tegra_fb_size - 1;
+	err = nvhost_device_register(&seaboard_disp2_device);
 
+fail:
 	return err;
 }
