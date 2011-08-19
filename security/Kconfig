@@ -89,6 +89,7 @@ config SECURITY_DMESG_RESTRICT
 config SECCOMP_FILTER
 	bool "Enable seccomp-based system call filtering"
 	select SECCOMP
+	select BTREE
 	depends on HAVE_SECCOMP_FILTER && EXPERIMENTAL
 	help
 	  This kernel feature expands CONFIG_SECCOMP to allow computing
