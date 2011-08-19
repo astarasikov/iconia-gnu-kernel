@@ -76,9 +76,9 @@ PR_SET_SECCOMP_FILTER:
 	call will append the supplied string to any existing filters.
 	Filter construction looks as follows:
 		(Nothing) + "fd == 1 || fd == 2" => fd == 1 || fd == 2
-		... + "fd != 2" => (fd == 1 || fd == 2) && fd != 2
+		... + "fd != 2" => (fd == 1 || fd == 2) && (fd != 2)
 		... + "size < 100" =>
-			((fd == 1 || fd == 2) && fd != 2) && size < 100
+		    ((fd == 1 || fd == 2) && (fd != 2)) && (size < 100)
 	If there is no filter and the seccomp mode has already
 	transitioned to filtering, additions cannot be made.  Filters
 	may only be added that reduce the available kernel surface.
@@ -150,6 +150,39 @@ may be done as follows:
   syscall(__NR_exit, 0);
 
 
+Inheritance
+-----------
+
+Changing the availability of the kernel ABI at runtime runs the risk of
+providing access to normally unreachable code paths in normal
+applications.  To avoid the pitfalls that accompany this risk, seccomp
+filters inheritance is restricted.
+
+In general, filters can be inherited across fork/clone, but only when
+they are active (e.g., PR_SET_SECCOMP has been set to 13) and not prior
+to use.  Inheriting only active filters stops a parent process from
+adding filters that may undermine the child process security or create
+unexpected behavior after an execve.
+
+For example, a parent process may add a rule to exposes a system call
+that was not normally part of the child process' filter set.  When the
+child process configures its filters, it would have to check
+/proc/self/seccomp_filter to ensure nothing unexpected has been added.
+The standard inheritance behavior ensures this suboptimal situation is
+avoided.
+
+Inheritance across execve follows a subset of this behavior.  In
+particular, execve can only be added to the allowed filter set by a
+process with CAP_SYS_ADMIN privileges.  The result is that an
+unprivileged process can never create a seccomp filter set that can be
+inherited across execve.  To further guarantee this behavior, any
+unprivileged modifications to a seccomp filter set will forcibly
+clear execve.  The end result is that a privileged parent may install
+a set of seccomp filters and, at any point in the hierarchy, a child may
+make a private version of the inherited filter set with their own
+changes applied but execve blocked.
+
+
 Caveats
 -------
 
@@ -157,14 +190,6 @@ Caveats
   prctl(PR_CLEAR_SECCOMP_FILTER, ...).  Otherwise the behavior may vary
   depending on if CONFIG_FTRACE_SYSCALLS support exists -- though an
   error will be returned if the support is missing.
-
-- execve is always blocked.  seccomp filters may not cross that boundary.
-
-- Filters can be inherited across fork/clone but only when they are
-  active (e.g., PR_SET_SECCOMP has been set to 13), but not prior to use.
-  This stops the parent process from adding filters that may undermine
-  the child process security or create unexpected behavior after an
-  execve.
 
 - Some platforms support a 32-bit userspace with 64-bit kernels.  In
   these cases (CONFIG_COMPAT), system call numbers may not match across
