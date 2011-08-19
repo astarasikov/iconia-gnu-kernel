@@ -25,6 +25,9 @@
 
 #define TEGRA_USB_DMA_ALIGN 32
 
+#define PORT_SPEED_MASK		(3 << 26)
+#define PORT_SPEED_RESERVED	(3 << 26)
+
 struct tegra_ehci_hcd {
 	struct ehci_hcd *ehci;
 	struct tegra_usb_phy *phy;
@@ -140,7 +143,7 @@ static int tegra_ehci_hub_control(
 	u32 __iomem	*status_reg;
 	u32		temp;
 	unsigned long	flags;
-	int		retval = 0;
+	int		i, retval = 0;
 
 	status_reg = &ehci->regs->port_status[(wIndex & 0xff) - 1];
 
@@ -163,6 +166,43 @@ static int tegra_ehci_hub_control(
 			/* Resume completed, re-enable disconnect detection */
 			tegra->port_resuming = 0;
 			tegra_usb_phy_postresume(tegra->phy);
+			/*
+			 * After tegra_usb_phy_postresume is called, device
+			 * may temporarily "disconnect", setting PORTSC bit 1.
+			 * Driver hub.c would then think the device is removed
+			 * from USB bus and "logically disconnect" the device.
+			 * On subsequent reconnect, a Bootable USB disk will be
+			 * enumerated with new device address, making the
+			 * original device address unaccessible. To avoid this,
+			 * in case the device is still connected, wait 120 ms
+			 * for bit 0 of PORTSC to be set. Bit 0 signals the
+			 * PORTSC connection state is stable.
+			 *
+			 * Page 150, Figure 7-29 of USB2.0 spec:
+			 *   t1 = 20 ms = bPwr2PwrGood of root hub descriptor
+			 *     If VBUS is turned off in system suspend state.
+			 *   t2 is defined in Section 7.1.7.3 of USB 2.0 spec:
+			 *     "t2 must be less than 100 ms for all hub and
+			 *      device implementation".
+			 * t1+t2 (20+100 ms) is timeout used in loop below.
+			 *
+			 * If your USB disk doesn't comply with USB 2.0 spec,
+			 * please try increasing timeout from 120 to 1000 (or
+			 * more) and report results to linux-usb mailing list.
+			 */
+			if ((temp & PORT_SPEED_MASK) !=
+				 PORT_SPEED_RESERVED ||
+				(temp & PORT_CSC)) {
+				for (i = 0; i < 120; i++) {
+					spin_unlock_irqrestore(&ehci->lock,
+						flags);
+					usleep_range(1000, 1001);
+					spin_lock_irqsave(&ehci->lock, flags);
+					temp = ehci_readl(ehci, status_reg);
+					if (temp & PORT_CONNECT)
+						break;
+				}
+			}
 		}
 	}
 
