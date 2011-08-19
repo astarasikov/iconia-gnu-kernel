@@ -371,6 +371,12 @@ fail:
 	return ERR_PTR(err);
 }
 
+static void seccomp_filters_drop(struct seccomp_filters *filters, int nr)
+{
+	struct event_filter *filter = btree_remove32(&filters->tree, nr);
+	free_event_filter(filter);
+}
+
 /**
  * seccomp_filters_copy - copies filters from src to dst.
  *
@@ -384,8 +390,7 @@ fail:
  * If @skip is < 0, it is ignored.
  */
 static int seccomp_filters_copy(struct seccomp_filters *dst,
-				struct seccomp_filters *src,
-				int skip)
+				struct seccomp_filters *src)
 {
 	int ret = 0, nr;
 	struct event_filter *ef;
@@ -393,8 +398,6 @@ static int seccomp_filters_copy(struct seccomp_filters *dst,
 
 	btree_for_each_safe32(&src->tree, nr, ef) {
 		struct event_filter *filter = ALLOW_FILTER;
-		if (nr == skip)
-			continue;
 		if (!IS_ALLOW_FILTER(ef)) {
 			filter = alloc_event_filter(nr, get_filter_string(ef));
 			if (IS_ERR(filter)) {
@@ -789,9 +792,10 @@ long seccomp_clear_filter(int syscall_nr)
 	}
 
 	/* Copy, but drop the requested entry. */
-	ret = seccomp_filters_copy(filters, orig_filters, syscall_nr);
+	ret = seccomp_filters_copy(filters, orig_filters);
 	if (ret)
 		goto out;
+	seccomp_filters_drop(filters, syscall_nr);
 	get_seccomp_filters(filters);  /* simplify the out: path */
 
 	current->seccomp.filters = filters;
@@ -858,7 +862,7 @@ long seccomp_set_filter(int syscall_nr, char *filter)
 
 	filters_set_compat(filters);
 	if (orig_filters) {
-		ret = seccomp_filters_copy(filters, orig_filters, -1);
+		ret = seccomp_filters_copy(filters, orig_filters);
 		if (ret)
 			goto out;
 	}
