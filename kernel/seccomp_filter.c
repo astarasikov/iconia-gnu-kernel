@@ -295,10 +295,11 @@ static int event_to_syscall_nr(int event_id)
 #else  /*  defined(CONFIG_FTRACE_SYSCALLS) && defined(CONFIG_PERF_EVENTS) */
 
 #define create_event_filter(_ef_pptr, _event_type, _str) (-ENOSYS)
-#define get_filter_string(_ef) (NULL)
-#define free_event_filter(_f) do { } while (0)
 #define event_to_syscall_nr(x) (-ENOSYS)
 #define syscall_nr_to_meta(x) (NULL)
+
+static void free_event_filter(struct event_filter *filter) { }
+static char *get_filter_string(struct event_filter *filter) { return NULL; }
 
 #endif
 
@@ -616,13 +617,12 @@ void put_seccomp_filters(struct seccomp_filters *orig)
 {
 	if (!orig)
 		return;
-	kref_put(orig, __put_seccomp_filters);
+	kref_put(&orig->usage, __put_seccomp_filters);
 }
 
 /* get_seccomp_filters - increments the reference count of @orig. */
 struct seccomp_filters *get_seccomp_filters(struct seccomp_filters *orig)
 {
-	int usage;
 	if (!orig)
 		return NULL;
 	/* XXX: kref needs overflow prevention support. */

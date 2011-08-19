@@ -65,7 +65,7 @@ static inline long prctl_set_seccomp(unsigned long arg2)
 #define seccomp_filter_init_task(_tsk) do { \
 	mutex_init(&(_tsk)->seccomp.filters_guard); \
 	(_tsk)->seccomp.filters = NULL; \
-} while (0);
+} while (0)
 
 /* Do nothing unless seccomp filtering is active. If not, the execve boundary
  * can not be cleanly enforced and preset filters may leak across execve calls.
@@ -78,14 +78,14 @@ static inline long prctl_set_seccomp(unsigned long arg2)
 			get_seccomp_filters((_orig)->seccomp.filters); \
 		mutex_unlock(&(_orig)->seccomp.filters_guard); \
 	} \
-} while (0);
+} while (0)
 
 /* No locking is needed here because the task_struct will
  * have no parallel consumers.
  */
 #define seccomp_filter_free_task(_tsk) do { \
 	put_seccomp_filters((_tsk)->seccomp.filters); \
-} while (0);
+} while (0)
 
 extern int seccomp_show_filters(struct seccomp_filters *filters,
 				struct seq_file *);
@@ -108,9 +108,9 @@ extern void seccomp_filter_log_failure(int);
 #else  /* CONFIG_SECCOMP_FILTER */
 
 struct seccomp_filters { };
-#define seccomp_filter_init_task(_tsk) do { } while (0);
-#define seccomp_filter_fork(_tsk, _orig) do { } while (0);
-#define seccomp_filter_free_task(_tsk) do { } while (0);
+#define seccomp_filter_init_task(_tsk) do { } while (0)
+#define seccomp_filter_fork(_tsk, _orig) do { } while (0)
+#define seccomp_filter_free_task(_tsk) do { } while (0)
 
 static inline int seccomp_show_filters(struct seccomp_filters *filters,
 				       struct seq_file *m)
