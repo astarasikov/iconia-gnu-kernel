@@ -32,7 +32,6 @@
 #include <linux/uaccess.h>
 #include <linux/btree.h>
 
-#include <asm/syscall.h>
 #include <trace/syscall.h>
 
 /* Pull in *just* to access event_filter->filter_string. */
@@ -72,6 +71,13 @@ struct seccomp_filters {
 	struct btree_head32 tree;
 };
 
+/*
+ * Make ftrace support optional
+ */
+
+#if defined(CONFIG_FTRACE_SYSCALLS) && defined(CONFIG_PERF_EVENTS)
+#include <asm/syscall.h>
+
 /* Make sure we can get to the syscall metadata that ftrace hordes. */
 extern struct syscall_metadata *__start_syscalls_metadata[];
 extern struct syscall_metadata *__stop_syscalls_metadata[];
@@ -84,12 +90,6 @@ static struct syscall_metadata *syscall_nr_to_meta(int nr)
 
 	return syscalls_metadata[nr];
 }
-
-/*
- * Make ftrace support optional
- */
-
-#if defined(CONFIG_FTRACE_SYSCALLS) && defined(CONFIG_PERF_EVENTS)
 
 /* Fix up buffer creation to allow the ftrace filter engine to
  * work with seccomp filter events.
@@ -266,11 +266,39 @@ static int ftrace_syscall_enter_state(u8 *buf, size_t available,
 	return 0;
 }
 
+/* Encodes translation from sys_enter events to system call numbers.
+ * Returns -ENOSYS when the event doesn't match a system call or if
+ * current is_compat_task().  ftrace has no awareness of CONFIG_COMPAT
+ * yet.
+ */
+static int event_to_syscall_nr(int event_id)
+{
+	int nr, nosys = 1;
+#ifdef CONFIG_COMPAT
+	if (is_compat_task())
+		return -ENOSYS;
+#endif
+	for (nr = 0; nr < NR_syscalls; ++nr) {
+		struct syscall_metadata *data = syscall_nr_to_meta(nr);
+		if (!data)
+			continue;
+		nosys = 0;
+		if (data->enter_event->event.type == event_id)
+			return nr;
+	}
+	if (nosys)
+		return -ENOSYS;
+	return -EINVAL;
+}
+
+
 #else  /*  defined(CONFIG_FTRACE_SYSCALLS) && defined(CONFIG_PERF_EVENTS) */
 
 #define create_event_filter(_ef_pptr, _event_type, _str) (-ENOSYS)
 #define get_filter_string(_ef) (NULL)
 #define free_event_filter(_f) do { } while (0)
+#define event_to_syscall_nr(x) (-ENOSYS)
+#define syscall_nr_to_meta(x) (NULL)
 
 #endif
 
@@ -540,31 +568,6 @@ static const char *syscall_nr_to_name(int syscall)
 	if (data)
 		syscall_name = data->name;
 	return syscall_name;
-}
-
-/* Encodes translation from sys_enter events to system call numbers.
- * Returns -ENOSYS when the event doesn't match a system call or if
- * current is_compat_task().  ftrace has no awareness of CONFIG_COMPAT
- * yet.
- */
-static int event_to_syscall_nr(int event_id)
-{
-	int nr, nosys = 1;
-#ifdef CONFIG_COMPAT
-	if (is_compat_task())
-		return -ENOSYS;
-#endif
-	for (nr = 0; nr < NR_syscalls; ++nr) {
-		struct syscall_metadata *data = syscall_nr_to_meta(nr);
-		if (!data)
-			continue;
-		nosys = 0;
-		if (data->enter_event->event.type == event_id)
-			return nr;
-	}
-	if (nosys)
-		return -ENOSYS;
-	return -EINVAL;
 }
 
 static void filters_set_compat(struct seccomp_filters *filters)
