@@ -389,7 +389,7 @@ static int tegra_cpu_init(struct cpufreq_policy *policy)
 	target_cpu_speed[policy->cpu] = policy->cur;
 
 	/* cpu clock change latency: ~400us */
-	policy->cpuinfo.transition_latency = 400;
+	policy->cpuinfo.transition_latency = 400 * 1000;
 
 	policy->shared_type = CPUFREQ_SHARED_TYPE_ALL;
 	cpumask_copy(policy->related_cpus, cpu_possible_mask);
