@@ -23,6 +23,7 @@
 int picasso_regulator_init(void);
 void picasso_pinmux_init(void);
 int picasso_panel_init(void);
+int tf101_panel_init(void);
 int picasso_kbc_init(void);
 int picasso_emc_init(void);
 

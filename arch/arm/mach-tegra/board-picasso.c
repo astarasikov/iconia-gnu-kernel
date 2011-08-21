@@ -678,7 +678,13 @@ static void __init tegra_picasso_init(void)
 	picasso_sensors_init();
 	picasso_regulator_init();
 	picasso_usb_init();
-	picasso_panel_init();
+
+	if(machine_is_picasso())
+		picasso_panel_init();
+
+	if(machine_is_tf101())
+		tf101_panel_init();
+
 	picasso_touch_init();
 	picasso_sound_init();
 }
