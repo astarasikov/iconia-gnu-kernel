@@ -249,3 +249,23 @@ config SYSV68_PARTITION
 	  partition table format used by Motorola Delta machines (using
 	  sysv68).
 	  Otherwise, say N.
+
+config NVTEGRA_PARTITION
+	bool "Nvidia Tegra partition table support" if PARTITION_ADVANCED
+	default n
+	help
+	  Add support for undocummented partition table format used by Tegra2
+	  systems.
+
+config NVTEGRA_HIDE_PARTS
+	string "Hidden NVidia Tegra partitions"
+	depends on NVTEGRA_PARTITION
+	default ""
+	help
+	  Fill here the list of partitions you want to hide to the kennel.
+	  This is likely used to hide boot configuration partition,
+	  bootloader, and others which does not contain valid filesystem.
+	  List each partition name (the 3,4 letters identifier) separated
+	  by commas.
+
+
