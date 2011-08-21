@@ -53,8 +53,8 @@
 
 #define DRV_NAME "tegra-snd-seaboard"
 
-#define GPIO_SPKR_EN    BIT(0)
-#define GPIO_HP_MUTE    BIT(1)
+#define GPIO_SPKR_EN	BIT(0)
+#define GPIO_HP_MUTE	BIT(1)
 
 struct tegra_seaboard {
 	struct tegra_asoc_utils_data util_data;
@@ -64,16 +64,34 @@ struct tegra_seaboard {
 	bool vdd_dmic_enabled;
 };
 
+static int is_wm8903_codec(void)
+{
+	return	machine_is_seaboard() ||
+		machine_is_kaen()     ||
+		machine_is_aebl()     ||
+		machine_is_asymptote();
+}
+
+static int is_max98095_codec(void)
+{
+	return machine_is_arthur();
+}
+
 static int seaboard_get_mclk(int srate)
 {
+	int mclk;
 	switch (srate) {
 	case 64000:
 	case 88200:
 	case 96000:
-		return 128 * srate;
+		mclk = 128 * srate;
 	default:
-		return 256 * srate;
+		mclk = 256 * srate;
 	}
+	if (is_wm8903_codec())
+		while (mclk < 6000000)
+			mclk *= 2;
+	return mclk;
 }
 
 static int seaboard_set_rate(struct snd_pcm_substream *substream,
@@ -87,20 +105,12 @@ static int seaboard_set_rate(struct snd_pcm_substream *substream,
 	int srate, mclk, mclk_change;
 	int err;
 
-	BUG_ON(!machine_is_seaboard() && /* WM8903 clock setting. */
-	       !machine_is_aebl()     &&
-	       !machine_is_kaen()     &&
-	       !machine_is_asymptote());
-
 	srate = params_rate(params);
 	mclk = seaboard_get_mclk(srate);
-	/* FIXME: Codec only requires >= 3MHz if OSR==0 */
-	while (mclk < 6000000)
-		mclk *= 2;
-
+	/* Set board PLLs */
 	err = tegra_asoc_utils_set_rate(&seaboard->util_data, srate, mclk,
 					&mclk_change);
-	if (err < 0) {
+	if (err) {
 		dev_err(card->dev, "Can't configure clocks\n");
 		return err;
 	}
@@ -343,40 +353,21 @@ static int seaboard_init_jacks(struct snd_soc_codec *codec)
 	if (ret)
 		return ret;
 
-	BUG_ON(!machine_is_seaboard() && /* Only systems w/ WM8903. */
-	       !machine_is_aebl()     &&
-	       !machine_is_kaen()     &&
-	       !machine_is_asymptote());
-	wm8903_mic_detect(codec, &mic, SND_JACK_MICROPHONE, 0);
-	snd_soc_dapm_force_enable_pin(dapm, "Mic Bias");
+	if (is_max98095_codec()) {
+		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS1");
+		snd_soc_dapm_force_enable_pin(dapm, "MICBIAS2");
+	} else {
+		BUG_ON(!is_wm8903_codec());
+		wm8903_mic_detect(codec, &mic, SND_JACK_MICROPHONE, 0);
+		snd_soc_dapm_force_enable_pin(dapm, "Mic Bias");
+	}
 	return 0;
 }
 
-static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
+static int wm8903_board_asoc_init(struct snd_soc_card *card,
+				  struct snd_soc_dapm_context *dapm)
 {
-	struct snd_soc_codec *codec = rtd->codec;
-	struct snd_soc_dapm_context *dapm = &codec->dapm;
-	struct snd_soc_card *card = codec->card;
-	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
 	int ret;
-
-	ret = seaboard_request_gpio_spkr_en(card);
-	if (ret < 0)
-		return ret;
-
-	ret = seaboard_request_gpio_hp_mute(card, seaboard);
-	if (ret < 0)
-		return ret;
-
-	ret = snd_soc_add_controls(codec, seaboard_controls,
-				   ARRAY_SIZE(seaboard_controls));
-	if (ret < 0)
-		return ret;
-
-	ret = snd_soc_dapm_new_controls(dapm, seaboard_dapm_widgets,
-					ARRAY_SIZE(seaboard_dapm_widgets));
-	if (ret < 0)
-		return ret;
 
 	if (machine_is_seaboard() || machine_is_asymptote()) {
 		ret = snd_soc_dapm_add_routes(dapm, seaboard_audio_map,
@@ -410,13 +401,86 @@ static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_nc_pin(dapm, "IN2L");
 	snd_soc_dapm_nc_pin(dapm, "IN3R");
 	snd_soc_dapm_nc_pin(dapm, "IN3L");
-
-	seaboard_init_jacks(codec);
-	snd_soc_dapm_sync(dapm);
 	return 0;
 }
 
-static struct snd_soc_dai_link seaboard_links[] = {
+static int max98095_board_asoc_init(struct snd_soc_dapm_context *dapm)
+{
+	/* Arthur schematic shows unconnected pins. */
+	snd_soc_dapm_nc_pin(dapm, "MIC2");
+	snd_soc_dapm_nc_pin(dapm, "INA1");
+	snd_soc_dapm_nc_pin(dapm, "INA2");
+	snd_soc_dapm_nc_pin(dapm, "INB1");
+	snd_soc_dapm_nc_pin(dapm, "INB2");
+	snd_soc_dapm_nc_pin(dapm, "OUT1");
+	snd_soc_dapm_nc_pin(dapm, "OUT2");
+	snd_soc_dapm_nc_pin(dapm, "OUT3");
+	snd_soc_dapm_nc_pin(dapm, "OUT4");
+	snd_soc_dapm_nc_pin(dapm, "RCV");
+	return 0;
+}
+
+static int seaboard_asoc_init(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_soc_codec *codec = rtd->codec;
+	struct snd_soc_dapm_context *dapm = &codec->dapm;
+	struct snd_soc_card *card = codec->card;
+	struct tegra_seaboard *seaboard = snd_soc_card_get_drvdata(card);
+	int ret;
+
+	ret = seaboard_request_gpio_spkr_en(card);
+	if (ret < 0)
+		return ret;
+
+	ret = seaboard_request_gpio_hp_mute(card, seaboard);
+	if (ret < 0)
+		return ret;
+
+	ret = snd_soc_add_controls(codec, seaboard_controls,
+				   ARRAY_SIZE(seaboard_controls));
+	if (ret < 0)
+		return ret;
+
+	ret = snd_soc_dapm_new_controls(dapm, seaboard_dapm_widgets,
+					ARRAY_SIZE(seaboard_dapm_widgets));
+	if (ret < 0)
+		return ret;
+
+	if (is_wm8903_codec())
+		ret = wm8903_board_asoc_init(card, dapm);
+	else {
+		BUG_ON(!is_max98095_codec());
+		max98095_board_asoc_init(dapm);
+	}
+
+	ret = seaboard_init_jacks(codec);
+	if (ret)
+		return ret;
+
+	snd_soc_dapm_sync(dapm);
+	return ret;
+}
+
+static struct snd_soc_dai_link max98095_links[] = {
+	{
+		.name		= "MAX98095",
+		.stream_name	= "MAX98095 PCM",
+		.codec_name	= "max98095.0-0010",
+		.platform_name	= "tegra-pcm-audio",
+		.cpu_dai_name	= "tegra-i2s.0",
+		.codec_dai_name = "HiFi",
+		.init		= seaboard_asoc_init,
+		.ops		= &seaboard_asoc_ops,
+	},
+};
+
+static struct snd_soc_card snd_soc_max89095 = {
+	.name      = "tegra-arthur",
+	.dai_link  = max98095_links,
+	.num_links = ARRAY_SIZE(max98095_links),
+};
+
+static struct snd_soc_dai_link wm8903_links[] = {
 	{
 		.name = "WM8903",
 		.stream_name = "WM8903 PCM",
@@ -438,22 +502,25 @@ static struct snd_soc_dai_link seaboard_links[] = {
 	},
 };
 
-static struct snd_soc_card snd_soc_seaboard = {
+static struct snd_soc_card snd_soc_wm8903 = {
 	.name = "tegra-seaboard",
-	.dai_link = seaboard_links,
-	.num_links = ARRAY_SIZE(seaboard_links),
+	.dai_link = wm8903_links,
+	.num_links = ARRAY_SIZE(wm8903_links),
 };
 
 static __devinit int tegra_snd_seaboard_probe(struct platform_device *pdev)
 {
-	struct snd_soc_card *card = &snd_soc_seaboard;
+	struct snd_soc_card *card;
 	struct tegra_seaboard *seaboard;
 	struct seaboard_audio_platform_data *pdata;
 	int ret;
 
-	if (!machine_is_seaboard() && !machine_is_kaen() &&
-	    !machine_is_aebl() && !machine_is_asymptote()) {
-		dev_err(&pdev->dev, "Not running on a supported board!\n");
+	if (is_wm8903_codec())
+		card = &snd_soc_wm8903;
+	else if (is_max98095_codec())
+		card = &snd_soc_max89095;
+	else {
+		dev_err(&pdev->dev, "Not running on a supported board.\n");
 		return -ENODEV;
 	}
 

@@ -583,7 +583,9 @@ void ath_hw_check(struct work_struct *work)
 
 		msleep(1);
 	}
+	spin_lock_bh(&sc->sc_pcu_lock);
 	ath_reset(sc, true);
+	spin_unlock_bh(&sc->sc_pcu_lock);
 
 out:
 	ath9k_ps_restore(sc);
@@ -598,8 +600,11 @@ void ath9k_tasklet(unsigned long data)
 	u32 status = sc->intrstatus;
 	u32 rxmask;
 
-	if (status & ATH9K_INT_FATAL) {
+	if ((status & ATH9K_INT_FATAL) ||
+	    (status & ATH9K_INT_BB_WATCHDOG)) {
+		spin_lock(&sc->sc_pcu_lock);
 		ath_reset(sc, true);
+		spin_unlock(&sc->sc_pcu_lock);
 		return;
 	}
 
@@ -656,6 +661,7 @@ irqreturn_t ath_isr(int irq, void *dev)
 {
 #define SCHED_INTR (				\
 		ATH9K_INT_FATAL |		\
+		ATH9K_INT_BB_WATCHDOG |		\
 		ATH9K_INT_RXORN |		\
 		ATH9K_INT_RXEOL |		\
 		ATH9K_INT_RX |			\
@@ -972,7 +978,6 @@ int ath_reset(struct ath_softc *sc, bool retry_tx)
 	del_timer_sync(&common->ani.timer);
 
 	ath9k_ps_wakeup(sc);
-	spin_lock_bh(&sc->sc_pcu_lock);
 
 	ieee80211_stop_queues(hw);
 
@@ -1014,7 +1019,6 @@ int ath_reset(struct ath_softc *sc, bool retry_tx)
 	}
 
 	ieee80211_wake_queues(hw);
-	spin_unlock_bh(&sc->sc_pcu_lock);
 
 	/* Start ANI */
 	ath_start_ani(common);

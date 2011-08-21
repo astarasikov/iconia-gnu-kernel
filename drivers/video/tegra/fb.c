@@ -58,12 +58,18 @@ static u32 pseudo_palette[16];
 static int tegra_fb_check_var(struct fb_var_screeninfo *var,
 			      struct fb_info *info)
 {
-	if ((var->yres * var->xres * var->bits_per_pixel / 8 * 2) >
+	struct tegra_fb_info *tegra_fb = info->par;
+	struct fb_videomode mode;
+
+	if ((var->yres * var->xres * var->bits_per_pixel / 8) >
 	    info->screen_size)
 		return -EINVAL;
 
-	/* double yres_virtual to allow double buffering through pan_display */
-	var->yres_virtual = var->yres * 2;
+	fb_var_to_videomode(&mode, var);
+	if (!tegra_dc_mode_filter(tegra_fb->win->dc, &mode))
+		return -EINVAL;
+	/* tegra_dc_mode_filter may have modified the mode */
+	fb_videomode_to_var(var, &mode);
 
 	return 0;
 }
@@ -104,31 +110,24 @@ static int tegra_fb_set_par(struct fb_info *info)
 	if (var->pixclock) {
 		struct tegra_dc_mode mode;
 
-		info->mode = (struct fb_videomode *)
-			fb_find_best_mode(var, &info->modelist);
-		if (!info->mode) {
-			dev_warn(&tegra_fb->ndev->dev, "can't match video mode\n");
-			return -EINVAL;
-		}
-
-		mode.pclk = PICOS2KHZ(info->mode->pixclock) * 1000;
+		mode.pclk = PICOS2KHZ(var->pixclock) * 1000;
 		mode.h_ref_to_sync = 1;
 		mode.v_ref_to_sync = 1;
-		mode.h_sync_width = info->mode->hsync_len;
-		mode.v_sync_width = info->mode->vsync_len;
-		mode.h_back_porch = info->mode->left_margin;
-		mode.v_back_porch = info->mode->upper_margin;
-		mode.h_active = info->mode->xres;
-		mode.v_active = info->mode->yres;
-		mode.h_front_porch = info->mode->right_margin;
-		mode.v_front_porch = info->mode->lower_margin;
+		mode.h_sync_width = var->hsync_len;
+		mode.v_sync_width = var->vsync_len;
+		mode.h_back_porch = var->left_margin;
+		mode.v_back_porch = var->upper_margin;
+		mode.h_active = var->xres;
+		mode.v_active = var->yres;
+		mode.h_front_porch = var->right_margin;
+		mode.v_front_porch = var->lower_margin;
 
 		mode.flags = 0;
 
-		if (!(info->mode->sync & FB_SYNC_HOR_HIGH_ACT))
+		if (!(var->sync & FB_SYNC_HOR_HIGH_ACT))
 			mode.flags |= TEGRA_DC_MODE_FLAG_NEG_H_SYNC;
 
-		if (!(info->mode->sync & FB_SYNC_VERT_HIGH_ACT))
+		if (!(var->sync & FB_SYNC_VERT_HIGH_ACT))
 			mode.flags |= TEGRA_DC_MODE_FLAG_NEG_V_SYNC;
 
 		tegra_dc_set_mode(tegra_fb->win->dc, &mode);
@@ -323,7 +322,8 @@ static struct fb_ops tegra_fb_ops = {
 
 void tegra_fb_update_monspecs(struct tegra_fb_info *fb_info,
 			      struct fb_monspecs *specs,
-			      bool (*mode_filter)(struct fb_videomode *mode))
+			      bool (*mode_filter)(const struct tegra_dc *dc,
+						  struct fb_videomode *mode))
 {
 	struct fb_event event;
 	struct fb_modelist *m;
@@ -348,14 +348,10 @@ void tegra_fb_update_monspecs(struct tegra_fb_info *fb_info,
 	       sizeof(fb_info->info->monspecs));
 
 	for (i = 0; i < specs->modedb_len; i++) {
-		if (mode_filter) {
-			if (mode_filter(&specs->modedb[i]))
-				fb_add_videomode(&specs->modedb[i],
-						 &fb_info->info->modelist);
-		} else {
+		if (!mode_filter ||
+		    mode_filter(fb_info->win->dc, &specs->modedb[i]))
 			fb_add_videomode(&specs->modedb[i],
 					 &fb_info->info->modelist);
-		}
 	}
 
 	if (list_empty(&fb_info->info->modelist)) {
@@ -404,6 +400,7 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 	unsigned long fb_size = 0;
 	unsigned long fb_phys = 0;
 	int ret = 0;
+	const struct tegra_dc_mode *dc_mode;
 
 	win = tegra_dc_get_window(dc, fb_data->win);
 	if (!win) {
@@ -450,34 +447,41 @@ struct tegra_fb_info *tegra_fb_register(struct nvhost_device *ndev,
 	info->fix.smem_start	= fb_phys;
 	info->fix.smem_len	= fb_size;
 
-	info->var.xres			= fb_data->xres;
-	info->var.yres			= fb_data->yres;
-	info->var.xres_virtual		= fb_data->xres;
-	info->var.yres_virtual		= fb_data->yres * 2;
 	info->var.bits_per_pixel	= fb_data->bits_per_pixel;
 	info->var.activate		= FB_ACTIVATE_VBL;
 	info->var.height		= tegra_dc_get_out_height(dc);
 	info->var.width			= tegra_dc_get_out_width(dc);
-	info->var.pixclock		= 0;
-	info->var.left_margin		= 0;
-	info->var.right_margin		= 0;
-	info->var.upper_margin		= 0;
-	info->var.lower_margin		= 0;
-	info->var.hsync_len		= 0;
-	info->var.vsync_len		= 0;
-	info->var.vmode			= FB_VMODE_NONINTERLACED;
+
+	dc_mode = tegra_dc_get_current_mode(dc);
+	if (dc_mode->pclk) {
+		struct fb_videomode mode;
+
+		mode.pixclock		= KHZ2PICOS(dc_mode->pclk / 1000);
+		mode.xres		= dc_mode->h_active;
+		mode.yres		= dc_mode->v_active;
+		mode.left_margin	= dc_mode->h_back_porch;
+		mode.right_margin	= dc_mode->h_front_porch;
+		mode.upper_margin	= dc_mode->v_back_porch;
+		mode.lower_margin	= dc_mode->v_front_porch;
+		mode.hsync_len		= dc_mode->h_sync_width;
+		mode.vsync_len		= dc_mode->v_sync_width;
+		mode.vmode		= FB_VMODE_NONINTERLACED;
+
+		fb_videomode_to_var(&info->var, &mode);
+	}
+
 
 	tegra_fb->info = info;
-
-	if (fb_mem) {
-		tegra_fb->in_use = true;
-		tegra_fb_set_par(info);
-	}
 
 	if (register_framebuffer(info)) {
 		dev_err(&ndev->dev, "failed to register framebuffer\n");
 		ret = -ENODEV;
 		goto err_iounmap_fb;
+	}
+
+	if (fb_mem) {
+		tegra_fb->in_use = true;
+		tegra_fb_set_par(info);
 	}
 
 	dev_info(&ndev->dev, "probed\n");

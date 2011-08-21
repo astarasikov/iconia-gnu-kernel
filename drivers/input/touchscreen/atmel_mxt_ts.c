@@ -536,8 +536,9 @@ static void mxt_input_report(struct mxt_data *data, int single_id)
 					finger[id].x);
 			input_report_abs(input_dev, ABS_MT_POSITION_Y,
 					finger[id].y);
-		} else
+		} else {
 			finger[id].status = 0;
+		}
 	}
 
 	input_report_key(input_dev, BTN_TOUCH, finger_num > 0);
@@ -654,7 +655,9 @@ static int mxt_check_reg_init(struct mxt_data *data)
 		if (!mxt_object_writable(object->type))
 			continue;
 
-		for (j = 0; j < object->size + 1; j++) {
+		for (j = 0;
+		     j < (object->size + 1) * (object->instances + 1);
+		     j++) {
 			config_offset = index + j;
 			if (config_offset > pdata->config_length) {
 				dev_err(dev, "Not enough config data!\n");
@@ -663,7 +666,7 @@ static int mxt_check_reg_init(struct mxt_data *data)
 			mxt_write_object(data, object->type, j,
 					 pdata->config[config_offset]);
 		}
-		index += object->size + 1;
+		index += (object->size + 1) * (object->instances + 1);
 	}
 
 	return 0;

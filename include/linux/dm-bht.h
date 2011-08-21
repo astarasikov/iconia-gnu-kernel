@@ -11,7 +11,6 @@
 
 #include <linux/compiler.h>
 #include <linux/crypto.h>
-#include <linux/mempool.h>
 #include <linux/types.h>
 
 /* To avoid allocating memory for digest tests, we just setup a
@@ -90,14 +89,13 @@ struct dm_bht {
 	unsigned int node_count;  /* Data size (in hashes) for each entry */
 	unsigned int node_count_shift;  /* first bit set - 1 */
 	/* There is one per CPU so that verified can be simultaneous. */
-	struct hash_desc *hash_desc;  /* Container for the hash alg */
+	struct hash_desc hash_desc[NR_CPUS];  /* Container for the hash alg */
 	unsigned int digest_size;
 	sector_t sectors;  /* Number of disk sectors used */
 
 	/* bool verified;  Full tree is verified */
 	u8 root_digest[DM_BHT_MAX_DIGEST_SIZE];
 	struct dm_bht_level *levels;  /* in reverse order */
-	mempool_t *entry_pool;
 	/* Callbacks for reading and/or writing to the hash device */
 	dm_bht_callback read_cb;
 	dm_bht_callback write_cb;

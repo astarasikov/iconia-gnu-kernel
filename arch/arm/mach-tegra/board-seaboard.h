@@ -31,6 +31,7 @@
 
 #define TEGRA_GPIO_LIDSWITCH		TEGRA_GPIO_PC7
 #define TEGRA_GPIO_USB1			TEGRA_GPIO_PD0
+#define TEGRA_GPIO_USB3			TEGRA_GPIO_PD3
 #define TEGRA_GPIO_POWERKEY		TEGRA_GPIO_PV2
 #define TEGRA_GPIO_BACKLIGHT		TEGRA_GPIO_PD4
 #define TEGRA_GPIO_LVDS_SHUTDOWN	TEGRA_GPIO_PB2
@@ -104,9 +105,11 @@ void kaen_pinmux_init(void);
 #ifdef CONFIG_MACH_KAEN
 int kaen_sensors_init(void);
 void kaen_emc_init(void);
+int kaen_panel_init(void);
 #else
 static inline int kaen_sensors_init(void) { return 0; }
 static inline void kaen_emc_init(void) { return; }
+static inline int kaen_panel_init(void) { return 0; }
 #endif
 
 void aebl_pinmux_init(void);
