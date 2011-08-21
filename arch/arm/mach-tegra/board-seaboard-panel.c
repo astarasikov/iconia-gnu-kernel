@@ -264,6 +264,22 @@ static struct tegra_dc_mode picasso_panel_modes[] = {
 	},
 };
 
+static struct tegra_dc_mode tf101_panel_modes[] = {
+	{
+		.pclk = 83900000,
+		.h_ref_to_sync = 11,
+		.v_ref_to_sync = 1,
+		.h_sync_width = 58,
+		.v_sync_width = 4,
+		.h_back_porch = 58,
+		.v_back_porch = 4,
+		.h_active = 1280,
+		.v_active = 800,
+		.h_front_porch = 58,
+		.v_front_porch = 4,
+	},
+};
+
 static struct tegra_fb_data seaboard_fb_data = {
 	.win		= 0,
 	.xres		= 1366,
@@ -290,6 +306,13 @@ static struct tegra_fb_data seaboard_hdmi_fb_data = {
 	.xres		= 1280,
 	.yres		= 720,
 	.bits_per_pixel	= 16,
+};
+
+static struct tegra_fb_data tf101_fb_data = {
+	.win		= 0,
+	.xres		= 1280,
+	.yres		= 800,
+	.bits_per_pixel	= 32,
 };
 
 static struct tegra_dc_out seaboard_disp1_out = {
@@ -490,6 +513,19 @@ int __init picasso_panel_init(void)
 	//that is used for HDMI power on other boards
 	seaboard_disp2_out.hotplug_init = NULL;
 	seaboard_disp2_out.postsuspend = NULL;
+	fix_framebuffer_carveouts();
+	return seaboard_panel_register_devices();
+}
+#endif
+
+#ifdef CONFIG_MACH_TF101
+int __init tf101_panel_init(void)
+{
+	seaboard_panel_gpio_init();
+	seaboard_disp1_out.modes = tf101_panel_modes;
+	seaboard_disp1_pdata.fb = &tf101_fb_data;
+	seaboard_backlight_data.pwm_period_ns = 4000000;
+
 	fix_framebuffer_carveouts();
 	return seaboard_panel_register_devices();
 }
