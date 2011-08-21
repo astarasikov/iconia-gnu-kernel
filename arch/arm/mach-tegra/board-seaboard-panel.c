@@ -627,7 +627,6 @@ int __init asymptote_panel_init(void)
 }
 #endif
 
-<<<<<<< HEAD
 #ifdef CONFIG_MACH_PICASSO
 int __init picasso_panel_init(void)
 {
