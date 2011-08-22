@@ -361,3 +361,8 @@ struct clocksource * __init clocksource_default_clock(void)
 	__clocksource_updatefreq_scale(&tegra_clocksource, 1, 1000000);
 	return &tegra_clocksource;
 }
+
+unsigned long timer_get_us(void)
+{
+	return tegra_clocksource_read(NULL);
+}
