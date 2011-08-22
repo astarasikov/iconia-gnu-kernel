@@ -355,3 +355,9 @@ void read_boot_clock(struct timespec *ts)
 	ts->tv_nsec -= (curr % 1000000) * 1000;
 	set_normalized_timespec(ts, ts->tv_sec, ts->tv_nsec);
 }
+
+struct clocksource * __init clocksource_default_clock(void)
+{
+	__clocksource_updatefreq_scale(&tegra_clocksource, 1, 1000000);
+	return &tegra_clocksource;
+}
