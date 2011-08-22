@@ -40,6 +40,13 @@ static void free_dev(struct kref *ref)
 	kfree(dev);
 }
 
+static void free_urb_with_skb(struct urb *urb)
+{
+	struct sk_buff *skb = (struct sk_buff *)urb->context;
+	dev_kfree_skb_any(skb);
+	usb_free_urb(urb);
+}
+
 void qcusbnet_put(struct qcusbnet *dev)
 {
 	mutex_lock(&qcusbnet_lock);
@@ -202,6 +209,7 @@ static void qcnet_unbind(struct usbnet *usbnet, struct usb_interface *iface)
 {
 	struct qcusbnet *dev = (struct qcusbnet *)usbnet->data[0];
 
+	iface->needs_remote_wakeup = 0;
 	netif_carrier_off(usbnet->net);
 	qc_deregister(dev);
 
@@ -215,10 +223,13 @@ static void qcnet_bg_complete(struct work_struct *work)
 {
 	unsigned long listflags;
 	struct qcusbnet *dev = container_of(work, struct qcusbnet, complete);
+
 	BUG_ON(!dev->active);
-	usb_free_urb(dev->active);
+	free_urb_with_skb(dev->active);
 	dev->active = NULL;
+
 	usb_autopm_put_interface(dev->iface);
+
 	spin_lock_irqsave(&dev->urbs_lock, listflags);
 	if (!list_empty(&dev->urbs))
 		queue_work(dev->workqueue, &dev->startxmit);
@@ -227,7 +238,10 @@ static void qcnet_bg_complete(struct work_struct *work)
 
 static void qcnet_complete(struct urb *urb)
 {
-	struct qcusbnet *dev = urb->context;
+	struct sk_buff *skb = urb->context;
+	struct qcusbnet *dev = *(struct qcusbnet **)skb->cb;
+
+	BUG_ON(urb != dev->active);
 	queue_work(dev->workqueue, &dev->complete);
 }
 
@@ -235,14 +249,13 @@ static void qcnet_bg_txtimeout(struct work_struct *work)
 {
 	struct qcusbnet *dev = container_of(work, struct qcusbnet, txtimeout);
 	struct list_head *node, *tmp;
-	struct urbreq *req;
+	struct urb *urb;
 	if (dev->active)
 		usb_kill_urb(dev->active);
 	list_for_each_safe(node, tmp, &dev->urbs) {
-		req = list_entry(node, struct urbreq, node);
-		usb_free_urb(req->urb);
-		list_del(&req->node);
-		kfree(req);
+		urb = list_entry(node, struct urb, urb_list);
+		list_del(&urb->urb_list);
+		free_urb_with_skb(urb);
 	}
 }
 
@@ -257,7 +270,7 @@ static void qcnet_bg_startxmit(struct work_struct *work)
 {
 	unsigned long listflags;
 	struct qcusbnet *dev = container_of(work, struct qcusbnet, startxmit);
-	struct urbreq *req = NULL;
+	struct urb *urb = NULL;
 	int status;
 
 	if (dev->active)
@@ -277,11 +290,11 @@ static void qcnet_bg_startxmit(struct work_struct *work)
 
 	spin_lock_irqsave(&dev->urbs_lock, listflags);
 	if (!list_empty(&dev->urbs)) {
-		req = list_first_entry(&dev->urbs, struct urbreq, node);
-		list_del(&req->node);
+		urb = list_first_entry(&dev->urbs, struct urb, urb_list);
+		list_del(&urb->urb_list);
 	}
 	spin_unlock_irqrestore(&dev->urbs_lock, listflags);
-	if (req == NULL) {
+	if (urb == NULL) {
 		/* If we hit this case, it means that we added our urb to the
 		 * list while there was an urb in flight, and that urb
 		 * completed, causing our urb to be submitted; in addition, our
@@ -291,66 +304,45 @@ static void qcnet_bg_startxmit(struct work_struct *work)
 		return;
 	}
 
-	dev->active = req->urb;
-	status = usb_submit_urb(dev->active, GFP_KERNEL);
+	dev->active = urb;
+	status = usb_submit_urb(urb, GFP_KERNEL);
 	if (status < 0) {
 		GOBI_ERROR("failed to submit urb: %d (packet dropped)", status);
-		usb_free_urb(dev->active);
+		free_urb_with_skb(urb);
 		dev->active = NULL;
 		usb_autopm_put_interface(dev->iface);
 	}
-
-	kfree(req);
 }
 
 static int qcnet_startxmit(struct sk_buff *skb, struct net_device *netdev)
 {
 	unsigned long listflags;
-	struct urbreq *req;
-	void *data;
+	struct urb *urb;
 	struct usbnet *usbnet = netdev_priv(netdev);
 	struct qcusbnet *dev = (struct qcusbnet *)usbnet->data[0];
 
 	if (qc_isdown(dev, DOWN_DRIVER_SUSPENDED)) {
-		GOBI_ERROR("device is suspended");
-		dump_stack();
+		GOBI_ERROR("device is suspended (packet requeued)");
 		return NETDEV_TX_BUSY;
 	}
 
-	req = kmalloc(sizeof(*req), GFP_ATOMIC);
-	if (!req) {
-		GOBI_ERROR("failed to allocate urbreq");
+	urb = usb_alloc_urb(0, GFP_ATOMIC);
+	if (!urb) {
+		GOBI_ERROR("failed to allocate urb (packet requeued)");
 		return NETDEV_TX_BUSY;
 	}
 
-	req->urb = usb_alloc_urb(0, GFP_ATOMIC);
-
-	if (!req->urb) {
-		kfree(req);
-		GOBI_ERROR("failed to allocate urb");
-		return NETDEV_TX_BUSY;
-	}
-
-	data = kmalloc(skb->len, GFP_ATOMIC);
-	if (!data) {
-		usb_free_urb(req->urb);
-		kfree(req);
-		GOBI_ERROR("failed to allocate data buffer");
-		return NETDEV_TX_BUSY;
-	}
-	memcpy(data, skb->data, skb->len);
-
-	usb_fill_bulk_urb(req->urb, dev->usbnet->udev, dev->usbnet->out,
-			  data, skb->len, qcnet_complete, dev);
+	usb_fill_bulk_urb(urb, dev->usbnet->udev, dev->usbnet->out,
+			  skb->data, skb->len, qcnet_complete, skb);
+	*(struct qcusbnet **)skb->cb = dev;
 
 	spin_lock_irqsave(&dev->urbs_lock, listflags);
-	list_add_tail(&req->node, &dev->urbs);
+	list_add_tail(&urb->urb_list, &dev->urbs);
 	spin_unlock_irqrestore(&dev->urbs_lock, listflags);
 
 	queue_work(dev->workqueue, &dev->startxmit);
 
 	netdev->trans_start = jiffies;
-	dev_kfree_skb_any(skb);
 
 	return NETDEV_TX_OK;
 }
@@ -543,6 +535,8 @@ int qcnet_probe(struct usb_interface *iface, const struct usb_device_id *vidpids
 	if (status) {
 		qc_deregister(dev);
 	} else {
+		iface->needs_remote_wakeup = 1;
+
 		mutex_lock(&qcusbnet_lock);
 		/* Give our initial ref to the list */
 		list_add(&dev->node, &qcusbnet_list);
@@ -565,13 +559,12 @@ static void qcnet_disconnect(struct usb_interface *intf)
 	struct usbnet *usbnet = usb_get_intfdata(intf);
 	struct qcusbnet *dev = (struct qcusbnet *)usbnet->data[0];
 	struct list_head *node, *tmp;
-	struct urbreq *req;
+	struct urb *urb;
 	destroy_workqueue(dev->workqueue);
 	list_for_each_safe(node, tmp, &dev->urbs) {
-		req = list_entry(node, struct urbreq, node);
-		usb_free_urb(req->urb);
-		list_del(&req->node);
-		kfree(req);
+		urb = list_entry(node, struct urb, urb_list);
+		list_del(&urb->urb_list);
+		free_urb_with_skb(urb);
 	}
 	usbnet_disconnect(intf);
 }

@@ -994,6 +994,87 @@ static int ov9740_enum_fmt(struct v4l2_subdev *sd, unsigned int index,
 	return 0;
 }
 
+static int ov9740_g_parm(struct v4l2_subdev *sd, struct v4l2_streamparm *parms)
+{
+	struct v4l2_captureparm *cp = &parms->parm.capture;
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	int ret = 0;
+	u8 div = 0;
+	u8 frame_length = 0;
+
+	if (parms->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+
+	/* For simplicity, just check the hi register of frame length. The
+	 * default is 0x03 for 30fps, so the divisor is the frame length / 3.
+	 */
+	ret = ov9740_reg_read(client, OV9740_FRM_LENGTH_LN_HI, &frame_length);
+	if (ret < 0 || frame_length < 3)
+		frame_length = 3;
+	div = frame_length / 3;
+
+	dev_info(&client->dev, "[camera framerate] returning divisor %d",
+		 div);
+
+	memset(cp, 0, sizeof(struct v4l2_captureparm));
+	cp->capability = V4L2_CAP_TIMEPERFRAME;
+	cp->timeperframe.numerator = div;
+	cp->timeperframe.denominator = 30;
+
+	return 0;
+}
+
+static int ov9740_s_parm(struct v4l2_subdev *sd, struct v4l2_streamparm *parms)
+{
+	struct v4l2_captureparm *cp = &parms->parm.capture;
+	struct v4l2_fract *tpf = &cp->timeperframe;
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	u8 div = 0;
+	int ret;
+
+	if (parms->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+	if (cp->extendedmode != 0)
+		return -EINVAL;
+
+	dev_info(&client->dev, "[camera framerate] request set %d / %d",
+		 tpf->numerator, tpf->denominator);
+
+	if (tpf->numerator == 0 || tpf->denominator == 0)
+		div = 1;  /* Reset to full rate */
+	else {
+		/* unit is seconds: http://v4l2spec.bytesex.org/spec/r11680.htm
+		 * Default clock speed is 30fps (33ms per frame).
+		 */
+		int frame_time_ms = (tpf->numerator * 1000) / tpf->denominator;
+		div = frame_time_ms / 33;
+	}
+	/* Min div is 1 (30fps), max is 30 (1fps) */
+	if (div == 0)
+		div = 1;
+	else if (div > 30)
+		div = 30;
+
+	dev_info(&client->dev, "[camera framerate] calculated div: %d",
+		 div);
+
+	/* The default frame length of 0x03/0x07 (in hi/lo) is 30fps. Multiply
+	 * both values by the divisor to set the framerate appropriately (e.g.
+	 * 0x06/0x0e is 15fps).
+	 */
+	ret = ov9740_reg_write(client, OV9740_FRM_LENGTH_LN_HI, div * 3);
+	if (ret < 0) {
+		dev_err(&client->dev, "write to FRM_LENGTH_LN_HI failed.\n");
+		return ret;
+	}
+
+	ret = ov9740_reg_write(client, OV9740_FRM_LENGTH_LN_LO, div * 7);
+	if (ret < 0)
+		dev_err(&client->dev, "write to FRM_LENGTH_LN_LO failed.\n");
+
+	return ret;
+}
+
 static int ov9740_cropcap(struct v4l2_subdev *sd, struct v4l2_cropcap *a)
 {
 	a->bounds.left		= 0;
@@ -1134,6 +1215,8 @@ static struct v4l2_subdev_video_ops ov9740_video_ops = {
 	.s_mbus_fmt		= ov9740_s_fmt,
 	.try_mbus_fmt		= ov9740_try_fmt,
 	.enum_mbus_fmt		= ov9740_enum_fmt,
+	.s_parm			= ov9740_s_parm,
+	.g_parm			= ov9740_g_parm,
 	.cropcap		= ov9740_cropcap,
 	.g_crop			= ov9740_g_crop,
 };

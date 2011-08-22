@@ -73,6 +73,7 @@
 #include <linux/security.h>
 #include <linux/ptrace.h>
 #include <linux/tracehook.h>
+#include <linux/seccomp.h>
 #include <linux/cgroup.h>
 #include <linux/cpuset.h>
 #include <linux/audit.h>
@@ -522,6 +523,30 @@ static int proc_pid_syscall(struct task_struct *task, char *buffer)
 		       sp, pc);
 }
 #endif /* CONFIG_HAVE_ARCH_TRACEHOOK */
+
+/*
+ * Print out the current seccomp filter set for the task.
+ */
+#ifdef CONFIG_SECCOMP_FILTER
+int proc_pid_seccomp_filter_show(struct seq_file *m, struct pid_namespace *ns,
+				 struct pid *pid, struct task_struct *task)
+{
+	struct seccomp_filters *filters;
+
+	seq_printf(m, "Mode: %d\n", task->seccomp.mode);
+	/* Avoid allowing other processes to incur too much added contention by
+	 * only acquiring a reference under the task-wide mutex.
+	 */
+	if (mutex_lock_killable(&task->seccomp.filters_guard))
+		return -1;
+	filters = get_seccomp_filters(task->seccomp.filters);
+	mutex_unlock(&task->seccomp.filters_guard);
+
+	seccomp_show_filters(filters, m);
+	put_seccomp_filters(filters);
+	return 0;
+}
+#endif /* CONFIG_SECCOMP_FILTER */
 
 /************************************************************************/
 /*                       Here the fs part begins                        */
@@ -2780,6 +2805,9 @@ static const struct pid_entry tgid_base_stuff[] = {
 #ifdef CONFIG_HAVE_ARCH_TRACEHOOK
 	INF("syscall",    S_IRUSR, proc_pid_syscall),
 #endif
+#ifdef CONFIG_SECCOMP_FILTER
+	ONE("seccomp_filter",     S_IRUGO, proc_pid_seccomp_filter_show),
+#endif
 	INF("cmdline",    S_IRUGO, proc_pid_cmdline),
 	ONE("stat",       S_IRUGO, proc_tgid_stat),
 	ONE("statm",      S_IRUGO, proc_pid_statm),
@@ -3116,6 +3144,9 @@ static const struct pid_entry tid_base_stuff[] = {
 	REG("comm",      S_IRUGO|S_IWUSR, proc_pid_set_comm_operations),
 #ifdef CONFIG_HAVE_ARCH_TRACEHOOK
 	INF("syscall",   S_IRUSR, proc_pid_syscall),
+#endif
+#ifdef CONFIG_SECCOMP_FILTER
+	ONE("seccomp_filter",     S_IRUGO, proc_pid_seccomp_filter_show),
 #endif
 	INF("cmdline",   S_IRUGO, proc_pid_cmdline),
 	ONE("stat",      S_IRUGO, proc_tid_stat),

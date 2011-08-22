@@ -812,7 +812,6 @@ ar6k_cfg80211_scan(struct wiphy *wiphy, struct net_device *ndev,
 {
     struct ar6_softc *ar = (struct ar6_softc *)ar6k_priv(ndev);
     int ret = 0;
-    u32 forceFgScan = 0;
 
     AR_DEBUG_PRINTF(ATH_DEBUG_INFO, ("%s: \n", __func__));
 
@@ -850,11 +849,7 @@ ar6k_cfg80211_scan(struct wiphy *wiphy, struct net_device *ndev,
         }
     }
 
-    if(ar->arConnected) {
-        forceFgScan = 1;
-    }
-
-    if(wmi_startscan_cmd(ar->arWmi, WMI_LONG_SCAN, forceFgScan, false, \
+    if(wmi_startscan_cmd(ar->arWmi, WMI_LONG_SCAN, 0, false, \
                          0, 0, 0, NULL) != 0) {
         AR_DEBUG_PRINTF(ATH_DEBUG_ERR, ("%s: wmi_startscan_cmd failed\n", __func__));
         ret = -EIO;

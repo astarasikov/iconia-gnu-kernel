@@ -8,10 +8,12 @@
 #define __NR_seccomp_write __NR_write
 #define __NR_seccomp_exit __NR_exit
 #define __NR_seccomp_sigreturn __NR_rt_sigreturn
+#define __NR_seccomp_execve __NR_execve
 
 #define __NR_seccomp_read_32 __NR_ia32_read
 #define __NR_seccomp_write_32 __NR_ia32_write
 #define __NR_seccomp_exit_32 __NR_ia32_exit
 #define __NR_seccomp_sigreturn_32 __NR_ia32_sigreturn
+#define __NR_seccomp_execve_32 __NR_ia32_execve
 
 #endif /* _ASM_X86_SECCOMP_64_H */

@@ -208,6 +208,8 @@ config DM_DEBUG
 
 	  If unsure, say N.
 
+source "drivers/md/persistent-data/Kconfig"
+
 config DM_CRYPT
 	tristate "Crypt target support"
 	depends on BLK_DEV_DM
@@ -279,6 +281,13 @@ config DM_SNAPSHOT
        depends on BLK_DEV_DM
        ---help---
          Allow volume managers to take writable snapshots of a device.
+
+config DM_THIN_PROVISIONING
+       tristate "Thin provisioning target (EXPERIMENTAL)"
+       depends on BLK_DEV_DM && EXPERIMENTAL
+       select DM_PERSISTENT_DATA
+       ---help---
+         Provides thin provisioning and snapshots that share a data store.
 
 config DM_MIRROR
        tristate "Mirror target"

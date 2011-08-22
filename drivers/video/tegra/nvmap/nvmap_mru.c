@@ -171,7 +171,7 @@ struct tegra_iovmm_area *nvmap_handle_iovmm(struct nvmap_client *c,
 int nvmap_mru_init(struct nvmap_share *share)
 {
 	int i;
-	spin_lock_init(&share->mru_lock);
+	mutex_init(&share->mru_lock);
 	share->nr_mru = ARRAY_SIZE(mru_cutoff) + 1;
 
 	share->mru_lists = kzalloc(sizeof(struct list_head) * share->nr_mru,

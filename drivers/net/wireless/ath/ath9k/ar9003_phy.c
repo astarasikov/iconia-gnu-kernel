@@ -1020,28 +1020,29 @@ static bool ar9003_hw_ani_control(struct ath_hw *ah,
 static void ar9003_hw_do_getnf(struct ath_hw *ah,
 			      int16_t nfarray[NUM_NF_READINGS])
 {
+#define AR_PHY_CH_MINCCA_PWR	0x1FF00000
+#define AR_PHY_CH_MINCCA_PWR_S	20
+#define AR_PHY_CH_EXT_MINCCA_PWR 0x01FF0000
+#define AR_PHY_CH_EXT_MINCCA_PWR_S 16
+
 	int16_t nf;
+	int i;
 
-	nf = MS(REG_READ(ah, AR_PHY_CCA_0), AR_PHY_MINCCA_PWR);
-	nfarray[0] = sign_extend32(nf, 8);
+	for (i = 0; i < AR9300_MAX_CHAINS; i++) {
+		if (ah->rxchainmask & BIT(i)) {
+			nf = MS(REG_READ(ah, ah->nf_regs[i]),
+					 AR_PHY_CH_MINCCA_PWR);
+			nfarray[i] = sign_extend32(nf, 8);
 
-	nf = MS(REG_READ(ah, AR_PHY_CCA_1), AR_PHY_CH1_MINCCA_PWR);
-	nfarray[1] = sign_extend32(nf, 8);
+			if (IS_CHAN_HT40(ah->curchan)) {
+				u8 ext_idx = AR9300_MAX_CHAINS + i;
 
-	nf = MS(REG_READ(ah, AR_PHY_CCA_2), AR_PHY_CH2_MINCCA_PWR);
-	nfarray[2] = sign_extend32(nf, 8);
-
-	if (!IS_CHAN_HT40(ah->curchan))
-		return;
-
-	nf = MS(REG_READ(ah, AR_PHY_EXT_CCA), AR_PHY_EXT_MINCCA_PWR);
-	nfarray[3] = sign_extend32(nf, 8);
-
-	nf = MS(REG_READ(ah, AR_PHY_EXT_CCA_1), AR_PHY_CH1_EXT_MINCCA_PWR);
-	nfarray[4] = sign_extend32(nf, 8);
-
-	nf = MS(REG_READ(ah, AR_PHY_EXT_CCA_2), AR_PHY_CH2_EXT_MINCCA_PWR);
-	nfarray[5] = sign_extend32(nf, 8);
+				nf = MS(REG_READ(ah, ah->nf_regs[ext_idx]),
+						 AR_PHY_CH_EXT_MINCCA_PWR);
+				nfarray[ext_idx] = sign_extend32(nf, 8);
+			}
+		}
+	}
 }
 
 static void ar9003_hw_set_nf_limits(struct ath_hw *ah)
@@ -1309,3 +1310,25 @@ void ar9003_hw_bb_watchdog_dbg_info(struct ath_hw *ah)
 		"==== BB update: done ====\n\n");
 }
 EXPORT_SYMBOL(ar9003_hw_bb_watchdog_dbg_info);
+
+void ar9003_hw_disable_phy_restart(struct ath_hw *ah)
+{
+	u32 val;
+
+	/* While receiving unsupported rate frame rx state machine
+	 * gets into a state 0xb and if phy_restart happens in that
+	 * state, BB would go hang. If RXSM is in 0xb state after
+	 * first bb panic, ensure to disable the phy_restart.
+	 */
+	if (!((MS(ah->bb_watchdog_last_status,
+		  AR_PHY_WATCHDOG_RX_OFDM_SM) == 0xb) ||
+	    ah->bb_hang_rx_ofdm))
+		return;
+
+	ah->bb_hang_rx_ofdm = true;
+	val = REG_READ(ah, AR_PHY_RESTART);
+	val &= ~AR_PHY_RESTART_ENA;
+
+	REG_WRITE(ah, AR_PHY_RESTART, val);
+}
+EXPORT_SYMBOL(ar9003_hw_disable_phy_restart);

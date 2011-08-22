@@ -80,7 +80,6 @@ static __initdata struct tegra_clk_init_table common_clk_init_table[] = {
 	{ "sclk",	"pll_c_out1",	120000000,	true },
 	{ "hclk",	"sclk",		120000000,	true },
 	{ "pclk",	"hclk",		60000000,	true },
-	{ "pll_x",	NULL,		0,		true },
 	{ "cpu",	NULL,		0,		true },
 	{ "emc",	NULL,		0,		true },
 	{ "csite",	NULL,		0,		true },
@@ -127,8 +126,9 @@ void tegra_init_cache(void)
 static void __init tegra_init_power(void)
 {
 	tegra_powergate_power_off(TEGRA_POWERGATE_MPE);
+#ifndef CONFIG_DISABLE_3D_POWERGATING
 	tegra_powergate_power_off(TEGRA_POWERGATE_3D);
-	tegra_powergate_power_off(TEGRA_POWERGATE_PCIE);
+#endif
 }
 
 static bool console_flushed;

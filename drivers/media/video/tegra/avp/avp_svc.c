@@ -543,12 +543,13 @@ static int avp_svc_thread(void *data)
 	u8 buf[TEGRA_RPC_MAX_MSG_LEN];
 	struct svc_msg *msg = (struct svc_msg *)buf;
 	int ret;
+	long timeout;
+	DECLARE_WAIT_QUEUE_HEAD(wq);
 
 	BUG_ON(!avp_svc->cpu_ep);
 
 	ret = trpc_wait_peer(avp_svc->cpu_ep, -1);
 	if (ret) {
-		/* XXX: teardown?! */
 		pr_err("%s: no connection from AVP (%d)\n", __func__, ret);
 		goto err;
 	}
@@ -560,20 +561,34 @@ static int avp_svc_thread(void *data)
 		ret = trpc_recv_msg(avp_svc->rpc_node, avp_svc->cpu_ep, buf,
 				    TEGRA_RPC_MAX_MSG_LEN, -1);
 		DBG(AVP_DBG_TRACE_SVC, "%s: got message\n", __func__);
-		if (ret < 0) {
-			pr_err("%s: couldn't receive msg\n", __func__);
-			/* XXX: port got closed? we should exit? */
-			goto err;
-		} else if (!ret) {
-			pr_err("%s: received msg of len 0?!\n", __func__);
+
+		if (ret == -ECONNRESET || ret == -ENOTCONN) {
+			pr_debug("%s: AVP seems to be down; "
+				"wait for kthread_stop\n", __func__);
+			timeout = msecs_to_jiffies(100);
+			/*
+			 * wait until kthread_stop() is called from
+			 * avp_svc_stop()
+			 */
+			timeout = wait_event_interruptible_timeout(wq,
+					kthread_should_stop(), timeout);
+			if (timeout == 0) {
+				pr_err("%s: timed out while waiting for "
+					"kthread_stop\n", __func__);
+				goto err;
+			}
 			continue;
+		} else if (ret <= 0) {
+			pr_err("%s: couldn't receive msg (ret=%d)\n",
+				__func__, ret);
+			goto err;
 		}
 		dispatch_svc_message(avp_svc, msg, ret);
 	}
 
 err:
 	trpc_put(avp_svc->cpu_ep);
-	pr_info("%s: done\n", __func__);
+	pr_info("%s: exiting\n", __func__);
 	return ret;
 }
 
@@ -690,6 +705,15 @@ struct avp_svc_info *avp_svc_init(struct platform_device *pdev,
 		avp_svc->clks[mod->clk_req].clk = clk;
 		avp_svc->clks[mod->clk_req].mod = mod;
 		avp_svc->clks[mod->clk_req].refcnt = 0;
+
+		/*
+		 * The VDE rate was tied to the video decoding capability.
+		 * For ex, YouTube 720P H.264 HP support. Set the rate to
+		 * ULONG_MAX to always request the max rate whenever this
+		 * request is enabled.
+		 */
+		if (i == AVP_MODULE_ID_VDE)
+			clk_set_rate(clk, ULONG_MAX);
 	}
 
 	avp_svc->sclk = clk_get(&pdev->dev, "sclk");
@@ -707,10 +731,11 @@ struct avp_svc_info *avp_svc_init(struct platform_device *pdev,
 	}
 
 	/*
-	 * The emc is a shared clock, it will be set to the highest
+	 * The sclk/emc is a shared clock, it will be set to the highest
 	 * requested rate from any user.  Set the rate to ULONG_MAX to
 	 * always request the max rate whenever this request is enabled
 	 */
+	clk_set_rate(avp_svc->sclk, ULONG_MAX);
 	clk_set_rate(avp_svc->emcclk, ULONG_MAX);
 
 	avp_svc->rpc_node = rpc_node;
