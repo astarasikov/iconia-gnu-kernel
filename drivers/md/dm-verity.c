@@ -153,11 +153,6 @@ struct verity_config {
 	 */
 	struct bio_set *bs;
 
-	/* Single threaded I/O submitter */
-	struct workqueue_struct *io_queue;
-	/* Multithreaded verifier queue */
-	struct workqueue_struct *verify_queue;
-
 	char hash_alg[CRYPTO_MAX_ALG_NAME];
 
 	int error_behavior;
@@ -166,6 +161,7 @@ struct verity_config {
 };
 
 static struct kmem_cache *_verity_io_pool;
+static struct workqueue_struct *kveritydq, *kverityd_ioq;
 
 static void kverityd_verify(struct work_struct *work);
 static void kverityd_io(struct work_struct *work);
@@ -403,7 +399,7 @@ do_panic:
  * Checks if the behavior is valid either as text or as an index digit
  * and returns the proper enum value or -1 on error.
  */
-static int verity_parse_error_behavior(char *behavior)
+static int verity_parse_error_behavior(const char *behavior)
 {
 	const char **allowed = allowed_error_behaviors;
 	char index = '0';
@@ -601,12 +597,12 @@ static void verity_dec_pending(struct dm_verity_io *io)
 		verity_stats_io_queue_dec(vc);
 		verity_stats_verify_queue_inc(vc);
 		INIT_DELAYED_WORK(&io->work, kverityd_verify);
-		queue_delayed_work(vc->verify_queue, &io->work, 0);
+		queue_delayed_work(kveritydq, &io->work, 0);
 		REQTRACE("Block %llu+ is being queued for verify (io:%p)",
 			 ULL(io->block), io);
 	} else {
 		INIT_DELAYED_WORK(&io->work, kverityd_io);
-		queue_delayed_work(vc->io_queue, &io->work, HZ/10);
+		queue_delayed_work(kverityd_ioq, &io->work, HZ/10);
 		verity_stats_total_requeues_inc(vc);
 		REQTRACE("Block %llu+ is being requeued for io (io:%p)",
 			 ULL(io->block), io);
@@ -949,24 +945,38 @@ static int verity_map(struct dm_target *ti, struct bio *bio,
 		}
 		verity_stats_io_queue_inc(vc);
 		INIT_DELAYED_WORK(&io->work, kverityd_io);
-		queue_delayed_work(vc->io_queue, &io->work, 0);
+		queue_delayed_work(kverityd_ioq, &io->work, 0);
 	}
 
 	return DM_MAPIO_SUBMITTED;
+}
+
+static void splitarg(char *arg, char **key, char **val) {
+	*key = strsep(&arg, "=");
+	*val = strsep(&arg, "");
 }
 
 /*
  * Non-block interfaces and device-mapper specific code
  */
 
-/*
- * Construct an verified mapping:
- *  <device_to_verify> <device_with_hash_data>
- *  <page_aligned_offset_to_hash_data>
- *  <tree_depth> <hash_alg> <hash-of-bundle-hashes> <errbehavior: optional>
+/**
+ * verity_ctr - Construct a verified mapping
+ * @ti:   Target being created
+ * @argc: Number of elements in argv
+ * @argv: Vector of key-value pairs (see below).
+ *
+ * Accepts the following keys:
+ * @payload:        hashed device
+ * @hashtree:       device hashtree is stored on
+ * @hashstart:      start address of hashes (default 0)
+ * @alg:            hash algorithm
+ * @root_hexdigest: toplevel hash of the tree
+ * @error_behavior: what to do when verification fails [optional]
+ *
  * E.g.,
- *   /dev/sda2 /dev/sda3 0 2 sha256
- *   f08aa4a3695290c569eb1b0ac032ae1040150afb527abbeb0a3da33d82fb2c6e
+ * payload=/dev/sda2 hashtree=/dev/sda3 alg=sha256
+ * root_hexdigest=f08aa4a3695290c569eb1b0ac032ae1040150afb527abbeb0a3da33d82fb2c6e
  *
  * TODO(wad):
  * - Add stats: num_requeues, num_ios, etc with proc ibnterface
@@ -987,17 +997,81 @@ static int verity_map(struct dm_target *ti, struct bio *bio,
  */
 static int verity_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 {
-	struct verity_config *vc;
+	struct verity_config *vc = NULL;
 	int ret = 0;
-	int depth;
-	unsigned long long tmpull = 0;
-	u64 blocks;
+	sector_t blocks;
+	const char *payload = NULL;
+	const char *hashtree = NULL;
+	unsigned long hashstart = 0;
+	const char *alg = NULL;
+	const char *root_hexdigest = NULL;
+	const char *dev_error_behavior = error_behavior;
+	int i;
 
-	/* Support expanding after the root hash for optional args */
-	if (argc < 6) {
-		ti->error = "Not enough arguments supplied";
-		return -EINVAL;
+	if (argc >= 6 && !strchr(argv[3], '=')) {
+		/* Transitional hack - support the old positional-argument format.
+		 * Detect it because it requires specifying an unused arg
+		 * (depth) which does not contain an '='. */
+		unsigned long long tmpull;
+		if (strcmp(argv[3], "0")) {
+			ti->error = "Non-zero depth supplied";
+			return -EINVAL;
+		}
+		if (sscanf(argv[2], "%llu", &tmpull) != 1) {
+			ti->error = "Invalid hash_start supplied";
+			return -EINVAL;
+		}
+		payload = argv[0];
+		hashtree = argv[1];
+		hashstart = tmpull;
+		alg = argv[4];
+		root_hexdigest = argv[5];
+		if (argc > 6)
+			dev_error_behavior = argv[6];
+	} else {
+		for (i = 0; i < argc; ++i) {
+			char *key, *val;
+			DMWARN("Argument %d: '%s'", i, argv[i]);
+			splitarg(argv[i], &key, &val);
+			if (!key) {
+				DMWARN("Bad argument %d: missing key?", i);
+				break;
+			}
+			if (!val) {
+				DMWARN("Bad argument %d='%s': missing value", i, key);
+				break;
+			}
+			if (!strcmp(key, "alg")) {
+				alg = val;
+			} else if (!strcmp(key, "payload")) {
+				payload = val;
+			} else if (!strcmp(key, "hashtree")) {
+				hashtree = val;
+			} else if (!strcmp(key, "root_hexdigest")) {
+				root_hexdigest = val;
+			} else if (!strcmp(key, "hashstart")) {
+				if (strict_strtoul(val, 10, &hashstart)) {
+					ti->error = "Invalid hashstart";
+					return -EINVAL;
+				}
+			} else if (!strcmp(key, "error_behavior")) {
+				dev_error_behavior = val;
+			}
+		}
 	}
+
+#define NEEDARG(n) \
+	if (!(n)) { \
+		ti->error = "Missing argument: " #n; \
+		return -EINVAL; \
+	}
+
+	NEEDARG(alg);
+	NEEDARG(payload);
+	NEEDARG(hashtree);
+	NEEDARG(root_hexdigest);
+
+#undef NEEDARG
 
 	/* The device mapper device should be setup read-only */
 	if ((dm_table_get_mode(ti->table) & ~FMODE_READ) != 0) {
@@ -1015,33 +1089,25 @@ static int verity_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		return -EINVAL;
 	}
 
-
-	/* arg3: blocks in a bundle */
-	if (sscanf(argv[3], "%u", &depth) != 1 ||
-	    depth != 0) {
-		ti->error =
-			"Non-zero depth supplied";
-		goto bad_depth;
-	}
 	/* Calculate the blocks from the given device size */
 	vc->size = ti->len;
 	blocks = to_bytes(vc->size) >> VERITY_BLOCK_SHIFT;
-	if (dm_bht_create(&vc->bht, blocks, argv[4])) {
+	if (dm_bht_create(&vc->bht, blocks, alg)) {
 		DMERR("failed to create required bht");
 		goto bad_bht;
 	}
-	if (dm_bht_set_root_hexdigest(&vc->bht, argv[5])) {
+	if (dm_bht_set_root_hexdigest(&vc->bht, root_hexdigest)) {
 		DMERR("root hexdigest error");
 		goto bad_root_hexdigest;
 	}
 	dm_bht_set_read_cb(&vc->bht, kverityd_bht_read_callback);
 
-	/* arg0: device to verify */
+	/* payload: device to verify */
 	vc->start = 0;  /* TODO: should this support a starting offset? */
 	/* We only ever grab the device in read-only mode. */
-	ret = verity_get_device(ti, argv[0], vc->start, ti->len, &vc->dev);
+	ret = verity_get_device(ti, payload, vc->start, ti->len, &vc->dev);
 	if (ret) {
-		DMERR("Failed to acquire device '%s': %d", argv[0], ret);
+		DMERR("Failed to acquire device '%s': %d", payload, ret);
 		ti->error = "Device lookup failed";
 		goto bad_verity_dev;
 	}
@@ -1052,20 +1118,14 @@ static int verity_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto bad_hash_start;
 	}
 
-	/* arg2: offset to hash on the hash device */
-	if (sscanf(argv[2], "%llu", &tmpull) != 1) {
-		ti->error =
-			"Invalid hash_start supplied";
-		goto bad_hash_start;
-	}
-	vc->hash_start = (sector_t)(tmpull);
+	vc->hash_start = (sector_t)hashstart;
 
-	/* arg1: device with hashes.
-	 * Note, arg1 == arg0 is okay as long as the size of
+	/* hashtree: device with hashes.
+	 * Note, payload == hashtree is okay as long as the size of
 	 *       ti->len passed to device mapper does not include
 	 *       the hashes.
 	 */
-	if (verity_get_device(ti, argv[1], vc->hash_start,
+	if (verity_get_device(ti, hashtree, vc->hash_start,
 			      dm_bht_sectors(&vc->bht), &vc->hash_dev)) {
 		ti->error = "Hash device lookup failed";
 		goto bad_hash_dev;
@@ -1079,26 +1139,18 @@ static int verity_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 
 
 	/* arg4: cryptographic digest algorithm */
-	if (snprintf(vc->hash_alg, CRYPTO_MAX_ALG_NAME, "%s", argv[4]) >=
+	if (snprintf(vc->hash_alg, CRYPTO_MAX_ALG_NAME, "%s", alg) >=
 	    CRYPTO_MAX_ALG_NAME) {
 		ti->error = "Hash algorithm name is too long";
 		goto bad_hash;
 	}
 
-	/* arg6: override with optional device-specific error behavior */
-	if (argc >= 7) {
-		vc->error_behavior = verity_parse_error_behavior(argv[6]);
-	} else {
-		/* Inherit the current global default. */
-		vc->error_behavior =
-			verity_parse_error_behavior(error_behavior);
-	}
+	/* override with optional device-specific error behavior */
+	vc->error_behavior = verity_parse_error_behavior(dev_error_behavior);
 	if (vc->error_behavior == -1) {
-		ti->error =
-			"Bad error_behavior supplied";
+		ti->error = "Bad error_behavior supplied";
 		goto bad_err_behavior;
 	}
-
 
 	/* TODO: Maybe issues a request on the io queue for block 0? */
 
@@ -1120,28 +1172,6 @@ static int verity_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto bad_bs;
 	}
 
-	/* Only one thread for the workqueue to keep the memory allocation
-	 * sane. Requests will be submitted asynchronously.
-	 * TODO(wad) look into workqueue flags to ensure safety.
-	 */
-	vc->io_queue = alloc_workqueue("kverityd_io",
-				       WQ_CPU_INTENSIVE|
-				       WQ_HIGHPRI,
-				       1);
-	if (!vc->io_queue) {
-		ti->error = "Couldn't create kverityd io queue";
-		goto bad_io_queue;
-	}
-
-	vc->verify_queue = alloc_workqueue("kverityd",
-					   WQ_CPU_INTENSIVE|
-					   WQ_HIGHPRI,
-					   1);
-	if (!vc->verify_queue) {
-		ti->error = "Couldn't create kverityd queue";
-		goto bad_verify_queue;
-	}
-
 	ti->num_flush_requests = 1;
 	ti->private = vc;
 
@@ -1155,10 +1185,6 @@ static int verity_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	}
 	return 0;
 
-bad_verify_queue:
-	destroy_workqueue(vc->io_queue);
-bad_io_queue:
-	bioset_free(vc->bs);
 bad_bs:
 	mempool_destroy(vc->io_pool);
 bad_slab_pool:
@@ -1168,7 +1194,6 @@ bad_hash:
 bad_hash_dev:
 bad_hash_start:
 	dm_put_device(ti, vc->dev);
-bad_depth:
 bad_bht:
 bad_root_hexdigest:
 bad_verity_dev:
@@ -1179,11 +1204,6 @@ bad_verity_dev:
 static void verity_dtr(struct dm_target *ti)
 {
 	struct verity_config *vc = (struct verity_config *) ti->private;
-
-	DMDEBUG("Destroying io_queue");
-	destroy_workqueue(vc->io_queue);
-	DMDEBUG("Destroying verify_queue");
-	destroy_workqueue(vc->verify_queue);
 
 	DMDEBUG("Destroying bs");
 	bioset_free(vc->bs);
@@ -1281,28 +1301,56 @@ static struct target_type verity_target = {
 	.io_hints = verity_io_hints,
 };
 
+#define VERITY_WQ_FLAGS (WQ_CPU_INTENSIVE|WQ_HIGHPRI)
+
 static int __init dm_verity_init(void)
 {
-	int r;
+	int r = -ENOMEM;
 
 	_verity_io_pool = KMEM_CACHE(dm_verity_io, 0);
-	if (!_verity_io_pool)
-		return -ENOMEM;
+	if (!_verity_io_pool) {
+		DMERR("failed to allocate pool dm_verity_io");
+		goto bad_io_pool;
+	}
+
+	kverityd_ioq = alloc_workqueue("kverityd_io", VERITY_WQ_FLAGS, 1);
+	if (!kverityd_ioq) {
+		DMERR("failed to create workqueue kverityd_ioq");
+		goto bad_io_queue;
+	}
+
+	kveritydq = alloc_workqueue("kverityd", VERITY_WQ_FLAGS, 1);
+	if (!kveritydq) {
+		DMERR("failed to create workqueue kveritydq");
+		goto bad_verify_queue;
+	}
 
 	r = dm_register_target(&verity_target);
 	if (r < 0) {
 		DMERR("register failed %d", r);
-		kmem_cache_destroy(_verity_io_pool);
-		/* TODO(wad): add optional recovery bail here. */
-	} else {
-		DMINFO("dm-verity registered");
-		/* TODO(wad): Add root setup to initcalls workqueue here */
+		goto register_failed;
 	}
+
+	DMINFO("version %u.%u.%u loaded", verity_target.version[0],
+	       verity_target.version[1], verity_target.version[2]);
+
+	return r;
+
+register_failed:
+	destroy_workqueue(kveritydq);
+bad_verify_queue:
+	destroy_workqueue(kverityd_ioq);
+bad_io_queue:
+	kmem_cache_destroy(_verity_io_pool);
+bad_io_pool:
 	return r;
 }
 
 static void __exit dm_verity_exit(void)
 {
+	destroy_workqueue(kveritydq);
+	destroy_workqueue(kverityd_ioq);
+
 	dm_unregister_target(&verity_target);
 	kmem_cache_destroy(_verity_io_pool);
 }

@@ -21,11 +21,16 @@
 #include <linux/i2c.h>
 #include <linux/wait.h>
 
+#include <mach/dc.h>
+
 struct tegra_edid;
 
 struct tegra_edid *tegra_edid_create(int bus);
 void tegra_edid_destroy(struct tegra_edid *edid);
 
 int tegra_edid_get_monspecs(struct tegra_edid *edid, struct fb_monspecs *specs);
+
+struct tegra_dc_edid *tegra_edid_get_data(struct tegra_edid *edid);
+void tegra_edid_put_data(struct tegra_dc_edid *data);
 
 #endif

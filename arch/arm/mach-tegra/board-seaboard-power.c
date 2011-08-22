@@ -25,6 +25,7 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <mach/iomap.h>
+#include <mach/powergate.h>
 #include <linux/err.h>
 
 #include <asm/mach-types.h>
@@ -128,7 +129,15 @@ static struct fixed_voltage_config vdd_1v5 = {
 	.init_data		= &vdd_1v5_initdata,
 };
 
-#define REGULATOR_INIT(_id, _minmv, _maxmv, _always_on)			\
+static struct tps6586x_settings sm0_config = {
+	.slew_rate = TPS6586X_SLEW_RATE_3520UV | TPS6586X_SLEW_RATE_SET,
+};
+
+static struct tps6586x_settings sm1_config = {
+	.slew_rate = TPS6586X_SLEW_RATE_3520UV | TPS6586X_SLEW_RATE_SET,
+};
+
+#define REGULATOR_INIT(_id, _minmv, _maxmv, _always_on, config)	\
 	{								\
 		.constraints = {					\
 			.min_uV = (_minmv)*1000,			\
@@ -143,21 +152,22 @@ static struct fixed_voltage_config vdd_1v5 = {
 		},							\
 		.num_consumer_supplies = ARRAY_SIZE(tps658621_##_id##_supply),\
 		.consumer_supplies = tps658621_##_id##_supply,		\
+		.driver_data = config,					\
 	}
 
-static struct regulator_init_data sm0_data = REGULATOR_INIT(sm0, 950, 1300, true);
-static struct regulator_init_data sm1_data = REGULATOR_INIT(sm1, 750, 1275, true);
-static struct regulator_init_data sm2_data = REGULATOR_INIT(sm2, 3000, 4550, true);
-static struct regulator_init_data ldo0_data = REGULATOR_INIT(ldo0, 1250, 3300, false);
-static struct regulator_init_data ldo1_data = REGULATOR_INIT(ldo1, 1100, 1100, true);
-static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2, 900, 1300, false);
-static struct regulator_init_data ldo3_data = REGULATOR_INIT(ldo3, 3300, 3300, true);
-static struct regulator_init_data ldo4_data = REGULATOR_INIT(ldo4, 1800, 1800, true);
-static struct regulator_init_data ldo5_data = REGULATOR_INIT(ldo5, 2850, 3300, true);
-static struct regulator_init_data ldo6_data = REGULATOR_INIT(ldo6, 1800, 1800, false);
-static struct regulator_init_data ldo7_data = REGULATOR_INIT(ldo7, 3300, 3300, false);
-static struct regulator_init_data ldo8_data = REGULATOR_INIT(ldo8, 1800, 1800, false);
-static struct regulator_init_data ldo9_data = REGULATOR_INIT(ldo9, 2850, 2850, true);
+static struct regulator_init_data sm0_data = REGULATOR_INIT(sm0, 950, 1300, true, &sm0_config);
+static struct regulator_init_data sm1_data = REGULATOR_INIT(sm1, 750, 1275, true, &sm1_config);
+static struct regulator_init_data sm2_data = REGULATOR_INIT(sm2, 3000, 4550, true, NULL);
+static struct regulator_init_data ldo0_data = REGULATOR_INIT(ldo0, 1250, 3300, false, NULL);
+static struct regulator_init_data ldo1_data = REGULATOR_INIT(ldo1, 1100, 1100, true, NULL);
+static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2, 900, 1300, false, NULL);
+static struct regulator_init_data ldo3_data = REGULATOR_INIT(ldo3, 3300, 3300, true, NULL);
+static struct regulator_init_data ldo4_data = REGULATOR_INIT(ldo4, 1800, 1800, true, NULL);
+static struct regulator_init_data ldo5_data = REGULATOR_INIT(ldo5, 2850, 3300, true, NULL);
+static struct regulator_init_data ldo6_data = REGULATOR_INIT(ldo6, 1800, 1800, false, NULL);
+static struct regulator_init_data ldo7_data = REGULATOR_INIT(ldo7, 3300, 3300, false, NULL);
+static struct regulator_init_data ldo8_data = REGULATOR_INIT(ldo8, 1800, 1800, false, NULL);
+static struct regulator_init_data ldo9_data = REGULATOR_INIT(ldo9, 2850, 2850, true, NULL);
 
 static struct tps6586x_rtc_platform_data rtc_data = {
 	.irq = TEGRA_NR_IRQS + TPS6586X_INT_RTC_ALM1,
@@ -295,36 +305,15 @@ int __init seaboard_ac_power_init(void)
 	return err;
 }
 
-static void reg_off(const char *reg)
-{
-	int rc;
-	struct regulator *regulator;
-
-	regulator = regulator_get(NULL, reg);
-
-	if (IS_ERR(regulator)) {
-		pr_err("%s: regulator_get returned %ld\n", __func__,
-		       PTR_ERR(regulator));
-		return;
-	}
-
-	rc = regulator_force_disable(regulator);
-	if (rc)
-		pr_err("%s: regulator_force_disable returned %d\n", __func__,
-			rc);
-	regulator_put(regulator);
-}
-
 static void seaboard_power_off(void)
 {
-	reg_off("vdd_sm2");
-	reg_off("vdd_core");
-	reg_off("vdd_cpu");
-	local_irq_disable();
-	while (1) {
-		dsb();
-		__asm__ ("wfi");
-	}
+	int ret;
+
+	ret = tps6586x_power_off();
+	if (ret)
+		pr_err("Failed to power off\n");
+
+	while(1);
 }
 
 int __init seaboard_power_init(void)
@@ -343,6 +332,8 @@ int __init seaboard_power_init(void)
 		pr_warning("Unable to initialize ac power\n");
 
 	pm_power_off = seaboard_power_off;
+
+	tegra_powergate_power_off(TEGRA_POWERGATE_PCIE);
 
 	return 0;
 }

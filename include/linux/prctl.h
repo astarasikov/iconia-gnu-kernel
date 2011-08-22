@@ -64,6 +64,13 @@
 #define PR_GET_SECCOMP	21
 #define PR_SET_SECCOMP	22
 
+/* Get/set process seccomp filters */
+#define PR_GET_SECCOMP_FILTER	35
+#define PR_SET_SECCOMP_FILTER	36
+#define PR_CLEAR_SECCOMP_FILTER	37
+#  define PR_SECCOMP_FILTER_SYSCALL	0
+#  define PR_SECCOMP_FILTER_EVENT	1
+
 /* Get/set the capability bounding set (as per security/commoncap.c) */
 #define PR_CAPBSET_READ 23
 #define PR_CAPBSET_DROP 24

@@ -536,6 +536,7 @@ static irqreturn_t tegra_cpuidle_irq(int irq, void *dev)
 	pr_err("%s: unexpected interrupt %d on cpu %d\n", __func__, irq,
 		smp_processor_id());
 	BUG();
+	return IRQ_HANDLED;
 }
 
 static int tegra_cpuidle_pm_notify(struct notifier_block *nb,

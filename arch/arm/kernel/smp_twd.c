@@ -46,8 +46,10 @@ static void twd_set_mode(enum clock_event_mode mode,
 		/* period set, and timer enabled in 'next_event' hook */
 		ctrl |= TWD_TIMER_CONTROL_IT_ENABLE | TWD_TIMER_CONTROL_ONESHOT;
 		break;
-	case CLOCK_EVT_MODE_UNUSED:
 	case CLOCK_EVT_MODE_SHUTDOWN:
+		/* turn off the timer but leave the prescaler as is. */
+		break;
+	case CLOCK_EVT_MODE_UNUSED:
 	default:
 		ctrl = 0;
 	}

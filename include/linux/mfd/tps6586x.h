@@ -1,6 +1,18 @@
 #ifndef __LINUX_MFD_TPS6586X_H
 #define __LINUX_MFD_TPS6586X_H
 
+#define TPS6586X_SLEW_RATE_INSTANTLY	0x00
+#define TPS6586X_SLEW_RATE_110UV	0x01
+#define TPS6586X_SLEW_RATE_220UV	0x02
+#define TPS6586X_SLEW_RATE_440UV	0x03
+#define TPS6586X_SLEW_RATE_880UV	0x04
+#define TPS6586X_SLEW_RATE_1760UV	0x05
+#define TPS6586X_SLEW_RATE_3520UV	0x06
+#define TPS6586X_SLEW_RATE_7040UV	0x07
+
+#define TPS6586X_SLEW_RATE_SET		0x08
+#define TPS6586X_SLEW_RATE_MASK         0x07
+
 enum {
 	TPS6586X_ID_SM_0,
 	TPS6586X_ID_SM_1,
@@ -48,6 +60,10 @@ enum {
 	TPS6586X_INT_RTC_ALM2,
 };
 
+struct tps6586x_settings {
+	int slew_rate;
+};
+
 struct tps6586x_subdev_info {
 	int		id;
 	const char	*name;
@@ -78,5 +94,6 @@ extern int tps6586x_set_bits(struct device *dev, int reg, uint8_t bit_mask);
 extern int tps6586x_clr_bits(struct device *dev, int reg, uint8_t bit_mask);
 extern int tps6586x_update(struct device *dev, int reg, uint8_t val,
 			   uint8_t mask);
+extern int tps6586x_power_off(void);
 
 #endif /*__LINUX_MFD_TPS6586X_H */

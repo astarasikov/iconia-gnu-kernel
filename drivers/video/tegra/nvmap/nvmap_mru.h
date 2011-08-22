@@ -35,12 +35,12 @@ struct tegra_iovmm_client;
 
 static inline void nvmap_mru_lock(struct nvmap_share *share)
 {
-	spin_lock(&share->mru_lock);
+	mutex_lock(&share->mru_lock);
 }
 
 static inline void nvmap_mru_unlock(struct nvmap_share *share)
 {
-	spin_unlock(&share->mru_lock);
+	mutex_unlock(&share->mru_lock);
 }
 
 int nvmap_mru_init(struct nvmap_share *share);

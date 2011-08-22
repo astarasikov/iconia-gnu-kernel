@@ -180,7 +180,8 @@ static int asusec_keypad_get_response(struct i2c_client *client, int res)
 	int retry = ASUSEC_RETRY_COUNT;
 
 	while(retry-- > 0){
-		asusec_i2c_read_data(client);		
+		if(asusec_i2c_read_data(client) < 0)
+			ASUSEC_ERR("ec read error %s\n", __func__);
 		ASUSEC_I2C_DATA(ec_chip->i2c_data, ec_chip->index);
 		if ((ec_chip->i2c_data[1] & ASUSEC_OBF_MASK) && 
 			(!(ec_chip->i2c_data[1] & ASUSEC_AUX_MASK))){ 
@@ -239,7 +240,8 @@ static int asusec_touchpad_get_response(struct i2c_client *client, int res)
 
 	msleep(CONVERSION_TIME_MS);
 	while(retry-- > 0){
-		asusec_i2c_read_data(client);
+		if(asusec_i2c_read_data(client) < 0)
+			ASUSEC_ERR("ec read error %s\n", __func__);
 		ASUSEC_I2C_DATA(ec_chip->i2c_data, ec_chip->index);
 		if ((ec_chip->i2c_data[1] & ASUSEC_OBF_MASK) && 
 			(ec_chip->i2c_data[1] & ASUSEC_AUX_MASK)){ 
@@ -260,7 +262,6 @@ get_asusec_touchpad_i2c:
 
 static int asusec_touchpad_enable(struct i2c_client *client)
 {
-	ec_chip->tp_wait_ack = 1;		
 	asusec_i2c_write_data(client, 0xF4D4);
 	return 0;
 }
@@ -307,7 +308,8 @@ static int asusec_is_init_running(void){
 static void asusec_clear_i2c_buffer(struct i2c_client *client){
 	int i;
 	for ( i=0; i<8; i++){
-		asusec_i2c_read_data(client);
+		if(asusec_i2c_read_data(client) < 0)
+			ASUSEC_ERR("ec read error %s\n", __func__);
 	}
 }
 static int asusec_chip_init(struct i2c_client *client)
@@ -319,10 +321,7 @@ static int asusec_chip_init(struct i2c_client *client)
 		return 0;
 	}	
 
-	//wake_lock(&ec_chip->wake_lock);
 	disable_irq_nosync(client->irq);
-
-	ec_chip->op_mode = 0;
 
 	for ( i = 0; i < 10; i++){
 		ret_val = asusec_i2c_test(client);
@@ -336,7 +335,8 @@ static int asusec_chip_init(struct i2c_client *client)
 	}	
 
 	for ( i=0; i<8; i++){
-		asusec_i2c_read_data(client);
+		if(asusec_i2c_read_data(client) < 0)
+			ASUSEC_ERR("ec read error %s\n", __func__);
 	}
 	
 	
@@ -349,7 +349,6 @@ static int asusec_chip_init(struct i2c_client *client)
 
 	ASUSEC_NOTICE("touchpad and keyboard init\n");
 	ec_chip->status = 1;
-	ec_chip->d_index = 0;
 
 	asusec_keypad_enable(client);
 	asusec_clear_i2c_buffer(client);
@@ -357,11 +356,8 @@ static int asusec_chip_init(struct i2c_client *client)
 	enable_irq(client->irq);
 	ec_chip->init_success = 1;
 
-	if (ec_chip->tp_enable){
-		asusec_touchpad_enable(client);
-	}
+	asusec_touchpad_enable(client);
 
-	//wake_unlock(&ec_chip->wake_lock);
 	return 0;
 
 fail_to_access_ec:
@@ -372,7 +368,6 @@ fail_to_access_ec:
 		ASUSEC_NOTICE("Need EC FW update\n");
 	}
 	enable_irq(client->irq);
-	//wake_unlock(&ec_chip->wake_lock);
 	return -1;
 
 }
@@ -384,15 +379,11 @@ static irqreturn_t asusec_interrupt_handler(int irq, void *dev_id){
 
 	if (gpio == TEGRA_GPIO_PS2){
 		disable_irq_nosync(irq);
-			if (ec_chip->suspend_state){
-				ec_chip->wakeup_lcd = 1;
-				ec_chip->ap_wake_wakeup = 1;
-			}
-			queue_delayed_work(asusec_wq, &ec_chip->asusec_work, 0);
+
+		queue_delayed_work(asusec_wq, &ec_chip->asusec_work, 0);
 	}
 	else if (gpio == TEGRA_GPIO_PX5){
 		ec_chip->dock_in = 0;
-		ec_chip->dock_det++;
 		queue_delayed_work(asusec_wq, &ec_chip->asusec_dock_init_work, 0);
 	}
 	return IRQ_HANDLED;	
@@ -520,55 +511,33 @@ err_exit:
 static void asusec_dock_init_work_function(struct work_struct *dat)
 {
 	int gpio = TEGRA_GPIO_PX5;
-	int i = 0;
-	int d_counter = 0;
-	int gpio_state = 0;
+
 	ASUSEC_INFO("Dock-init function\n");
 
-	//wake_lock(&ec_chip->wake_lock_init);
-	if (1) {//ASUSGetProjectID()==101){
-		ASUSEC_NOTICE("EP101 dock-init\n");
-		if (ec_chip->dock_det){
-			gpio_state = gpio_get_value(gpio);
-			for(i = 0; i < 40; i++){
-				msleep(50);
-				if (gpio_state == gpio_get_value(gpio)){
-					d_counter++;
-				} else {
-					gpio_state = gpio_get_value(gpio);
-					d_counter = 0;
-				}
-				if (d_counter > 4){
-					break;
-				}
-			}
-			ec_chip->dock_det--;
-			ec_chip->re_init = 0;
+	mutex_lock(&ec_chip->input_lock);
+	if (gpio_get_value(gpio)){
+		ASUSEC_NOTICE("No dock detected\n");
+		ec_chip->dock_in = 0;
+		ec_chip->init_success = 0;
+
+	} else{
+		ASUSEC_NOTICE("Dock detected\n");
+
+		ec_chip->dock_in = 1;
+
+		if (ec_chip->init_success == 0){
+			msleep(400);
+			asusec_reset_dock();
+			msleep(200);
+			asusec_chip_init(ec_chip->client);
+		} else {
+			ASUSEC_ERR("wtf? dock detected twice?\n");
 		}
-		
-		mutex_lock(&ec_chip->input_lock);
-		if (gpio_get_value(gpio)){
-			ASUSEC_NOTICE("No dock detected\n");
-			ec_chip->dock_in = 0;
-			ec_chip->init_success = 0;
-			ec_chip->tp_enable = 1;
-
-		} else{
-
-			ASUSEC_NOTICE("Dock detected %d / %d\n",
-					gpio_get_value(TEGRA_GPIO_PS4),
-					ec_chip->status);
-
-			ec_chip->dock_in = 1;
-			if (ec_chip->init_success == 0){
-				msleep(400);
-				asusec_reset_dock();
-				msleep(200);
-				asusec_chip_init(ec_chip->client);
-			}
-		}
-		mutex_unlock(&ec_chip->input_lock);
 	}
+
+	gpio_set_value(GPIOPIN_CHARGER_ENABLE, !ec_chip->dock_in);
+
+	mutex_unlock(&ec_chip->input_lock);
 
 }
 
@@ -587,28 +556,17 @@ static void asusec_work_function(struct work_struct *dat)
 	int irq = gpio_to_irq(gpio);
 	int ret_val = 0;
 
-	if (ec_chip->wakeup_lcd){
-		if (gpio_get_value(TEGRA_GPIO_PS4)){
-			ec_chip->wakeup_lcd = 0;
-			ec_chip->dock_in = gpio_get_value(TEGRA_GPIO_PX5) ? 0 : 1;
-			//wake_lock_timeout(&ec_chip->wake_lock, 3*HZ);
-			msleep(500);
-		}
-	}
-
 	ret_val = asusec_i2c_read_data(ec_chip->client);
 	enable_irq(irq);
 
 	if (ret_val < 0){
+		ASUSEC_ERR("ec read error %s\n", __func__);
+
 		return ;
 	}
 	atomic_notifier_call_chain(&ec_chip->notifier_list, ec_chip->i2c_data[1],
 			ec_chip->i2c_data);
 
-}
-
-static void asusec_reset_counter(unsigned long data){
-	ec_chip->d_index = 0;
 }
 
 static int __devinit asusec_probe(struct i2c_client *client,
@@ -635,24 +593,10 @@ static int __devinit asusec_probe(struct i2c_client *client,
 	mutex_init(&ec_chip->input_lock);
 	mutex_init(&ec_chip->dock_init_lock);
 
-	init_timer(&ec_chip->asusec_timer);
-	ec_chip->asusec_timer.function = asusec_reset_counter;
-
-	//wake_lock_init(&ec_chip->wake_lock, WAKE_LOCK_SUSPEND, "asusec_wake");
-	//wake_lock_init(&ec_chip->wake_lock_init, WAKE_LOCK_SUSPEND, "asusec_wake_init");
-
 	ec_chip->status = 0;
-	ec_chip->dock_det = 0;
 	ec_chip->dock_in = 0;
 	ec_chip->dock_init = 0;
-	ec_chip->d_index = 0;
-	ec_chip->suspend_state = 0;
 	ec_chip->init_success = 0;
-	ec_chip->wakeup_lcd = 0;
-	ec_chip->tp_wait_ack = 0;
-	ec_chip->tp_enable = 1;
-	ec_chip->re_init = 0;
-	ec_chip->ec_wakeup = 0;
 	asusec_dockram_init(client);
 	
 
@@ -664,6 +608,7 @@ static int __devinit asusec_probe(struct i2c_client *client,
 	
 	asusec_wq = create_singlethread_workqueue("asusec_wq");
 	INIT_DELAYED_WORK_DEFERRABLE(&ec_chip->asusec_work, asusec_work_function);
+
 	INIT_DELAYED_WORK_DEFERRABLE(&ec_chip->asusec_dock_init_work, asusec_dock_init_work_function);
 	
 	ATOMIC_INIT_NOTIFIER_HEAD(&ec_chip->notifier_list);
@@ -671,6 +616,37 @@ static int __devinit asusec_probe(struct i2c_client *client,
 	asusec_irq_dock_in(client);
 	asusec_irq_ec_request(client);
 	asusec_irq(client);
+
+	/*
+	 * If dock connected, enable charge path
+	 * for internal battery.
+	 *
+	 * This GPIO controls such path.
+	 *
+	 * Maby should move this to MFD cell
+	 */
+	err = gpio_request(GPIOPIN_CHARGER_ENABLE, "charger_enable");
+
+	if (err) {
+		printk("request charger_enable gpio failed\n");
+		goto skip_gpio;
+	}
+	err = gpio_direction_output(GPIOPIN_CHARGER_ENABLE,1);
+	if (err) {
+			printk(" Configure_Charger_pin failed to configure GPIO TEGRA_GPIO_PR6\n");
+			gpio_free(GPIOPIN_CHARGER_ENABLE);
+			goto skip_gpio;
+	}
+	tegra_gpio_enable(GPIOPIN_CHARGER_ENABLE);
+
+	/*
+	 * 1 Means charge
+	 * 0 Means no charge
+	 *
+	 * */
+	gpio_set_value(GPIOPIN_CHARGER_ENABLE, !ec_chip->dock_in);
+
+skip_gpio:
 
 	queue_delayed_work(asusec_wq, &ec_chip->asusec_dock_init_work, 0);
 
@@ -706,8 +682,6 @@ static int asusec_resume(struct i2c_client *client){
 
 	printk("asusec_resume+\n");
 
-	ec_chip->suspend_state = 0;
-
 	ec_chip->init_success = 0;
 	queue_delayed_work(asusec_wq, &ec_chip->asusec_dock_init_work, 0);
 
@@ -718,42 +692,38 @@ static int asusec_resume(struct i2c_client *client){
 
 
 static int asusec_dock_battery_get_capacity(union power_supply_propval *val){
-	int bat_percentage = 0;
-	int ret_val = 0;
+	int ret;
 
-	val->intval = -1;
-	if ((ec_chip->op_mode == 0) && (ec_chip->dock_in)){
-		ret_val = asusec_dockram_read_data(0x14);
+	if (!ec_chip->dock_in)
+		return -1;
 
-		if (ret_val < 0){
-			return -1;
-		}
-		else {
-			bat_percentage = (ec_chip->i2c_dm_data[14] << 8 )| ec_chip->i2c_dm_data[13];
-			val->intval = bat_percentage;
-			return 0;
-		}
-	}
-	return -1;
+	ret = asusec_dockram_read_data(0x14);
+
+	if (ret < 0)
+		return ret;
+
+	val->intval = ec_chip->i2c_dm_data[14] << 8;
+	val->intval |= ec_chip->i2c_dm_data[13];
+
+	return 0;
 }
 
 static int asusec_dock_battery_get_status(union power_supply_propval *val){
-	int ret_val = 0;
+	int ret;
 
-	val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
-	if ((ec_chip->op_mode == 0) && (ec_chip->dock_in)){
-		ret_val = asusec_dockram_read_data(0x0A);
+	if (!ec_chip->dock_in)
+		return -1;
 
-		if (ret_val < 0){
-			return -1;
-		}
-		else {
-			if (ec_chip->i2c_dm_data[1] & 0x4)
-				val->intval = POWER_SUPPLY_STATUS_CHARGING;
-			return 0;
-		}
-	}
-	return -1;
+	ret = asusec_dockram_read_data(0x0A);
+	if(ret < 0)
+		return ret;
+
+	if (ec_chip->i2c_dm_data[1] & 0x4)
+		val->intval = POWER_SUPPLY_STATUS_CHARGING;
+	else
+		val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+
+	return 0;
 }
 
 static int asusec_dock_battery_get_property(struct power_supply *psy,
@@ -762,11 +732,11 @@ static int asusec_dock_battery_get_property(struct power_supply *psy,
 {
 	switch (psp) {
 		case POWER_SUPPLY_PROP_CAPACITY:
-			if(asusec_dock_battery_get_capacity(val) < 0)
+			if(asusec_dock_battery_get_capacity(val))
 				goto error;
 			break;
 		case POWER_SUPPLY_PROP_STATUS:
-			if(asusec_dock_battery_get_status(val) < 0)
+			if(asusec_dock_battery_get_status(val))
 				goto error;
 			break;
 		default:
