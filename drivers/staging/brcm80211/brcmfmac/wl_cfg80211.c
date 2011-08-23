@@ -40,13 +40,6 @@
 #include <wl_cfg80211.h>
 #include <linux/version.h>
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,38)
-/* 2.6.38 doesn't have "band" arguement */
-#define ieee80211_channel_to_frequency(chan, band) \
-		ieee80211_channel_to_frequency(chan)
-
-#endif
-
 
 void sdioh_sdio_set_host_pm_flags(int flag);
 
