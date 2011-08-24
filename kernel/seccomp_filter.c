@@ -25,6 +25,7 @@
 #include <linux/kallsyms.h>
 #include <linux/kref.h>
 #include <linux/perf_event.h>
+#include <linux/pid.h>
 #include <linux/prctl.h>
 #include <linux/seccomp.h>
 #include <linux/security.h>
@@ -57,17 +58,22 @@
  *         get/put helpers should be used when accessing an instance
  *         outside of a lifetime-guarded section.  In general, this
  *         is only needed for handling shared filters across tasks.
+ * @creator: pointer to the pid that created this filter
+ * @parent: pointer to the ancestor which this filter will be composed with.
  * @count: size of @event_filters
  * @filter: tree of pointers to seccomp filters
  *
  * seccomp_filters objects should never be modified after being attached
- * to a task_struct.
+ * to a task_struct (other than @usage).
  */
 struct seccomp_filters {
 	struct kref usage;
+	struct pid *creator;
+	struct seccomp_filters *parent;
 	struct {
 		uint32_t compat:1,
-			 __reserved:31;
+			 enabled:1,
+			 __reserved:30;
 	} flags;
 	uint16_t count;
 	struct btree_head32 tree;
@@ -76,7 +82,6 @@ struct seccomp_filters {
 /*
  * Make ftrace support optional
  */
-
 #if defined(CONFIG_FTRACE_SYSCALLS) && defined(CONFIG_PERF_EVENTS)
 #include <asm/syscall.h>
 
@@ -320,6 +325,7 @@ static struct seccomp_filters *seccomp_filters_alloc(void)
 	kref_init(&f->usage);
 	if (btree_init32(&f->tree))
 		return ERR_PTR(-ENOMEM);
+	f->creator = get_task_pid(current, PIDTYPE_PID);
 
 	return f;
 }
@@ -339,6 +345,8 @@ static void seccomp_filters_free(struct seccomp_filters *filters)
 		free_event_filter(ef);
 	}
 	btree_destroy32(&filters->tree);
+	put_seccomp_filters(filters->parent);
+	put_pid(filters->creator);
 	kfree(filters);
 }
 
@@ -427,6 +435,10 @@ static int seccomp_filters_copy(struct seccomp_filters *dst,
 		}
 		dst->count++;
 	}
+	dst->parent = get_seccomp_filters(src->parent);
+	if (dst->creator)
+		put_pid(dst->creator);
+	dst->creator = get_pid(src->creator);
 
 done:
 	return ret;
@@ -647,6 +659,19 @@ struct seccomp_filters *get_seccomp_filters(struct seccomp_filters *orig)
 	return orig;
 }
 
+static int filters_created_by_parent(struct seccomp_filters *filters)
+{
+	struct pid *pid;
+	int ret = 0;
+	if (!filters)
+		return ret;
+	pid = get_task_pid(current, PIDTYPE_PID);
+	if (pid != filters->creator)
+		ret = 1;
+	put_pid(pid);
+	return ret;
+}
+
 /**
  * seccomp_test_filters - tests 'current' against the given syscall
  * @syscall: number of the system call to test
@@ -661,28 +686,37 @@ int seccomp_test_filters(int syscall)
 
 	mutex_lock(&current->seccomp.filters_guard);
 	/* No reference counting is done. filters_guard should protect the
-	 * lifetime of any existing pointer below.
+	 * lifetime of any existing pointer below using the task reference.
+	 * Parents will be protected by the held references.
 	 */
 	filters = current->seccomp.filters;
+
+	/* Inherited filters will always be enabled so skip ahead here. */
+	if (filters && !filters->flags.enabled)
+		filters = filters->parent;
+
+	/* Without any enabled filters, no system calls will be allowed. */
 	if (!filters)
 		goto out;
 
-	if (filters_compat_mismatch(filters)) {
-		pr_info("%s[%d]: seccomp_filter compat() mismatch.\n",
-			current->comm, task_pid_nr(current));
+	/* Only allow a system call if it is allowed in all ancestors. */
+	for ( ; filters != NULL; filters = filters->parent) {
+		if (filters_compat_mismatch(filters)) {
+			pr_info("%s[%d]: seccomp_filter compat() mismatch.\n",
+				current->comm, task_pid_nr(current));
+			goto out;
+		}
+
+		filter = btree_lookup32(&filters->tree, syscall);
+		if (!filter)
+			goto out;
+
+		if (IS_ALLOW_FILTER(filter) || filter_match_current(filter))
+			continue;
 		goto out;
 	}
-
-	filter = btree_lookup32(&filters->tree, syscall);
-	if (!filter)
-		goto out;
-
+	/* If the loop terminates normally, the syscall is approved. */
 	ret = 0;
-	if (IS_ALLOW_FILTER(filter))
-		goto out;
-
-	if (!filter_match_current(filter))
-		ret = -EACCES;
 out:
 	mutex_unlock(&current->seccomp.filters_guard);
 	return ret;
@@ -699,15 +733,22 @@ int seccomp_show_filters(struct seccomp_filters *filters, struct seq_file *m)
 {
 	int nr;
 	struct event_filter *ef;
+
 	if (!filters)
 		goto out;
 
-	btree_for_each_safe32(&filters->tree, nr, ef) {
-		const char *filter_string = SECCOMP_FILTER_ALLOW;
-		seq_printf(m, "%d (%s): ", nr, syscall_nr_to_name(nr));
-		if (!IS_ALLOW_FILTER(ef))
-			filter_string = get_filter_string(ef);
-		seq_printf(m, "%s\n", filter_string);
+	for ( ; filters; filters = filters->parent) {
+		seq_printf(m, "Enabled: %d\n", filters->flags.enabled);
+		seq_printf(m, "Inherited: %d\n",
+			   filters_created_by_parent(filters));
+		btree_for_each_safe32(&filters->tree, nr, ef) {
+			const char *filter_string = SECCOMP_FILTER_ALLOW;
+			seq_printf(m, "%d (%s): ", nr, syscall_nr_to_name(nr));
+			if (!IS_ALLOW_FILTER(ef))
+				filter_string = get_filter_string(ef);
+			seq_printf(m, "%s\n", filter_string);
+		}
+		seq_printf(m, "--\n");
 	}
 out:
 	return 0;
@@ -740,7 +781,7 @@ long seccomp_get_filter(int syscall_nr, char *buf, unsigned long bufsize)
 	mutex_lock(&current->seccomp.filters_guard);
 	filters = current->seccomp.filters;
 
-	if (!filters)
+	if (!filters || filters_created_by_parent(filters))
 		goto out;
 
 	ret = -ENOENT;
@@ -784,7 +825,7 @@ long seccomp_clear_filter(int syscall_nr)
 	mutex_lock(&current->seccomp.filters_guard);
 	orig_filters = current->seccomp.filters;
 
-	if (!orig_filters)
+	if (!orig_filters || filters_created_by_parent(orig_filters))
 		goto out;
 
 	if (filters_compat_mismatch(orig_filters))
@@ -835,7 +876,8 @@ EXPORT_SYMBOL_GPL(seccomp_clear_filter);
  */
 long seccomp_set_filter(int syscall_nr, char *filter)
 {
-	struct seccomp_filters *filters = NULL, *orig_filters = NULL;
+	struct seccomp_filters *filters = NULL, *orig_filters = NULL,
+			       *parent_filters = NULL;
 	struct event_filter *ef = NULL;
 	long ret = -EPERM;
 
@@ -855,6 +897,11 @@ long seccomp_set_filter(int syscall_nr, char *filter)
 
 	orig_filters = current->seccomp.filters;
 
+	if (filters_created_by_parent(orig_filters)) {
+		parent_filters = orig_filters;
+		orig_filters = NULL;
+	}
+
 	/* After the first call, compatibility mode is selected permanently. */
 	ret = -EACCES;
 	if (filters_compat_mismatch(orig_filters))
@@ -864,9 +911,10 @@ long seccomp_set_filter(int syscall_nr, char *filter)
 		ef = btree_lookup32(&orig_filters->tree, syscall_nr);
 
 	if (!ef) {
-		/* Don't allow DENYs to be changed when in a seccomp mode */
+		/* A new filter cannot be added to an active filters set. */
 		ret = -EACCES;
-		if (current->seccomp.mode)
+		if (current->seccomp.mode && orig_filters &&
+		    orig_filters->flags.enabled)
 			goto out;
 	}
 
@@ -894,6 +942,8 @@ long seccomp_set_filter(int syscall_nr, char *filter)
 	get_seccomp_filters(filters);  /* simplify the error paths */
 
 	current->seccomp.filters = filters;
+	if (parent_filters)
+		filters->parent = parent_filters;  /* already have a ref */
 	put_seccomp_filters(orig_filters);  /* for the task */
 out:
 	put_seccomp_filters(filters);  /* for get or task, on err */
@@ -901,6 +951,46 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(seccomp_set_filter);
+
+long seccomp_enable_filters(void)
+{
+	struct seccomp_filters *filters = NULL, *orig_filters = NULL;
+	long ret = 0;
+
+	mutex_lock(&current->seccomp.filters_guard);
+	/* Rely on the task reference */
+	orig_filters = current->seccomp.filters;
+	if (!orig_filters)
+		goto out;
+
+	/* Cannot re-enable inherited filters */
+	ret = -EINVAL;
+	if (filters_created_by_parent(orig_filters))
+		goto out;
+
+	filters = seccomp_filters_alloc();
+	if (IS_ERR(filters)) {
+		ret = PTR_ERR(filters);
+		goto out;
+	}
+
+	ret = seccomp_filters_copy(filters, orig_filters);
+	if (ret)
+		goto out;
+
+	/* Do the real work */
+	filters->flags.enabled = 1;
+
+	get_seccomp_filters(filters);  /* simplify the error paths */
+
+	current->seccomp.filters = filters;
+	put_seccomp_filters(orig_filters);  /* for the task */
+out:
+	put_seccomp_filters(filters);  /* for get or task, on err */
+	 mutex_unlock(&current->seccomp.filters_guard);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(seccomp_enable_filters);
 
 long prctl_set_seccomp_filter(unsigned long id_type,
 			      unsigned long id,
@@ -1022,4 +1112,31 @@ long prctl_get_seccomp_filter(unsigned long id_type, unsigned long id,
 out:
 	kfree(buf);
 	return ret;
+}
+
+/* seccomp_filter_fork: manages inheritance on fork
+ * @child: forkee
+ * @parent: forker
+ * Ensures that @child inherit a seccomp_filters iff seccomp is enabled
+ * and the set of filters is marked as 'enabled'.
+ */
+void seccomp_filter_fork(struct task_struct *child,
+			 struct task_struct *parent)
+{
+	if (!parent->seccomp.mode)
+		return;
+	child->seccomp.mode = parent->seccomp.mode;
+	mutex_lock(&parent->seccomp.filters_guard);
+	child->seccomp.filters = get_seccomp_filters(parent->seccomp.filters);
+	mutex_unlock(&parent->seccomp.filters_guard);
+	/* If @parent's filters are not active, then inherit the ancestor
+	 * if there is one.  It's possible that it will be NULL if the seccomp
+	 * mode does not use seccomp_filters.
+	 */
+	if (child->seccomp.filters && !child->seccomp.filters->flags.enabled) {
+		struct seccomp_filters *enabled =
+		    get_seccomp_filters(child->seccomp.filters->parent);
+		put_seccomp_filters(child->seccomp.filters);
+		child->seccomp.filters = enabled;
+	}
 }

@@ -75,29 +75,27 @@ long prctl_get_seccomp(void)
 
 long prctl_set_seccomp(unsigned long seccomp_mode)
 {
-	long ret;
+	long ret = 0;
 
-	/* can set it only once to be even more secure */
-	ret = -EPERM;
-	if (unlikely(current->seccomp.mode))
-		goto out;
-
-	ret = 0;
 	switch (seccomp_mode) {
 	case 1:
 #ifdef TIF_NOTSC
 		disable_TSC();
 #endif
+		break;
 #ifdef CONFIG_SECCOMP_FILTER
 	case 13:
-#endif
-		current->seccomp.mode = seccomp_mode;
-		set_thread_flag(TIF_SECCOMP);
+		ret = seccomp_enable_filters();
 		break;
+#endif
 	default:
 		ret = -EINVAL;
 	}
 
-out:
+	if (!ret && !current->seccomp.mode) {
+		current->seccomp.mode = seccomp_mode;
+		set_thread_flag(TIF_SECCOMP);
+	}
+
 	return ret;
 }
