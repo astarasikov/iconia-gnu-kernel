@@ -47,6 +47,7 @@
 #define   USB_PORTSC1_CCS	(1 << 0)
 
 #define USB_SUSP_CTRL		0x400
+#define   USB_WAKE_ON_RESUME_EN		(1 << 2)
 #define   USB_WAKE_ON_CNNT_EN_DEV	(1 << 3)
 #define   USB_WAKE_ON_DISCON_EN_DEV	(1 << 4)
 #define   USB_SUSP_CLR		(1 << 5)
@@ -352,6 +353,10 @@ static void utmi_phy_clk_disable(struct tegra_usb_phy *phy)
 {
 	unsigned long val;
 	void __iomem *base = phy->regs;
+
+	val = readl(base + USB_SUSP_CTRL);
+	val |= USB_WAKE_ON_RESUME_EN;
+	writel(val, base + USB_SUSP_CTRL);
 
 	if (phy->instance == 0) {
 		val = readl(base + USB_SUSP_CTRL);
