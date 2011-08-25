@@ -127,15 +127,14 @@ unsigned long bootstage_mark(const char *name)
  */
 unsigned long bootstage_mark_early(const char *name)
 {
-	unsigned long ret;
+	unsigned long ret = 0;
 
 	mutex_lock(&bootstage_mutex);
 
-	if (num_bootstages >= cap_bootstages)
-		return -1;
-
-	ret = __bootstage_mark_early(num_bootstages, name);
-	num_bootstages++;
+	if (num_bootstages < cap_bootstages) {
+		ret = __bootstage_mark_early(num_bootstages, name);
+		num_bootstages++;
+	}
 
 	mutex_unlock(&bootstage_mutex);
 	return ret;
