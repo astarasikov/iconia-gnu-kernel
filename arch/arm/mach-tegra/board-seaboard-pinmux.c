@@ -228,6 +228,7 @@ static struct tegra_gpio_table seaboard_gpio_table[] = {
 
 static struct tegra_gpio_table asymptote_gpio_table[] = {
 	{ .gpio = ASYMPTOTE_GPIO_MXT_RST,	.enable = true },
+	{ .gpio = ASYMPTOTE_GPIO_TSL2563_IRQ,	.enable = true },
 };
 
 void __init seaboard_common_pinmux_init(void)
