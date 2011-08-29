@@ -611,6 +611,11 @@ static struct i2c_board_info __initdata isl29018_device = {
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_ISL29018_IRQ),
 };
 
+static struct i2c_board_info __initdata tsl2563_device = {
+	I2C_BOARD_INFO("tsl2563", 0x29),
+	.irq = TEGRA_GPIO_TO_IRQ(ASYMPTOTE_GPIO_TSL2563_IRQ),
+};
+
 static struct i2c_board_info __initdata nct1008_device = {
 	I2C_BOARD_INFO("nct1008", 0x4c),
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_NCT1008_THERM2_IRQ),
@@ -964,8 +969,12 @@ static void __init asymptote_i2c_register_devices(void)
 	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
 	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
 
+	gpio_request(TEGRA_GPIO_ISL29018_IRQ, "tsl2563");
+	gpio_direction_input(ASYMPTOTE_GPIO_TSL2563_IRQ);
+
 	i2c_register_board_info(0, &wm8903_device, 1);
 	i2c_register_board_info(0, &mpu3050_device, 1);
+	i2c_register_board_info(0, &tsl2563_device, 1);
 	i2c_register_board_info(2, &bq20z75_device, 1);
 	i2c_register_board_info(3, &asymptote_mxt_device, 1);
 	i2c_register_board_info(4, &nct1008_device, 1);
