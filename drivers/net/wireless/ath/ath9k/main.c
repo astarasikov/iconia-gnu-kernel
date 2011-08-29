@@ -529,6 +529,7 @@ set_timer:
 	* The interval must be the shortest necessary to satisfy ANI,
 	* short calibration and long calibration.
 	*/
+	ath9k_debug_samp_bb_mac(sc);
 	cal_interval = ATH_LONG_CALINTERVAL;
 	if (sc->sc_ah->config.enable_ani)
 		cal_interval = min(cal_interval,
@@ -974,6 +975,7 @@ int ath_reset(struct ath_softc *sc, bool retry_tx)
 	struct ieee80211_hw *hw = sc->hw;
 	int r;
 
+	ath9k_debug_samp_bb_mac(sc);
 	/* Stop ANI */
 	del_timer_sync(&common->ani.timer);
 
@@ -2139,6 +2141,7 @@ static void ath9k_sw_scan_start(struct ieee80211_hw *hw)
 		return;
 	}
 
+	ath9k_debug_samp_bb_mac(sc);
 	aphy->state = ATH_WIPHY_SCAN;
 	ath9k_wiphy_pause_all_forced(sc, aphy);
 	mutex_unlock(&sc->mutex);
@@ -2153,6 +2156,7 @@ static void ath9k_sw_scan_complete(struct ieee80211_hw *hw)
 	struct ath_wiphy *aphy = hw->priv;
 	struct ath_softc *sc = aphy->sc;
 
+	ath9k_debug_samp_bb_mac(sc);
 	mutex_lock(&sc->mutex);
 	aphy->state = ATH_WIPHY_ACTIVE;
 	mutex_unlock(&sc->mutex);
