@@ -167,11 +167,16 @@ static int event__synthesize_mmap_events(event_t *event, pid_t pid, pid_t tgid,
 			continue;
 		pbf += n + 3;
 		if (*pbf == 'x') { /* vm_exec */
+			char anonstr[] = "//anon\n";
 			char *execname = strchr(bf, '/');
 
 			/* Catch VDSO */
 			if (execname == NULL)
 				execname = strstr(bf, "[vdso]");
+
+			/* Catch anonymous mmaps */
+			if ((execname == NULL) && !strstr(bf, "["))
+				execname = anonstr;
 
 			if (execname == NULL)
 				continue;
