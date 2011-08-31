@@ -60,6 +60,8 @@ struct qmihandle {
 	struct qcusbnet *dev;
 };
 
+#define CID_NONE ((u16)-1)
+
 static int qcusbnet2k_fwdelay;
 
 static bool device_valid(struct qcusbnet *dev);
@@ -1114,7 +1116,7 @@ static int devqmi_open(struct inode *inode, struct file *file)
 	}
 
 	handle = (struct qmihandle *)file->private_data;
-	handle->cid = (u16)-1;
+	handle->cid = CID_NONE;
 	handle->dev = ref;
 
 	GOBI_DEBUG("%p %04x", handle, handle->cid);
@@ -1150,7 +1152,7 @@ static long devqmi_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			return -EINVAL;
 		}
 
-		if (handle->cid != (u16)-1) {
+		if (handle->cid != CID_NONE) {
 			GOBI_WARN("cid already set");
 			return -EBADR;
 		}
@@ -1179,7 +1181,7 @@ static long devqmi_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	 * altogether).
 	 */
 	case IOCTL_QMI_CLOSE:
-		if (handle->cid == (u16)-1) {
+		if (handle->cid == CID_NONE) {
 			GOBI_WARN("no cid");
 			return -EBADR;
 		}
@@ -1254,7 +1256,7 @@ static int devqmi_release(struct inode *inode, struct file *file)
 
 	if (handle) {
 		file->private_data = NULL;
-		if (handle->cid != (u16)-1)
+		if (handle->cid != CID_NONE)
 			client_free(handle->dev, handle->cid);
 		qcusbnet_put(handle->dev);
 		kfree(handle);
@@ -1286,7 +1288,7 @@ static ssize_t devqmi_read(struct file *file, char __user *buf, size_t size,
 		return -ENXIO;
 	}
 
-	if (handle->cid == (u16)-1) {
+	if (handle->cid == CID_NONE) {
 		GOBI_WARN("cid is not set");
 		return -EBADR;
 	}
@@ -1335,7 +1337,7 @@ static ssize_t devqmi_write(struct file *file, const char __user * buf,
 		return -ENXIO;
 	}
 
-	if (handle->cid == (u16)-1) {
+	if (handle->cid == CID_NONE) {
 		GOBI_WARN("cid is not set");
 		return -EBADR;
 	}
@@ -1386,7 +1388,7 @@ static unsigned devqmi_poll(struct file *file,
 		return POLLERR;
 	}
 
-	if (handle->cid == (u16)-1) {
+	if (handle->cid == CID_NONE) {
 		GOBI_WARN("cid is not set");
 		return POLLERR;
 	}
