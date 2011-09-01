@@ -326,6 +326,8 @@ static int hid_submit_out(struct hid_device *hid)
 			return -1;
 		}
 		usbhid->last_out = jiffies;
+	} else {
+		return -1;
 	}
 
 	return 0;
@@ -385,6 +387,8 @@ static int hid_submit_ctrl(struct hid_device *hid)
 			return -1;
 		}
 		usbhid->last_ctrl = jiffies;
+	} else {
+		return -1;
 	}
 
 	return 0;
