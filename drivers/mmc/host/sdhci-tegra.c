@@ -187,6 +187,7 @@ static int tegra_sdhci_pltfm_init(struct sdhci_host *host,
 	host->mmc->pm_caps = plat->pm_flags;
 
 	host->mmc->caps |= MMC_CAP_ERASE;
+
 	if (plat->is_8bit)
 		host->mmc->caps |= MMC_CAP_8_BIT_DATA;
 
