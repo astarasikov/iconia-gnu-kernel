@@ -14,7 +14,6 @@
 #include <linux/irq.h>
 #include <linux/dmi.h>
 #include <linux/device.h>
-#include <linux/preserved.h>
 #include <linux/suspend.h>
 #include <linux/reboot.h>
 
@@ -809,40 +808,3 @@ int __init acpi_sleep_init(void)
 	acpi_gts_bfs_check();
 	return 0;
 }
-
-#ifdef CONFIG_PRESERVED_RAM
-void acpi_S3_reboot(void)
-{
-	int error;
-
-	/*
-	 * We shall skip the device driver stages of pm_suspend(),
-	 * to avoid the danger of hanging there; but must do this
-	 * excerpt from rtc_wake_on(), to enable wakeup from suspend.
-	 */
-	acpi_clear_event(ACPI_EVENT_RTC);
-	acpi_enable_event(ACPI_EVENT_RTC, 0);
-
-	/*
-	 * Go to S3 to preserve RAM, but with flag in NVRAM
-	 * telling the BIOS to reboot instead of resuming.
-	 */
-	error = acpi_suspend_begin(PM_SUSPEND_MEM);
-	if (error) {
-		printk(KERN_ERR "S3 reboot: acpi_suspend_begin()=%d\n", error);
-		return;
-	}
-
-	error = acpi_pm_prepare();
-	if (error) {
-		printk(KERN_ERR "S3 reboot: acpi_pm_prepare()=%d\n", error);
-		return;
-	}
-
-	error = acpi_suspend_enter(PM_SUSPEND_MEM);
-	/*
-	 * We should not reach here, but take note if we do.
-	 */
-	printk(KERN_ERR "S3 reboot: acpi_suspend_enter()=%d\n", error);
-}
-#endif /* CONFIG_PRESERVED_RAM */

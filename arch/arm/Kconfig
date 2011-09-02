@@ -1474,40 +1474,6 @@ config HIGHMEM
 
 	  If unsure, say n.
 
-config PRESERVED_RAM
-	bool "Save crash log in preserved RAM"
-	select DEBUG_FS
-	select SYSFS
-	---help---
-	  Boot firmware may reserve an area of RAM to be preserved across
-	  reboot, in the event of a kernel BUG or oops or panic - perhaps
-	  even across normal reboot.  If you say "Y", then the kernel
-	  will try to copy its printk log buffer (as shown by dmesg) there
-	  before rebooting when it crashes, for examination after reboot.
-
-	  The default address of the area is architecture-specific, but may be
-	  passed in to the kernel with the kcrashmem= parameter.
-
-config PRESERVED_RAM_START
-	hex "Physical address of preserved RAM" if (PRESERVED_RAM)
-	default "0x02000000"
-	---help---
-	  Address of the memory area that is preserved over reboot.
-
-	  For this feature to be useful, the selected memory area must be
-	  preserved across reboot, so not used by the boot loader, for example.
-	  The default value is generally suitable for ARM systems.
-
-config PRESERVED_RAM_SIZE
-	hex "Size of preserved RAM" if (PRESERVED_RAM)
-	default "0x00100000"
-	---help---
-	  Size of the memory area that is preserved over reboot.
-
-	  Typically 1MB is the most you could possibly need for this. In
-	  most cases the crash dump is only 50KB or so. This memory will be
-	  reserved by the kernel and not available for any other purpose.
-
 config HIGHPTE
 	bool "Allocate 2nd-level pagetables from highmem"
 	depends on HIGHMEM
