@@ -691,6 +691,11 @@ static void __init tegra_kaen_init(void)
 	seaboard_audio_pdata.gpio_hp_mute = TEGRA_GPIO_KAEN_HP_MUTE;
 	tegra_gpio_enable(TEGRA_GPIO_KAEN_HP_MUTE);
 
+	tegra_gpio_enable(TEGRA_GPIO_BATT_DETECT);
+	bq20z75_pdata.battery_detect = TEGRA_GPIO_BATT_DETECT;
+	/* battery present is low */
+	bq20z75_pdata.battery_detect_present = 0;
+
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
 	seaboard_common_init();
