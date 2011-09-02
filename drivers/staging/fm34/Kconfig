@@ -1,0 +1,4 @@
+config DSP_FM34
+        tristate "DSP FM34 driver"
+        depends on I2C
+

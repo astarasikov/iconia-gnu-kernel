@@ -366,9 +366,17 @@ static struct i2c_board_info __initdata wm8903_device = {
 	.platform_data = &picasso_wm8903_pdata,
 };
 
+static const struct i2c_board_info fm34_dsp = {
+	I2C_BOARD_INFO("dsp_fm34", 0x60)
+};
+
 static void __init picasso_sound_init(void) {
 	i2c_register_board_info(0, &wm8903_device, 1);
 	platform_device_register(&picasso_audio_device);
+
+	if(machine_is_tf101())
+	        i2c_register_board_info(0, &fm34_dsp, 1);
+
 }
 
 /******************************************************************************

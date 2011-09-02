@@ -181,5 +181,7 @@ source "drivers/staging/ste_rmi4/Kconfig"
 
 source "drivers/staging/asusec/Kconfig"
 
+source "drivers/staging/fm34/Kconfig"
+
 endif # !STAGING_EXCLUDE_BUILD
 endif # STAGING
