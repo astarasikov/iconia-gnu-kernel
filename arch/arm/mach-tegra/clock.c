@@ -205,8 +205,10 @@ int clk_enable(struct clk *c)
 
 	if (clk_is_auto_dvfs(c)) {
 		ret = tegra_dvfs_set_rate(c, clk_get_rate_locked(c));
+#if 0
 		if (ret)
 			goto out;
+#endif
 	}
 
 	if (c->refcnt == 0) {
