@@ -2137,7 +2137,7 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 		goto out_probe_err;
 	}
 
-	set_irq_type(touch->irq, IRQF_TRIGGER_FALLING);
+	irq_set_irq_type(touch->irq, IRQF_TRIGGER_FALLING);
 	ret = request_irq(touch->irq,
 			cyapa_i2c_irq,
 			0,
