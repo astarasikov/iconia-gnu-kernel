@@ -208,6 +208,10 @@ REGULATOR_INIT(ldo7, 1250, 3300, false);
 REGULATOR_INIT(ldo8, 1250, 3300, false);
 REGULATOR_INIT(ldo9, 1250, 3300, false);
 
+static struct tps6586x_rtc_platform_data rtc_data = {
+	.irq = TEGRA_NR_IRQS + TPS6586X_INT_RTC_ALM1,
+};
+
 #define TPS_REG(_id, _data)			\
 	{					\
 		.id = TPS6586X_ID_##_id,	\
@@ -240,6 +244,11 @@ static struct tps6586x_subdev_info tps_devs[] = {
 	TPS_GPIO_FIXED_REG(1, &vdd_1v2),
 	TPS_GPIO_FIXED_REG(2, &vdd_1v05),
 	TPS_GPIO_FIXED_REG(3, &vdd_1v05_mode),
+	{
+		.id	= 0,
+		.name	= "tps6586x-rtc",
+		.platform_data  = &rtc_data,
+	},
 };
 
 static struct tps6586x_platform_data tps_platform = {
