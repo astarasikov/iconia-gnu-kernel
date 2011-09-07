@@ -53,7 +53,8 @@ and one existing one.
 
 PR_SET_SECCOMP:
 	A pre-existing option for enabling strict seccomp mode (1) or
-	filtering seccomp (13).
+	filtering seccomp (13).  Performing this call (13) will enable
+	the current set of defined filters.
 
 	Usage:
 		prctl(PR_SET_SECCOMP, 1);  /* strict */
@@ -76,9 +77,9 @@ PR_SET_SECCOMP_FILTER:
 	call will append the supplied string to any existing filters.
 	Filter construction looks as follows:
 		(Nothing) + "fd == 1 || fd == 2" => fd == 1 || fd == 2
-		... + "fd != 2" => (fd == 1 || fd == 2) && fd != 2
+		... + "fd != 2" => (fd == 1 || fd == 2) && (fd != 2)
 		... + "size < 100" =>
-			((fd == 1 || fd == 2) && fd != 2) && size < 100
+		    ((fd == 1 || fd == 2) && (fd != 2)) && (size < 100)
 	If there is no filter and the seccomp mode has already
 	transitioned to filtering, additions cannot be made.  Filters
 	may only be added that reduce the available kernel surface.
@@ -150,6 +151,38 @@ may be done as follows:
   syscall(__NR_exit, 0);
 
 
+Inheritance
+-----------
+
+Changing the availability of the kernel ABI at runtime runs the risk of
+providing access to unreachable code paths in normal applications.  To
+avoid the pitfalls that accompany this risk, seccomp filter inheritance
+is restricted.
+
+Filters may be inherited across a fork/clone if they have been activated
+by a call to prctl(PR_SET_SECCOMP, 13).  If the process had the
+CAP_SYS_ADMIN capability when configuring the filters, they may also be
+inherited across an execve call.
+
+Inherited filters may not be modified by the child process.  If child
+would like to further restrict the available system calls, it may
+perform the same calls as discussed earlier: set, clear, get, and
+finally prctl(PR_SET_SECCOMP, 13).  Until the child calls
+PR_SET_SECCOMP, their filters will be ignored and only the inherited
+filter will be evaluated.  After a successful PR_SET_SECCOMP call, all
+system calls performed by the child will be checked against the filters
+that were specified by itself and then against the filters supplied by
+any ancestors.  Any system call used must be allowed by all of the
+filters tested.  This composition of the ancestral seccomp filters and
+process-local filters guarantees that only the minimal set of system calls
+will be permitted at any point and without child processes needing to be
+aware of any prior system call filtering.
+
+(If, for instance, the child process merely copied the parent filters
+and then extended them, the child would be required to enumerate all
+existing filters to determine which needed to be dropped.)
+
+
 Caveats
 -------
 
@@ -157,14 +190,6 @@ Caveats
   prctl(PR_CLEAR_SECCOMP_FILTER, ...).  Otherwise the behavior may vary
   depending on if CONFIG_FTRACE_SYSCALLS support exists -- though an
   error will be returned if the support is missing.
-
-- execve is always blocked.  seccomp filters may not cross that boundary.
-
-- Filters can be inherited across fork/clone but only when they are
-  active (e.g., PR_SET_SECCOMP has been set to 13), but not prior to use.
-  This stops the parent process from adding filters that may undermine
-  the child process security or create unexpected behavior after an
-  execve.
 
 - Some platforms support a 32-bit userspace with 64-bit kernels.  In
   these cases (CONFIG_COMPAT), system call numbers may not match across

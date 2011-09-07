@@ -21,6 +21,7 @@
 #include "qcusbnet.h"
 
 #include <linux/compat.h>
+#include <linux/poll.h>
 
 struct readreq {
 	struct list_head node;
@@ -43,6 +44,7 @@ struct client {
 	struct list_head reads;
 	struct list_head notifies;
 	struct list_head urbs;
+	wait_queue_head_t poll_queue;
 };
 
 struct urbsetup {
@@ -57,6 +59,8 @@ struct qmihandle {
 	u16 cid;
 	struct qcusbnet *dev;
 };
+
+#define CID_NONE ((u16)-1)
 
 static int qcusbnet2k_fwdelay;
 
@@ -88,6 +92,8 @@ static ssize_t devqmi_read(struct file *file, char __user *buf, size_t size,
 			   loff_t *pos);
 static ssize_t devqmi_write(struct file *file, const char __user *buf,
 			    size_t size, loff_t *pos);
+static unsigned devqmi_poll(struct file *file,
+			    struct poll_table_struct *poll_table);
 
 static bool qmi_ready(struct qcusbnet *dev, u16 timeout);
 static void wds_callback(struct qcusbnet *dev, u16 cid, void *data);
@@ -105,6 +111,7 @@ static const struct file_operations devqmi_fops = {
 	.owner   = THIS_MODULE,
 	.read    = devqmi_read,
 	.write   = devqmi_write,
+	.poll    = devqmi_poll,
 	.unlocked_ioctl   = devqmi_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl = devqmi_compat_ioctl,
@@ -235,6 +242,10 @@ static void read_callback(struct urb *urb)
 				kfree(copy);
 				break;
 			}
+
+			/* TODO(ttuttle): Should we do this only if a
+			   notify is not registered? */
+			wake_up_interruptible(&client->poll_queue);
 
 			notify = client_remove_notify(client, tid);
 			if (notify)
@@ -822,6 +833,7 @@ static int client_alloc(struct qcusbnet *dev, u8 type)
 	INIT_LIST_HEAD(&client->reads);
 	INIT_LIST_HEAD(&client->notifies);
 	INIT_LIST_HEAD(&client->urbs);
+	init_waitqueue_head(&client->poll_queue);
 
 	spin_unlock_irqrestore(&dev->qmi.clients_lock, flags);
 
@@ -862,6 +874,8 @@ static void client_free(struct qcusbnet *dev, u16 cid)
 		}
 		while (client_delread(dev, cid, 0, &data, &size))
 			kfree(data);
+
+		wake_up_all(&client->poll_queue);
 
 		list_del(&client->node);
 		kfree(client);
@@ -1102,7 +1116,7 @@ static int devqmi_open(struct inode *inode, struct file *file)
 	}
 
 	handle = (struct qmihandle *)file->private_data;
-	handle->cid = (u16)-1;
+	handle->cid = CID_NONE;
 	handle->dev = ref;
 
 	GOBI_DEBUG("%p %04x", handle, handle->cid);
@@ -1138,7 +1152,7 @@ static long devqmi_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			return -EINVAL;
 		}
 
-		if (handle->cid != (u16)-1) {
+		if (handle->cid != CID_NONE) {
 			GOBI_WARN("cid already set");
 			return -EBADR;
 		}
@@ -1167,7 +1181,7 @@ static long devqmi_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	 * altogether).
 	 */
 	case IOCTL_QMI_CLOSE:
-		if (handle->cid == (u16)-1) {
+		if (handle->cid == CID_NONE) {
 			GOBI_WARN("no cid");
 			return -EBADR;
 		}
@@ -1242,7 +1256,7 @@ static int devqmi_release(struct inode *inode, struct file *file)
 
 	if (handle) {
 		file->private_data = NULL;
-		if (handle->cid != (u16)-1)
+		if (handle->cid != CID_NONE)
 			client_free(handle->dev, handle->cid);
 		qcusbnet_put(handle->dev);
 		kfree(handle);
@@ -1274,7 +1288,7 @@ static ssize_t devqmi_read(struct file *file, char __user *buf, size_t size,
 		return -ENXIO;
 	}
 
-	if (handle->cid == (u16)-1) {
+	if (handle->cid == CID_NONE) {
 		GOBI_WARN("cid is not set");
 		return -EBADR;
 	}
@@ -1323,7 +1337,7 @@ static ssize_t devqmi_write(struct file *file, const char __user * buf,
 		return -ENXIO;
 	}
 
-	if (handle->cid == (u16)-1) {
+	if (handle->cid == CID_NONE) {
 		GOBI_WARN("cid is not set");
 		return -EBADR;
 	}
@@ -1350,6 +1364,51 @@ static ssize_t devqmi_write(struct file *file, const char __user * buf,
 
 	if (status == size + qmux_size)
 		return size;
+	return status;
+}
+
+static unsigned devqmi_poll(struct file *file,
+			    struct poll_table_struct *poll_table)
+{
+	struct qmihandle *handle = (struct qmihandle *)file->private_data;
+	struct client *client;
+	unsigned long flags;
+	unsigned status;
+
+	/* Always ready to write. */
+	status = POLLOUT | POLLWRNORM;
+
+	if (!handle) {
+		GOBI_WARN("handle is NULL");
+		return POLLERR;
+	}
+
+	if (!device_valid(handle->dev)) {
+		GOBI_WARN("invalid device");
+		return POLLERR;
+	}
+
+	if (handle->cid == CID_NONE) {
+		GOBI_WARN("cid is not set");
+		return POLLERR;
+	}
+
+	spin_lock_irqsave(&handle->dev->qmi.clients_lock, flags);
+
+	client = client_bycid(handle->dev, handle->cid);
+	if (!client) {
+		status = POLLERR;
+		goto out;
+	}
+
+	poll_wait(file, &client->poll_queue, poll_table);
+
+	if (!list_empty(&client->reads))
+		status |= POLLIN | POLLRDNORM;
+
+out:
+	spin_unlock_irqrestore(&handle->dev->qmi.clients_lock, flags);
+
 	return status;
 }
 

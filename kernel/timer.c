@@ -1775,3 +1775,12 @@ void usleep_range(unsigned long min, unsigned long max)
 	do_usleep_range(min, max);
 }
 EXPORT_SYMBOL(usleep_range);
+
+/**
+ * A platform-specific timer to get the time since the system start.
+ * It returns the time in microseconds.
+ */
+unsigned long __attribute__((weak)) timer_get_us(void)
+{
+	return 0;
+}

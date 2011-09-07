@@ -884,6 +884,15 @@ struct ieee80211_ht_cap {
 #define IEEE80211_HT_CAP_40MHZ_INTOLERANT	0x4000
 #define IEEE80211_HT_CAP_LSIG_TXOP_PROT		0x8000
 
+/* 802.11n HT extended capabilities masks (for extended_ht_cap_info) */
+#define IEEE80211_HT_EXT_CAP_PCO		0x0001
+#define IEEE80211_HT_EXT_CAP_PCO_TIME		0x0006
+#define		IEEE80211_HT_EXT_CAP_PCO_TIME_SHIFT	1
+#define IEEE80211_HT_EXT_CAP_MCS_FB		0x0300
+#define		IEEE80211_HT_EXT_CAP_MCS_FB_SHIFT	8
+#define IEEE80211_HT_EXT_CAP_HTC_SUP		0x0400
+#define IEEE80211_HT_EXT_CAP_RD_RESPONDER	0x0800
+
 /* 802.11n HT capability AMPDU settings (for ampdu_params_info) */
 #define IEEE80211_HT_AMPDU_PARM_FACTOR		0x03
 #define IEEE80211_HT_AMPDU_PARM_DENSITY		0x1C
@@ -1324,6 +1333,9 @@ enum {
 
 /* Although the spec says 8 I'm seeing 6 in practice */
 #define IEEE80211_COUNTRY_IE_MIN_LEN	6
+
+/* The Country String field of the element shall be 3 octets in length */
+#define IEEE80211_COUNTRY_STRING_LEN	3
 
 /*
  * For regulatory extension stuff see IEEE 802.11-2007

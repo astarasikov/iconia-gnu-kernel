@@ -299,4 +299,6 @@ unsigned long __round_jiffies_up_relative(unsigned long j, int cpu);
 unsigned long round_jiffies_up(unsigned long j);
 unsigned long round_jiffies_up_relative(unsigned long j);
 
+unsigned long timer_get_us(void);
+
 #endif

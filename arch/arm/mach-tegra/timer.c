@@ -346,3 +346,23 @@ unsigned long tegra_lp2_timer_remain(void)
 	return timer_readl(TIMER4_BASE + TIMER_PCR) & 0x1ffffffful;
 }
 
+void read_boot_clock(struct timespec *ts)
+{
+	unsigned long curr = tegra_clocksource_read(NULL);
+
+	read_persistent_clock(ts);
+	ts->tv_sec -= curr / 1000000;
+	ts->tv_nsec -= (curr % 1000000) * 1000;
+	set_normalized_timespec(ts, ts->tv_sec, ts->tv_nsec);
+}
+
+struct clocksource * __init clocksource_default_clock(void)
+{
+	__clocksource_updatefreq_scale(&tegra_clocksource, 1, 1000000);
+	return &tegra_clocksource;
+}
+
+unsigned long timer_get_us(void)
+{
+	return tegra_clocksource_read(NULL);
+}

@@ -1,6 +1,6 @@
 /* Driver for Realtek RTS51xx USB card reader
  *
- * Copyright(c) 2009 Realtek Semiconductor Corp. All rights reserved.  
+ * Copyright(c) 2009 Realtek Semiconductor Corp. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,19 +22,20 @@
 
 #if defined(CONFIG_USB_STORAGE_REALTEK) || \
 		defined(CONFIG_USB_STORAGE_REALTEK_MODULE)
-UNUSUAL_DEV(  0x0bda, 0x0159, 0x0000, 0x9999,
-		"Realtek",
-		"USB Card Reader",
-		USB_SC_SCSI, 0xF8, init_realtek_cr, 0),
 
-UNUSUAL_DEV(  0x0bda, 0x0158, 0x0000, 0x9999,
+UNUSUAL_DEV(0x0bda, 0x0138, 0x0000, 0x9999,
 		"Realtek",
 		"USB Card Reader",
-		USB_SC_SCSI, 0xF8, init_realtek_cr, 0),
+		USB_SC_DEVICE, USB_PR_DEVICE, init_realtek_cr, 0),
 
-UNUSUAL_DEV(  0x0bda, 0x0138, 0x0000, 0x9999,
+UNUSUAL_DEV(0x0bda, 0x0158, 0x0000, 0x9999,
 		"Realtek",
 		"USB Card Reader",
-		USB_SC_SCSI, 0xF8, init_realtek_cr, 0),
+		USB_SC_DEVICE, USB_PR_DEVICE, init_realtek_cr, 0),
+
+UNUSUAL_DEV(0x0bda, 0x0159, 0x0000, 0x9999,
+		"Realtek",
+		"USB Card Reader",
+		USB_SC_DEVICE, USB_PR_DEVICE, init_realtek_cr, 0),
+
 #endif  /* defined(CONFIG_USB_STORAGE_REALTEK) || ... */
-

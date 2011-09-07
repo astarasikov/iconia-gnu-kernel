@@ -1440,6 +1440,8 @@ struct cfg80211_ops {
  *	control port protocol ethertype. The device also honours the
  *	control_port_no_encrypt flag.
  * @WIPHY_FLAG_IBSS_RSN: The device supports IBSS RSN.
+ * @WIPHY_FLAG_SUPPORTS_FW_ROAM: The device supports roaming feature in the
+ *	firmware.
  */
 enum wiphy_flags {
 	WIPHY_FLAG_CUSTOM_REGULATORY		= BIT(0),
@@ -1451,6 +1453,7 @@ enum wiphy_flags {
 	WIPHY_FLAG_4ADDR_STATION		= BIT(6),
 	WIPHY_FLAG_CONTROL_PORT_PROTOCOL	= BIT(7),
 	WIPHY_FLAG_IBSS_RSN			= BIT(8),
+	WIPHY_FLAG_SUPPORTS_FW_ROAM		= BIT(13),
 };
 
 struct mac_address {
@@ -1824,8 +1827,9 @@ static inline void *wdev_priv(struct wireless_dev *wdev)
 /**
  * ieee80211_channel_to_frequency - convert channel number to frequency
  * @chan: channel number
+ * @band: band, necessary due to channel number overlap
  */
-extern int ieee80211_channel_to_frequency(int chan);
+extern int ieee80211_channel_to_frequency(int chan, enum ieee80211_band band);
 
 /**
  * ieee80211_frequency_to_channel - convert frequency to channel number
@@ -2012,10 +2016,12 @@ int ieee80211_data_from_8023(struct sk_buff *skb, const u8 *addr,
  * @addr: The device MAC address.
  * @iftype: The device interface type.
  * @extra_headroom: The hardware extra headroom for SKBs in the @list.
+ * @has_80211_header: Set it true if SKB is with IEEE 802.11 header.
  */
 void ieee80211_amsdu_to_8023s(struct sk_buff *skb, struct sk_buff_head *list,
 			      const u8 *addr, enum nl80211_iftype iftype,
-			      const unsigned int extra_headroom);
+			      const unsigned int extra_headroom,
+			      bool has_80211_header);
 
 /**
  * cfg80211_classify8021d - determine the 802.1p/1d tag for a data frame

@@ -65,33 +65,25 @@ static inline long prctl_set_seccomp(unsigned long arg2)
 #define seccomp_filter_init_task(_tsk) do { \
 	mutex_init(&(_tsk)->seccomp.filters_guard); \
 	(_tsk)->seccomp.filters = NULL; \
-} while (0);
+} while (0)
 
-/* Do nothing unless seccomp filtering is active. If not, the execve boundary
- * can not be cleanly enforced and preset filters may leak across execve calls.
- */
-#define seccomp_filter_fork(_tsk, _orig) do { \
-	if ((_tsk)->seccomp.mode) { \
-		(_tsk)->seccomp.mode = (_orig)->seccomp.mode; \
-		mutex_lock(&(_orig)->seccomp.filters_guard); \
-		(_tsk)->seccomp.filters = \
-			get_seccomp_filters((_orig)->seccomp.filters); \
-		mutex_unlock(&(_orig)->seccomp.filters_guard); \
-	} \
-} while (0);
+extern void seccomp_filter_fork(struct task_struct *child,
+				struct task_struct *parent);
 
 /* No locking is needed here because the task_struct will
  * have no parallel consumers.
  */
 #define seccomp_filter_free_task(_tsk) do { \
 	put_seccomp_filters((_tsk)->seccomp.filters); \
-} while (0);
+} while (0)
 
 extern int seccomp_show_filters(struct seccomp_filters *filters,
 				struct seq_file *);
 extern long seccomp_set_filter(int, char *);
 extern long seccomp_clear_filter(int);
 extern long seccomp_get_filter(int, char *, unsigned long);
+
+extern long seccomp_enable_filters(void);
 
 extern long prctl_set_seccomp_filter(unsigned long, unsigned long,
 				     char __user *);
@@ -108,9 +100,10 @@ extern void seccomp_filter_log_failure(int);
 #else  /* CONFIG_SECCOMP_FILTER */
 
 struct seccomp_filters { };
-#define seccomp_filter_init_task(_tsk) do { } while (0);
-#define seccomp_filter_fork(_tsk, _orig) do { } while (0);
-#define seccomp_filter_free_task(_tsk) do { } while (0);
+#define seccomp_filter_init_task(_tsk) do { } while (0)
+static inline void seccomp_filter_fork(struct task_struct *child,
+				       struct task_struct *parent) { }
+#define seccomp_filter_free_task(_tsk) do { } while (0)
 
 static inline int seccomp_show_filters(struct seccomp_filters *filters,
 				       struct seq_file *m)
