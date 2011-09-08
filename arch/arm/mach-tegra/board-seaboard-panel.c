@@ -463,15 +463,18 @@ static void __init fix_framebuffer_carveouts(void) {
 	seaboard_carveouts[1].base = tegra_carveout_start;
 	seaboard_carveouts[1].size = tegra_carveout_size;
 	
-	res = nvhost_get_resource_byname(&seaboard_disp1_device,
-		IORESOURCE_MEM, "fbmem");
-	res->start = tegra_fb_start;
-	res->end = tegra_fb_start + tegra_fb_size - 1;
-
-	res = nvhost_get_resource_byname(&seaboard_disp2_device,
-		IORESOURCE_MEM, "fbmem");
+	res = nvhost_get_resource_byname(&seaboard_disp2_device, IORESOURCE_MEM,
+					 "fbmem");
+	if (!res) {
+		pr_err("Failed to get fbmem2 resource!\n");
+		err = -ENXIO;
+		goto fail;
+	}
 	res->start = tegra_fb2_start;
 	res->end = tegra_fb2_start + tegra_fb2_size - 1;
+
+fail:
+	return err;
 }
 
 int __init seaboard_panel_init(void)
@@ -513,7 +516,6 @@ int __init picasso_panel_init(void)
 	//that is used for HDMI power on other boards
 	seaboard_disp2_out.hotplug_init = NULL;
 	seaboard_disp2_out.postsuspend = NULL;
-	fix_framebuffer_carveouts();
 	return seaboard_panel_register_devices();
 }
 #endif
@@ -526,7 +528,6 @@ int __init tf101_panel_init(void)
 	seaboard_disp1_pdata.fb = &tf101_fb_data;
 	seaboard_backlight_data.pwm_period_ns = 4000000;
 
-	fix_framebuffer_carveouts();
 	return seaboard_panel_register_devices();
 }
 #endif
