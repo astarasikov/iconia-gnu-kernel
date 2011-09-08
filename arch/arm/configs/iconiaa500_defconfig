@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux/arm 2.6.38.3 Kernel Configuration
-# Mon Aug 29 21:32:44 2011
+# Thu Sep  8 00:51:35 2011
 #
 CONFIG_ARM=y
 CONFIG_HAVE_PWM=y
@@ -206,6 +206,7 @@ CONFIG_DEFAULT_IOSCHED="noop"
 # CONFIG_INLINE_WRITE_UNLOCK_IRQ is not set
 # CONFIG_INLINE_WRITE_UNLOCK_IRQRESTORE is not set
 # CONFIG_MUTEX_SPIN_ON_OWNER is not set
+# CONFIG_BOOTSTAGE is not set
 CONFIG_FREEZER=y
 
 #
@@ -425,7 +426,7 @@ CONFIG_ALIGNMENT_TRAP=y
 # CONFIG_USE_OF is not set
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="nvmem=128M@384M mem=1024M@0M vmalloc=256M lp0_vec=8192@0x1840c000 console=tty0 usbcore.old_scheme_first=1 root=/dev/mmcblk1p2 rootwait rootfstype=ext4"
+CONFIG_CMDLINE="mem=1024M@0M vmalloc=256M lp0_vec=8192@0x1840c000 console=tty0 usbcore.old_scheme_first=1 root=/dev/mmcblk1p2 rootwait rootfstype=ext4"
 CONFIG_CMDLINE_FORCE=y
 # CONFIG_XIP_KERNEL is not set
 # CONFIG_KEXEC is not set
@@ -1883,7 +1884,6 @@ CONFIG_BRCMDBG=y
 # CONFIG_ST_BT is not set
 # CONFIG_EASYCAP is not set
 CONFIG_MACH_NO_WESTBRIDGE=y
-# CONFIG_ATH6K_LEGACY is not set
 # CONFIG_USB_ENESTORAGE is not set
 # CONFIG_BCM_WIMAX is not set
 # CONFIG_FT1000 is not set
@@ -1985,6 +1985,7 @@ CONFIG_MISC_FILESYSTEMS=y
 # CONFIG_OMFS_FS is not set
 # CONFIG_QNX4FS_FS is not set
 # CONFIG_ROMFS_FS is not set
+# CONFIG_PSTORE is not set
 # CONFIG_SYSV_FS is not set
 CONFIG_NETWORK_FILESYSTEMS=y
 CONFIG_NFS_FS=y
