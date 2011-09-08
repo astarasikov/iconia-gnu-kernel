@@ -650,7 +650,7 @@ static struct platform_device *picasso_devices[] __initdata = {
 
 static void __init tegra_picasso_reserve(void)
 {
-	tegra_reserve(SZ_128M - (12 << 20), SZ_8M, SZ_16M);
+	tegra_reserve(SZ_128M, SZ_8M, SZ_16M);
 }
 
 static void __init tegra_limit_wifi_clock(void) {
