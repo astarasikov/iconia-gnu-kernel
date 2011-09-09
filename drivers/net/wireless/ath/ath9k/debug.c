@@ -438,7 +438,9 @@ static ssize_t read_file_wiphy(struct file *file, char __user *user_buf,
 	put_unaligned_le16(REG_READ_D(sc->sc_ah, AR_BSSMSKU) & 0xffff, addr + 4);
 	len += snprintf(buf + len, sizeof(buf) - len,
 			"addrmask: %pM\n", addr);
+	ath9k_ps_wakeup(sc);
 	tmp = ath9k_hw_getrxfilter(sc->sc_ah);
+	ath9k_ps_restore(sc);
 	len += snprintf(buf + len, sizeof(buf) - len,
 			"rfilt: 0x%x", tmp);
 	if (tmp & ATH9K_RX_FILTER_UCAST)
@@ -717,6 +719,7 @@ static ssize_t read_file_recv(struct file *file, char __user *user_buf,
 	if (buf == NULL)
 		return -ENOMEM;
 
+	ath9k_ps_wakeup(sc);
 	len += snprintf(buf + len, size - len,
 			"%18s : %10u\n", "CRC ERR",
 			sc->debug.stats.rxstats.crc_err);
@@ -891,7 +894,9 @@ static ssize_t read_file_regval(struct file *file, char __user *user_buf,
 	unsigned int len;
 	u32 regval;
 
+	ath9k_ps_wakeup(sc);
 	regval = REG_READ_D(ah, sc->debug.regidx);
+	ath9k_ps_restore(sc);
 	len = sprintf(buf, "0x%08x\n", regval);
 	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
 }
@@ -913,7 +918,9 @@ static ssize_t write_file_regval(struct file *file, const char __user *user_buf,
 	if (strict_strtoul(buf, 0, &regval))
 		return -EINVAL;
 
+	ath9k_ps_wakeup(sc);
 	REG_WRITE_D(ah, sc->debug.regidx, regval);
+	ath9k_ps_restore(sc);
 	return count;
 }
 
