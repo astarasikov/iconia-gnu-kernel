@@ -1149,6 +1149,10 @@ static irqreturn_t tegra_dc_irq(int irq, void *ptr)
 			val = tegra_dc_readl(dc, DC_CMD_INT_ENABLE);
 			val &= ~FRAME_END_INT;
 			tegra_dc_writel(dc, val, DC_CMD_INT_ENABLE);
+
+			val = tegra_dc_readl(dc, DC_CMD_INT_MASK);
+			val &= ~FRAME_END_INT;
+			tegra_dc_writel(dc, val, DC_CMD_INT_MASK);
 		}
 
 		if (completed)
@@ -1357,8 +1361,7 @@ static int tegra_dc_init(struct tegra_dc *dc)
 	tegra_dc_writel(dc, 0x00202020, DC_DISP_MEM_HIGH_PRIORITY);
 	tegra_dc_writel(dc, 0x00010101, DC_DISP_MEM_HIGH_PRIORITY_TIMER);
 
-	tegra_dc_writel(dc, (FRAME_END_INT |
-			     V_BLANK_INT |
+	tegra_dc_writel(dc, (V_BLANK_INT |
 			     WIN_A_UF_INT |
 			     WIN_B_UF_INT |
 			     WIN_C_UF_INT), DC_CMD_INT_MASK);
