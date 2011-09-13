@@ -142,12 +142,15 @@ struct tegra_dc_win {
 	struct tegra_dc		*dc;
 
 	struct nvmap_handle_ref	*cur_handle;
+
+	u32			swap_countdown;
 };
 
 
 #define TEGRA_WIN_FLAG_ENABLED		(1 << 0)
 #define TEGRA_WIN_FLAG_BLEND_PREMULT	(1 << 1)
 #define TEGRA_WIN_FLAG_BLEND_COVERAGE	(1 << 2)
+#define TEGRA_WIN_FLAG_SWAP_ASAP	(1 << 3)
 
 #define TEGRA_WIN_BLEND_FLAGS_MASK \
 	(TEGRA_WIN_FLAG_BLEND_PREMULT | TEGRA_WIN_FLAG_BLEND_COVERAGE)
