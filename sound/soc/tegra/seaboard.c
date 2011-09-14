@@ -318,12 +318,21 @@ static struct snd_soc_jack_pin hp_pins[] = {
 	},
 };
 
-static struct snd_soc_jack_gpio hp_gpios[] = {
+static struct snd_soc_jack_gpio seaboard_hp_gpios[] = {
 	{
 		.name = "Headphone Detect",
 		.report = SND_JACK_HEADPHONE,
 		.debounce_time = 150,
 		.invert = 1,
+	}
+};
+
+static struct snd_soc_jack_gpio asymptote_hp_gpios[] = {
+	{
+		.name = "Headphone Detect",
+		.report = SND_JACK_HEADPHONE,
+		.debounce_time = 150,
+		.invert = 0,
 	}
 };
 
@@ -342,14 +351,23 @@ static int seaboard_init_jacks(struct snd_soc_codec *codec)
 	struct seaboard_audio_platform_data *pdata = board->pdata;
 	int ret = 0;
 
-	hp_gpios[0].gpio = pdata->gpio_hp_det;
-
 	snd_soc_jack_new(codec, "Headphone Jack", SND_JACK_HEADPHONE,  &hp);
 	snd_soc_jack_new(codec, "Mic Jack",	  SND_JACK_MICROPHONE, &mic);
 	snd_soc_jack_add_pins(&hp,  ARRAY_SIZE(hp_pins),  hp_pins);
 	snd_soc_jack_add_pins(&mic, ARRAY_SIZE(mic_pins), mic_pins);
 
-	ret = snd_soc_jack_add_gpios(&hp, ARRAY_SIZE(hp_gpios), hp_gpios);
+	if (machine_is_asymptote()) {
+		asymptote_hp_gpios[0].gpio = pdata->gpio_hp_det;
+		ret = snd_soc_jack_add_gpios(&hp,
+					ARRAY_SIZE(asymptote_hp_gpios),
+					asymptote_hp_gpios);
+	} else {
+		seaboard_hp_gpios[0].gpio = pdata->gpio_hp_det;
+		ret = snd_soc_jack_add_gpios(&hp,
+					ARRAY_SIZE(seaboard_hp_gpios),
+					seaboard_hp_gpios);
+	}
+
 	if (ret)
 		return ret;
 
