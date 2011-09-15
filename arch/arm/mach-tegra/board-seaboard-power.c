@@ -232,6 +232,16 @@ int __init seaboard_regulator_init(void)
 	/* set initial_mode to MODE_FAST for SM1 */
 	sm1_data.constraints.initial_mode = REGULATOR_MODE_FAST;
 
+	/* Asymptote has a touchscreen on the rail powered by LDO6, it needs
+	 * 3v3. All other seaboard-based targets use 1v8 on LDO6.
+	 */
+	if (machine_is_asymptote()) {
+		ldo6_data.constraints.max_uV = 3300*1000;
+		ldo6_data.constraints.min_uV = 3300*1000;
+		ldo6_data.constraints.apply_uV = true;
+		ldo6_data.constraints.always_on = true;
+	}
+
 	i2c_register_board_info(4, seaboard_regulators, 1);
 	return 0;
 }
