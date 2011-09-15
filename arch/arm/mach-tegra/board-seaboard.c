@@ -1127,7 +1127,7 @@ static void __init tegra_seaboard_init(void)
  * On boards that don't implement the reset hardware we fall back to the old
  * method.
  */
-static void kaen_machine_restart(char mode, const char *cmd)
+static void gpio_machine_restart(char mode, const char *cmd)
 {
 	/* Disable interrupts first */
 	local_irq_disable();
@@ -1184,7 +1184,7 @@ static void __init tegra_kaen_init(void)
 
 	kaen_sensors_init();
 	legacy_arm_pm_restart = arm_pm_restart;
-	arm_pm_restart = kaen_machine_restart;
+	arm_pm_restart = gpio_machine_restart;
 }
 
 static void __init tegra_aebl_init(void)
@@ -1220,6 +1220,8 @@ static void __init tegra_aebl_init(void)
 	seaboard_i2c_init();
 
 	aebl_sensors_init();
+	legacy_arm_pm_restart = arm_pm_restart;
+	arm_pm_restart = gpio_machine_restart;
 }
 
 static void __init tegra_wario_init(void)
