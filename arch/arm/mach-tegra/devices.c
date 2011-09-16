@@ -29,6 +29,7 @@
 #include <mach/iomap.h>
 #include <mach/dma.h>
 #include <mach/usb_phy.h>
+#include <mach/nvhost.h>
 #include "gpio-names.h"
 
 static struct resource i2c_resource1[] = {
@@ -782,3 +783,28 @@ struct platform_device tegra_gart_device = {
 	.num_resources	= ARRAY_SIZE(tegra_gart_resources),
 	.resource	= tegra_gart_resources
 };
+
+static struct resource tegra_camera_resources[] = {
+	{
+		.name	= "regs",
+		.start	= TEGRA_VI_BASE,
+		.end	= TEGRA_VI_BASE + TEGRA_VI_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+static u64 tegra_camera_dma_mask = DMA_BIT_MASK(32);
+
+struct nvhost_device tegra_camera_device = {
+	.name		= "tegra-camera",
+	.id		= 0,
+	.dev		= {
+		.dma_mask		= &tegra_camera_dma_mask,
+		.coherent_dma_mask	= 0xffffffff,
+	},
+	.num_resources	= ARRAY_SIZE(tegra_camera_resources),
+	.resource	= tegra_camera_resources,
+};
+
+
+

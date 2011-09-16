@@ -55,4 +55,6 @@ extern struct platform_device tegra_pwfm2_device;
 extern struct platform_device tegra_pwfm3_device;
 extern struct platform_device tegra_gart_device;
 
+extern struct nvhost_device tegra_camera_device;
+
 #endif
