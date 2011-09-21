@@ -987,6 +987,7 @@ static bool ar9003_hw_init_cal(struct ath_hw *ah,
 	/* Revert chainmasks to their original values before NF cal */
 	ar9003_hw_set_chain_masks(ah, ah->rxchainmask, ah->txchainmask);
 
+	ath9k_hw_loadnf(ah, chan);
 	ath9k_hw_start_nfcal(ah, true);
 
 	/* Initialize list pointers */
