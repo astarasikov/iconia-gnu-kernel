@@ -1085,6 +1085,9 @@ static void __init tegra_asymptote_init(void)
 	}
 
 	asymptote_i2c_register_devices();
+
+	/* The tsl2563 ALS on Asymptote doesn't play nice with a 400kHz bus */
+	seaboard_i2c1_platform_data.bus_clk_rate[0] = 100000;
 	seaboard_i2c_init();
 }
 
