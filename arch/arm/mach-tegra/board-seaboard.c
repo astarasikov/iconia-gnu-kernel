@@ -43,6 +43,7 @@
 #include <mach/kbc.h>
 #include <mach/system.h>
 #include <mach/clk.h>
+#include <mach/usb_phy.h>
 
 #include <asm/cacheflush.h>
 #include <asm/mach-types.h>
@@ -564,6 +565,30 @@ static struct i2c_board_info __initdata cyapa_device = {
 	.platform_data	= &cyapa_i2c_platform_data,
 };
 
+static struct tegra_utmip_config usb1_phy_config = {
+	.hssync_start_delay = 0,
+	.idle_wait_delay = 17,
+	.elastic_limit = 16,
+	.term_range_adj = 6,
+	.xcvr_setup = 15,
+	.xcvr_lsfslew = 2,
+	.xcvr_lsrslew = 2,
+	.vbus_gpio = TEGRA_GPIO_USB1,
+};
+
+static struct tegra_utmip_config usb3_phy_config = {
+	.hssync_start_delay = 0,
+	.idle_wait_delay = 17,
+	.elastic_limit = 16,
+	.term_range_adj = 6,
+	.xcvr_setup = 8,
+	.xcvr_lsfslew = 2,
+	.xcvr_lsrslew = 2,
+	.vbus_gpio = TEGRA_GPIO_USB3,
+	.shared_pin_vbus_en_oc = true,
+};
+
+
 static int seaboard_ehci_init(void)
 {
 	int gpio_status;
@@ -584,9 +609,11 @@ static int seaboard_ehci_init(void)
 
 	pdata = tegra_ehci1_device.dev.platform_data;
 	pdata->keep_clock_in_bus_suspend = 1;
+	pdata->phy_config = &usb1_phy_config;
 
 	pdata = tegra_ehci3_device.dev.platform_data;
 	pdata->keep_clock_in_bus_suspend = 1;
+	pdata->phy_config = &usb3_phy_config;
 
 	platform_device_register(&tegra_ehci1_device);
 	platform_device_register(&tegra_ehci3_device);
