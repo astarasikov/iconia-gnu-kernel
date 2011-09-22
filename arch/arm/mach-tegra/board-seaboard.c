@@ -1165,7 +1165,7 @@ void __init tegra_common_reserve(void)
 	 * and 0 for fb2_size.
 	 */
 	fb_size = round_up((1368 * 910 * 4 * 2), PAGE_SIZE);
-	tegra_reserve(SZ_128M, fb_size, 0);
+	tegra_reserve(256 * 1024 * 1024, fb_size, 0);
 }
 
 static const char *seaboard_dt_board_compat[] = {
