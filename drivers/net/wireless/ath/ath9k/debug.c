@@ -1234,24 +1234,24 @@ int ath9k_init_debug(struct ath_hw *ah)
 		goto err;
 #endif
 
-	if (!debugfs_create_file("dma", S_IRUSR, sc->debug.debugfs_phy,
-			sc, &fops_dma))
+	if (!debugfs_create_file("dma", S_IRUSR | S_IRGRP | S_IROTH,
+			sc->debug.debugfs_phy, sc, &fops_dma))
 		goto err;
 
-	if (!debugfs_create_file("interrupt", S_IRUSR, sc->debug.debugfs_phy,
-			sc, &fops_interrupt))
+	if (!debugfs_create_file("interrupt", S_IRUSR | S_IRGRP | S_IROTH,
+			sc->debug.debugfs_phy, sc, &fops_interrupt))
 		goto err;
 
 	if (!debugfs_create_file("wiphy", S_IRUSR | S_IWUSR,
 			sc->debug.debugfs_phy, sc, &fops_wiphy))
 		goto err;
 
-	if (!debugfs_create_file("xmit", S_IRUSR, sc->debug.debugfs_phy,
-			sc, &fops_xmit))
+	if (!debugfs_create_file("xmit", S_IRUSR | S_IRGRP | S_IROTH,
+			sc->debug.debugfs_phy, sc, &fops_xmit))
 		goto err;
 
-	if (!debugfs_create_file("recv", S_IRUSR, sc->debug.debugfs_phy,
-			sc, &fops_recv))
+	if (!debugfs_create_file("recv", S_IRUSR | S_IRGRP | S_IROTH,
+			sc->debug.debugfs_phy, sc, &fops_recv))
 		goto err;
 
 	if (!debugfs_create_file("rx_chainmask", S_IRUSR | S_IWUSR,
@@ -1274,7 +1274,7 @@ int ath9k_init_debug(struct ath_hw *ah)
 			sc->debug.debugfs_phy, &ah->config.cwm_ignore_extcca))
 		goto err;
 
-	if (!debugfs_create_file("samples", S_IRUSR,
+	if (!debugfs_create_file("samples", S_IRUSR | S_IRGRP | S_IROTH,
 			sc->debug.debugfs_phy, sc, &fops_samps))
 		goto err;
 
