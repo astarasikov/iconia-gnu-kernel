@@ -356,51 +356,6 @@ static const struct file_operations fops_credit_dist_stats = {
 	.llseek = default_llseek,
 };
 
-static ssize_t write_file_lrssi_roam_threshold(struct file *file,
-					       const char __user *user_buf,
-					       size_t count, loff_t *ppos)
-{
-	struct ath6kl *ar = file->private_data;
-	unsigned long lrssi_roam_threshold;
-	char buf[32];
-	ssize_t len;
-
-	len = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, user_buf, len))
-		return -EFAULT;
-
-	buf[len] = '\0';
-	if (strict_strtoul(buf, 0, &lrssi_roam_threshold))
-		return -EINVAL;
-
-	ar->lrssi_roam_threshold = lrssi_roam_threshold;
-
-	ath6kl_wmi_set_roam_lrssi_cmd(ar->wmi, ar->lrssi_roam_threshold);
-
-	return count;
-}
-
-static ssize_t read_file_lrssi_roam_threshold(struct file *file,
-					      char __user *user_buf,
-					      size_t count, loff_t *ppos)
-{
-	struct ath6kl *ar = file->private_data;
-	char buf[32];
-	unsigned int len;
-
-	len = sprintf(buf, "%d\n", ar->lrssi_roam_threshold);
-
-	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
-}
-
-static const struct file_operations fops_lrssi_roam_threshold = {
-	.read = read_file_lrssi_roam_threshold,
-	.write = write_file_lrssi_roam_threshold,
-	.open = ath6kl_debugfs_open,
-	.owner = THIS_MODULE,
-	.llseek = default_llseek,
-};
-
 int ath6kl_debug_init(struct ath6kl *ar)
 {
 	ar->debugfs_phy = debugfs_create_dir("ath6kl",
@@ -414,8 +369,6 @@ int ath6kl_debug_init(struct ath6kl *ar)
 	debugfs_create_file("credit_dist_stats", S_IRUSR, ar->debugfs_phy, ar,
 			    &fops_credit_dist_stats);
 
-	debugfs_create_file("lrssi_roam_threshold", S_IRUSR | S_IWUSR,
-			    ar->debugfs_phy, ar, &fops_lrssi_roam_threshold);
 	return 0;
 }
 #endif
