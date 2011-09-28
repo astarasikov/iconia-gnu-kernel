@@ -1408,8 +1408,7 @@ static int ath6kl_flush_pmksa(struct wiphy *wiphy, struct net_device *netdev)
 }
 
 #ifdef CONFIG_PM
-static int ar6k_cfg80211_suspend(struct wiphy *wiphy,
-				 struct cfg80211_wowlan *wow)
+static int ar6k_cfg80211_suspend(struct wiphy *wiphy)
 {
 	struct ath6kl *ar = wiphy_priv(wiphy);
 
