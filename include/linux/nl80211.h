@@ -887,9 +887,6 @@ enum nl80211_commands {
  * @NL80211_ATTR_MESH_CONFIG: Mesh configuration parameters, a nested attribute
  *	containing attributes from &enum nl80211_meshconf_params.
  *
- * @NL80211_ATTR_ROAM_SUPPORT: Indicates whether the firmware is capable of
- *	roaming to another AP in the same ESS if the signal lever is low.
- *
  * @NL80211_ATTR_SCAN_FLAGS: scan request control flags (u32)
  *
  * @NL80211_ATTR_MAX: highest attribute number currently defined
@@ -1078,8 +1075,6 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_WIPHY_ANTENNA_AVAIL_TX,
 	NL80211_ATTR_WIPHY_ANTENNA_AVAIL_RX,
-
-	NL80211_ATTR_ROAM_SUPPORT,
 
 	NL80211_ATTR_SCAN_FLAGS,
 
