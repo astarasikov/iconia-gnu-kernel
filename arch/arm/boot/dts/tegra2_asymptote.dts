@@ -1,10 +1,10 @@
 /dts-v1/;
 
-/include/ "tegra250.dtsi"
+/include/ "tegra20.dtsi"
 
 / {
         model = "Google Asymptote";
-        compatible = "google,asymptote", "nvidia,tegra250";
+        compatible = "google,asymptote", "nvidia,tegra20";
 
 	sdhci@c8000600 {
 		status = "ok";
