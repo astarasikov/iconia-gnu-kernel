@@ -1072,7 +1072,6 @@ static void __init tegra_asymptote_init(void)
 	seaboard_kbc_platform_data.keymap_data = &cros_keymap_data;
 
 	asymptote_common_init();
-	seaboard_panel_init();
 	/* asymptote has same memory config as seaboard (for now) */
 	seaboard_emc_init();
 
