@@ -341,6 +341,9 @@ struct ieee80211_bss_conf {
  *	the off-channel channel when a remain-on-channel offload is done
  *	in hardware -- normal packets still flow and are expected to be
  *	handled properly by the device.
+ * @IEEE80211_TX_CTL_USE_MINRATE: This frame will be sent at lowest rate.
+ *	This flag is used to send nullfunc frame at minimum rate when
+ *	the nullfunc is used for connection monitoring purpose.
  *
  * Note: If you have to add new flags to the enumeration, then don't
  *	 forget to update %IEEE80211_TX_TEMPORARY_FLAGS when necessary.
@@ -370,6 +373,7 @@ enum mac80211_tx_control_flags {
 	IEEE80211_TX_CTL_LDPC			= BIT(22),
 	IEEE80211_TX_CTL_STBC			= BIT(23) | BIT(24),
 	IEEE80211_TX_CTL_TX_OFFCHAN		= BIT(25),
+	IEEE80211_TX_CTL_USE_MINRATE		= BIT(28),
 };
 
 #define IEEE80211_TX_CTL_STBC_SHIFT		23
