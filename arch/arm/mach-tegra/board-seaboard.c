@@ -975,6 +975,14 @@ static void __init tegra_kaen_init(void)
 	/* setting skew makes WIFI stable when sdmmc1 runs 48MHz. */
 	tegra_set_clock_readskew("sdmmc1", 8);
 
+	/* change xcvr_setup to 13 to adjust USB driving to pass eye
+	 * diagram test.
+	 * xcvr_effect is only for USB1 to set FUSE_SETUP_SEL to zero
+	 */
+	usb1_phy_config.xcvr_effect = 1;
+	usb1_phy_config.xcvr_setup = 13;
+	usb3_phy_config.xcvr_setup = 13;
+
 	kaen_common_init();
 	kaen_emc_init();
 

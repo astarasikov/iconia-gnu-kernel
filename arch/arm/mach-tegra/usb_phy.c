@@ -498,7 +498,8 @@ static int utmi_phy_power_on(struct tegra_usb_phy *phy)
 
 	if (phy->instance == 0) {
 		val = readl(base + UTMIP_SPARE_CFG0);
-		if (phy->mode == TEGRA_USB_PHY_MODE_DEVICE)
+		if (phy->mode == TEGRA_USB_PHY_MODE_DEVICE ||
+		    config->xcvr_effect)
 			val &= ~FUSE_SETUP_SEL;
 		else
 			val |= FUSE_SETUP_SEL;
