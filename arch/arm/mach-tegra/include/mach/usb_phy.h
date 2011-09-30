@@ -20,6 +20,9 @@
 #include <linux/clk.h>
 #include <linux/usb/otg.h>
 
+/*
+ * xcvr_effect is only for USB1 to control FUSE_SETUP_SEL
+ */
 struct tegra_utmip_config {
 	u8 hssync_start_delay;
 	u8 elastic_limit;
@@ -28,6 +31,7 @@ struct tegra_utmip_config {
 	u8 xcvr_setup;
 	u8 xcvr_lsfslew;
 	u8 xcvr_lsrslew;
+	u8 xcvr_effect;
 	u8 vbus_gpio;
 	bool shared_pin_vbus_en_oc;
 };
