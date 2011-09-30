@@ -215,6 +215,10 @@ static int picasso_battery_get_property(struct power_supply *psy,
 		return picasso_battery_get_current_now(val);
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
 		return picasso_battery_get_charge_now(val);
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+		val->intval = 100;
+		return 0;
 	default:
 		dev_err(&priv->client->dev,
 			"%s: INVALID property\n", __func__);
@@ -231,6 +235,8 @@ static enum power_supply_property picasso_battery_properties[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_TEMP,
