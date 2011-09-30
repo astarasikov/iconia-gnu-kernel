@@ -22,7 +22,6 @@
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/reboot.h>
-#include <linux/kdebug.h>
 
 #include "clock.h"
 #include "dvfs.h"
@@ -397,5 +396,4 @@ void __init tegra2_init_dvfs(void)
 		tegra_dvfs_rail_disable(&tegra2_dvfs_rail_vdd_cpu);
 
 	register_reboot_notifier(&tegra_dvfs_reboot_nb);
-	register_die_notifier(&tegra_dvfs_reboot_nb);
 }

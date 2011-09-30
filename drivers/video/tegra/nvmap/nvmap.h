@@ -111,6 +111,7 @@ struct nvmap_client {
 	bool				super;
 	atomic_t			count;
 	struct task_struct		*task;
+	struct list_head		list;
 	struct nvmap_carveout_commit	carveout_commit[0];
 };
 

@@ -20,7 +20,6 @@ CONFIG_EXTRA_FIRMWARE=""
 # CONFIG_FORCEDETH is not set
 # CONFIG_IWLWIFI is not set
 # CONFIG_PCNET32 is not set
-# CONFIG_R8169 is not set
 # CONFIG_RT2500USB is not set
 # CONFIG_RT2800USB is not set
 # CONFIG_RT73USB is not set

@@ -890,6 +890,8 @@ enum nl80211_commands {
  * @NL80211_ATTR_ROAM_SUPPORT: Indicates whether the firmware is capable of
  *	roaming to another AP in the same ESS if the signal lever is low.
  *
+ * @NL80211_ATTR_SCAN_FLAGS: scan request control flags (u32)
+ *
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
  */
@@ -1078,6 +1080,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_WIPHY_ANTENNA_AVAIL_RX,
 
 	NL80211_ATTR_ROAM_SUPPORT,
+
+	NL80211_ATTR_SCAN_FLAGS,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -2038,6 +2042,18 @@ enum nl80211_tx_power_setting {
 	NL80211_TX_POWER_AUTOMATIC,
 	NL80211_TX_POWER_LIMITED,
 	NL80211_TX_POWER_FIXED,
+};
+
+/**
+ * enum nl80211_scan_flags -  scan request control flags
+ *
+ * Scan request control flags are used to control the handling
+ * of NL80211_CMD_TRIGGER_SCAN, requests.
+ *
+ * @NL80211_SCAN_FLAG_TX_ABORT: abort scan if tx collides
+ */
+enum nl80211_scan_flags {
+	NL80211_SCAN_FLAG_TX_ABORT	= 1<<0,
 };
 
 #endif /* __LINUX_NL80211_H */

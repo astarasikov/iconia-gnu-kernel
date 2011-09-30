@@ -611,6 +611,11 @@ static struct i2c_board_info __initdata isl29018_device = {
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_ISL29018_IRQ),
 };
 
+static struct i2c_board_info __initdata tsl2563_device = {
+	I2C_BOARD_INFO("tsl2563", 0x29),
+	.irq = TEGRA_GPIO_TO_IRQ(ASYMPTOTE_GPIO_TSL2563_IRQ),
+};
+
 static struct i2c_board_info __initdata nct1008_device = {
 	I2C_BOARD_INFO("nct1008", 0x4c),
 	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_NCT1008_THERM2_IRQ),
@@ -693,7 +698,7 @@ static struct mxt_platform_data seaboard_mxt_platform_data = {
 	.blen			= 0x16,
 	.threshold		= 0x28,
 	.voltage		= 3300000,	/* 3.3V */
-	.orient			= MXT_DIAGONAL,
+	.orient			= MXT_ROTATED_90,
 	.irqflags		= IRQF_TRIGGER_FALLING,
 	.config			= seaboard_mxt_config_data,
 	.config_length		= sizeof(seaboard_mxt_config_data),
@@ -713,7 +718,7 @@ static const u8 asymptote_mxt_config_data[] = {
 	/* MXT_GEN_ACQUIRE(8) */
 	0x0a, 0x00, 0x14, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	/* MXT_TOUCH_MULTI(9) */
-	0x0F, 0x00, 0x00, 0x20, 0x2a, 0x00, 0x10, 0x50, 0x03, 0x05,
+	0x0F, 0x00, 0x00, 0x20, 0x2a, 0x00, 0x10, 0x1e, 0x02, 0x05,
 	0x00, 0x02, 0x01, 0x00, 0x0a, 0x0a, 0x0a, 0x0a, 0x00, 0x03,
 	0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x0a, 0x00, 0x00, 0x00,
@@ -726,8 +731,8 @@ static const u8 asymptote_mxt_config_data[] = {
 	/* MXT_SPT_COMMSCONFIG(18) */
 	0x00, 0x00,
 	/* MXT_PROCG_NOISE(22) */
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x23, 0x00,
-	0x00, 0x00, 0x05, 0x0a, 0x14, 0x1e, 0x00,
+	0x81, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x23, 0x00,
+	0x00, 0x0d, 0x05, 0x0a, 0x14, 0x1e, 0x00,
 	/* MXT_PROCI_ONETOUCH(24) */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -737,7 +742,7 @@ static const u8 asymptote_mxt_config_data[] = {
 	/* MXT_PROCI_TWOTOUCH(27) */
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	/* MXT_SPT_CTECONFIG(28) */
-	0x00, 0x00, 0x00, 0x28, 0x28, 0x00,
+	0x00, 0x00, 0x00, 0x14, 0x14, 0x00,
 	/* MXT_PROCI_GRIP(40) */
 	0x00, 0x00, 0x00, 0x00, 0x00,
 	/* MXT_PROCI_PALM(41) */
@@ -751,10 +756,10 @@ static struct mxt_platform_data asymptote_mxt_platform_data = {
 	.y_line			= 42,
 	.x_size			= 768,
 	.y_size			= 1024,
-	.blen			= 0x16,
-	.threshold		= 0x3c,
+	.blen			= 0x00,
+	.threshold		= 0x1e,
 	.voltage		= 3300000,	/* 3.3V */
-	.orient			= MXT_DIAGONAL,
+	.orient			= MXT_ROTATED_90,
 	.irqflags		= IRQF_TRIGGER_FALLING,
 	.config			= asymptote_mxt_config_data,
 	.config_length		= sizeof(asymptote_mxt_config_data),
@@ -964,8 +969,12 @@ static void __init asymptote_i2c_register_devices(void)
 	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "temp_alert");
 	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
 
+	gpio_request(TEGRA_GPIO_ISL29018_IRQ, "tsl2563");
+	gpio_direction_input(ASYMPTOTE_GPIO_TSL2563_IRQ);
+
 	i2c_register_board_info(0, &wm8903_device, 1);
 	i2c_register_board_info(0, &mpu3050_device, 1);
+	i2c_register_board_info(0, &tsl2563_device, 1);
 	i2c_register_board_info(2, &bq20z75_device, 1);
 	i2c_register_board_info(3, &asymptote_mxt_device, 1);
 	i2c_register_board_info(4, &nct1008_device, 1);
@@ -1118,7 +1127,7 @@ static void __init tegra_seaboard_init(void)
  * On boards that don't implement the reset hardware we fall back to the old
  * method.
  */
-static void kaen_machine_restart(char mode, const char *cmd)
+static void gpio_machine_restart(char mode, const char *cmd)
 {
 	/* Disable interrupts first */
 	local_irq_disable();
@@ -1175,7 +1184,7 @@ static void __init tegra_kaen_init(void)
 
 	kaen_sensors_init();
 	legacy_arm_pm_restart = arm_pm_restart;
-	arm_pm_restart = kaen_machine_restart;
+	arm_pm_restart = gpio_machine_restart;
 }
 
 static void __init tegra_aebl_init(void)
@@ -1211,6 +1220,8 @@ static void __init tegra_aebl_init(void)
 	seaboard_i2c_init();
 
 	aebl_sensors_init();
+	legacy_arm_pm_restart = arm_pm_restart;
+	arm_pm_restart = gpio_machine_restart;
 }
 
 static void __init tegra_wario_init(void)
@@ -1318,6 +1329,9 @@ static void __init tegra_asymptote_init(void)
 	}
 
 	asymptote_i2c_register_devices();
+
+	/* The tsl2563 ALS on Asymptote doesn't play nice with a 400kHz bus */
+	seaboard_i2c1_platform_data.bus_clk_rate[0] = 100000;
 	seaboard_i2c_init();
 }
 

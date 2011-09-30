@@ -207,6 +207,7 @@ static struct tegra_gpio_table common_gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_NCT1008_THERM2_IRQ,.enable = true },
 	{ .gpio = TEGRA_GPIO_WLAN_POWER,	.enable = true },
 	{ .gpio = TEGRA_GPIO_BACKLIGHT,		.enable = true },
+	{ .gpio = TEGRA_GPIO_BACKLIGHT_VDD,	.enable = true },
 	{ .gpio = TEGRA_GPIO_LVDS_SHUTDOWN,	.enable = true },
 	{ .gpio = TEGRA_GPIO_EN_VDD_PNL,	.enable = true },
 	{ .gpio = TEGRA_GPIO_AC_ONLINE,		.enable = true },
@@ -224,13 +225,12 @@ static struct tegra_gpio_table common_gpio_table[] = {
 };
 
 static struct tegra_gpio_table seaboard_gpio_table[] = {
-	{ .gpio = SEABOARD_GPIO_BACKLIGHT_VDD,	.enable = true },
 	{ .gpio = SEABOARD_GPIO_MXT_RST,	.enable = true },
 };
 
 static struct tegra_gpio_table asymptote_gpio_table[] = {
-	{ .gpio = ASYMPTOTE_GPIO_BACKLIGHT_VDD,	.enable = true },
 	{ .gpio = ASYMPTOTE_GPIO_MXT_RST,	.enable = true },
+	{ .gpio = ASYMPTOTE_GPIO_TSL2563_IRQ,	.enable = true },
 };
 
 

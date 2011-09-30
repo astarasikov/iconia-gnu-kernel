@@ -241,6 +241,8 @@ static void qcnet_unbind(struct usbnet *usbnet, struct usb_interface *iface)
 {
 	struct qcusbnet *dev = (struct qcusbnet *)usbnet->data[0];
 
+	dev->dying = true;
+
 	iface->needs_remote_wakeup = 0;
 	netif_carrier_off(usbnet->net);
 	qc_deregister(dev);
@@ -304,6 +306,12 @@ static void qcnet_bg_startxmit(struct work_struct *work)
 	struct qcusbnet *dev = container_of(work, struct qcusbnet, startxmit);
 	struct urb *urb = NULL;
 	int status;
+
+	if (dev->dying) {
+		GOBI_WARN("dying device");
+		/* Fear not; queued urbs will be freed in qcnet_disconnect. */
+		return;
+	}
 
 	if (dev->active)
 		return;
@@ -599,7 +607,9 @@ int qcnet_probe(struct usb_interface *iface, const struct usb_device_id *vidpids
 		return -ENOMEM;
 	}
 
+	dev->dying = false;
 	dev->iface = iface;
+
 	status = discover_endpoints(dev);
 	if (status) {
 		GOBI_ERROR("discover_endpoints failed: %d", status);

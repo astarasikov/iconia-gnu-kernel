@@ -19596,7 +19596,6 @@ static int alc272_alex_suspend(struct hda_codec *codec, pm_message_t state)
 	struct alc_spec *spec = codec->spec;
 
 	set_eapd(codec, 0x14, 0);
-	set_eapd(codec, 0x15, 0);
 	msleep(300);
 
 	alc_shutup(codec);
@@ -19617,7 +19616,6 @@ static int alc272_alex_resume(struct hda_codec *codec)
 
 	msleep(25);
 	set_eapd(codec, 0x14, 1);
-	set_eapd(codec, 0x15, 1);
 	snd_printdd("hda_codec: alex resume completed\n");
 	return 0;
 }
@@ -19632,7 +19630,7 @@ static void alc272_fixup_alex(struct hda_codec *codec,
 				      (0 << AC_AMPCAP_MUTE_SHIFT)))
 		printk(KERN_WARNING
 		       "hda_codec: failed to override amp caps for NID 0x2\n");
-
+	set_eapd(codec, 0x14, 1);
 #ifdef CONFIG_SND_HDA_POWER_SAVE
 	codec->patch_ops.suspend = alc272_alex_suspend;
 #endif

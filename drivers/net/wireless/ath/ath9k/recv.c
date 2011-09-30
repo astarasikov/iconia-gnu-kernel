@@ -964,15 +964,10 @@ static void ath9k_process_rssi(struct ath_common *common,
 	struct ath_wiphy *aphy = hw->priv;
 	struct ath_hw *ah = common->ah;
 	int last_rssi;
-	__le16 fc;
 
-	if ((ah->opmode != NL80211_IFTYPE_STATION) &&
-	    (ah->opmode != NL80211_IFTYPE_ADHOC))
-		return;
-
-	fc = hdr->frame_control;
-	if (!ieee80211_is_beacon(fc) ||
-	    compare_ether_addr(hdr->addr3, common->curbssid))
+	if (!rx_stats->is_mybeacon ||
+	    ((ah->opmode != NL80211_IFTYPE_STATION) &&
+	     (ah->opmode != NL80211_IFTYPE_ADHOC)))
 		return;
 
 	if (rx_stats->rs_rssi != ATH9K_RSSI_BAD && !rx_stats->rs_moreaggr)
@@ -1677,6 +1672,11 @@ int ath_rx_tasklet(struct ath_softc *sc, int flush, bool hp)
 
 		hdr = (struct ieee80211_hdr *) (hdr_skb->data + rx_status_len);
 		rxs = IEEE80211_SKB_RXCB(hdr_skb);
+		if (ieee80211_is_beacon(hdr->frame_control) &&
+		    !compare_ether_addr(hdr->addr3, common->curbssid))
+			rs.is_mybeacon = true;
+		else
+			rs.is_mybeacon = false;
 
 		hw = ath_get_virt_hw(sc, hdr);
 

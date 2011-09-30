@@ -131,7 +131,7 @@ static int seaboard_backlight_notify(struct device *unused, int brightness)
 		gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
 		tegra_msleep(panel_timings.en_lvds_en_blvdd_ms);
 
-		gpio_set_value(SEABOARD_GPIO_BACKLIGHT_VDD, 1);
+		gpio_set_value(TEGRA_GPIO_BACKLIGHT_VDD, 1);
 		tegra_msleep(panel_timings.en_blvdd_en_pwm_ms);
 	}
 
@@ -142,7 +142,7 @@ static void seaboard_bl_notify_after(struct device *unused, int brightness)
 {
 	if (panel_is_enabled && !brightness) {
 		tegra_msleep(panel_timings.dis_pwm_dis_blvdd_ms);
-		gpio_set_value(SEABOARD_GPIO_BACKLIGHT_VDD, 0);
+		gpio_set_value(TEGRA_GPIO_BACKLIGHT_VDD, 0);
 		rtc_ms_at_panel_off = tegra_rtc_read_ms();
 		panel_is_enabled = 0;
 	} else if (!panel_is_enabled && brightness) {
@@ -516,7 +516,7 @@ static struct platform_device *seaboard_gfx_devices[] __initdata = {
 	&seaboard_backlight_device,
 };
 
-static void __init seaboard_common_panel_gpio_init(void)
+static void __init seaboard_panel_gpio_init(void)
 {
 	gpio_request(TEGRA_GPIO_EN_VDD_PNL, "en_vdd_pnl");
 	gpio_direction_output(TEGRA_GPIO_EN_VDD_PNL, 1);
@@ -534,21 +534,10 @@ static void __init seaboard_common_panel_gpio_init(void)
 	gpio_request(TEGRA_GPIO_HDMI_HPD, "hdmi_hpd");
 	gpio_direction_input(TEGRA_GPIO_HDMI_HPD);
 
+	gpio_request(TEGRA_GPIO_BACKLIGHT_VDD, "bl_vdd");
+	gpio_direction_output(TEGRA_GPIO_BACKLIGHT_VDD, 1);
+
 	panel_is_enabled = 1;
-}
-
-static void __init seaboard_panel_gpio_init(void)
-{
-	seaboard_common_panel_gpio_init();
-	gpio_request(SEABOARD_GPIO_BACKLIGHT_VDD, "bl_vdd");
-	gpio_direction_output(SEABOARD_GPIO_BACKLIGHT_VDD, 1);
-}
-
-static void __init asymptote_panel_gpio_init(void)
-{
-	seaboard_common_panel_gpio_init();
-	gpio_request(ASYMPTOTE_GPIO_BACKLIGHT_VDD, "bl_vdd");
-	gpio_direction_output(ASYMPTOTE_GPIO_BACKLIGHT_VDD, 1);
 }
 
 static int __init seaboard_panel_register_devices(void)
@@ -628,7 +617,7 @@ int __init arthur_panel_init(void)
 #ifdef CONFIG_MACH_ASYMPTOTE
 int __init asymptote_panel_init(void)
 {
-	asymptote_panel_gpio_init();
+	seaboard_panel_gpio_init();
 	seaboard_disp1_out.modes = asymptote_panel_modes;
 	seaboard_disp1_pdata.fb = &asymptote_fb_data;
 	return seaboard_panel_register_devices();

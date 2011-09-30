@@ -298,6 +298,10 @@ int ath6kl_access_datadiag(struct ath6kl *ar, u32 address,
 	return status;
 }
 
+/* FIXME: move to a better place, target.h? */
+#define AR6003_RESET_CONTROL_ADDRESS 0x00004000
+#define AR6004_RESET_CONTROL_ADDRESS 0x00004000
+
 static void ath6kl_reset_device(struct ath6kl *ar, u32 target_type,
 				bool wait_fot_compltn, bool cold_reset)
 {
@@ -305,12 +309,24 @@ static void ath6kl_reset_device(struct ath6kl *ar, u32 target_type,
 	u32 address;
 	u32 data;
 
-	if (target_type != TARGET_TYPE_AR6003)
+	if (target_type != TARGET_TYPE_AR6003 &&
+		target_type != TARGET_TYPE_AR6004)
 		return;
 
 	data = cold_reset ? RESET_CONTROL_COLD_RST : RESET_CONTROL_MBOX_RST;
 
-	address = RTC_BASE_ADDRESS;
+	switch (target_type) {
+	case TARGET_TYPE_AR6003:
+		address = AR6003_RESET_CONTROL_ADDRESS;
+		break;
+	case TARGET_TYPE_AR6004:
+		address = AR6004_RESET_CONTROL_ADDRESS;
+		break;
+	default:
+		address = AR6003_RESET_CONTROL_ADDRESS;
+		break;
+	}
+
 	status = ath6kl_write_reg_diag(ar, &address, &data);
 
 	if (status)
@@ -375,7 +391,7 @@ void ath6kl_stop_endpoint(struct net_device *dev, bool keep_profile,
 
 	if (ar->htc_target) {
 		ath6kl_dbg(ATH6KL_DBG_TRC, "%s: shut down htc\n", __func__);
-		htc_stop(ar->htc_target);
+		ath6kl_htc_stop(ar->htc_target);
 	}
 
 	/*
@@ -568,7 +584,7 @@ int ath6k_setup_credit_dist(void *htc_handle,
 	servicepriority[4] = WMI_DATA_BK_SVC; /* lowest */
 
 	/* set priority list */
-	htc_set_credit_dist(htc_handle, cred_info, servicepriority, 5);
+	ath6kl_htc_set_credit_dist(htc_handle, cred_info, servicepriority, 5);
 
 	return 0;
 }

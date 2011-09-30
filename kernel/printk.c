@@ -27,7 +27,6 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/interrupt.h>			/* For in_interrupt() */
-#include <linux/preserved.h>
 #include <linux/delay.h>
 #include <linux/smp.h>
 #include <linux/security.h>
@@ -1606,55 +1605,3 @@ void kmsg_dump(enum kmsg_dump_reason reason)
 	rcu_read_unlock();
 }
 #endif
-
-#ifdef CONFIG_PRESERVED_RAM
-/*
- * Copy from our circular log_buf to cursor in the given circular buf.
- */
-unsigned int copy_log_buf(char *buf, unsigned int buf_size, unsigned int cursor)
-{
-#ifdef CONFIG_PRINTK
-	unsigned int log_count = ACCESS_ONCE(log_end);
-	unsigned int log_idx = log_count & LOG_BUF_MASK;
-	unsigned int log_size = log_buf_len;
-	char *sptr, *dptr, *swrap, *dwrap, *sstop;
-
-	sstop = log_buf + log_idx;	/* source copy end marker */
-
-	/*
-	 * Don't copy trailing 0s when the log_buf has never been filled.
-	 * Try not to be fooled whenever log_count wraps through 0 thereafter
-	 * (but it's not worth worrying about NUL chars embedded in messages).
-	 */
-	if (log_count < log_buf_len && log_buf[log_count] == '\0') {
-		log_size = log_idx;
-		log_idx = 0;
-	}
-	if (log_size > buf_size) {
-		log_idx += log_size - buf_size;
-		log_idx &= LOG_BUF_MASK;
-		log_size = buf_size;
-	}
-	if (unlikely(log_size == 0))
-		return 0;
-
-	sptr = log_buf + log_idx;
-	swrap = log_buf + log_buf_len;
-	dptr = buf + cursor;
-	dwrap = buf + buf_size;
-
-	do {
-		*dptr++ = *sptr++;
-		if (dptr == dwrap)
-			dptr = buf;
-		if (sptr == swrap)
-			sptr = log_buf;
-	} while (sptr != sstop);
-
-	return log_size;
-
-#else /* !CONFIG_PRINTK */
-	return 0;
-#endif
-}
-#endif /* CONFIG_PRESERVED_RAM */
