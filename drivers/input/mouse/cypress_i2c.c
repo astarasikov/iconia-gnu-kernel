@@ -328,23 +328,23 @@ struct cyapa_i2c {
 
 	/* read from query data region. */
 	char product_id[16];
-	unsigned char capability[14];
-	unsigned char fw_maj_ver;  /* firmware major version. */
-	unsigned char fw_min_ver;  /* firmware minor version. */
-	unsigned char hw_maj_ver;  /* hardware major version. */
-	unsigned char hw_min_ver;  /* hardware minor version. */
+	u8 capability[14];
+	u8 fw_maj_ver;  /* firmware major version. */
+	u8 fw_min_ver;  /* firmware minor version. */
+	u8 hw_maj_ver;  /* hardware major version. */
+	u8 hw_min_ver;  /* hardware minor version. */
 	int max_abs_x;
 	int max_abs_y;
 	int physical_size_x;
 	int physical_size_y;
 };
 
-static unsigned char bl_switch_active[] = {0x00, 0xFF, 0x38,
-		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
-static unsigned char bl_switch_idle[] = {0x00, 0xFF, 0x3B,
-		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
-static unsigned char bl_app_launch[] = {0x00, 0xFF, 0xA5,
-		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+static u8 bl_switch_active[] = { 0x00, 0xFF, 0x38, 0x00, 0x01, 0x02, 0x03,
+		0x04, 0x05, 0x06, 0x07 };
+static u8 bl_switch_idle[] = { 0x00, 0xFF, 0x3B, 0x00, 0x01, 0x02, 0x03, 0x04,
+		0x05, 0x06, 0x07 };
+static u8 bl_app_launch[] = { 0x00, 0xFF, 0xA5, 0x00, 0x01, 0x02, 0x03, 0x04,
+		0x05, 0x06, 0x07 };
 
 /* global pointer to trackpad touch data structure. */
 static struct cyapa_i2c *global_touch;
@@ -362,9 +362,9 @@ static void cyapa_i2c_reschedule_work(struct cyapa_i2c *touch,
 #define DUMP_BUF_SIZE (40 * 3 + 20)  /* max will dump 40 bytes data. */
 void cyapa_dump_data_block(const char *func, u8 reg, u8 length, void *data)
 {
-	char buf[DUMP_BUF_SIZE];
+	u8 buf[DUMP_BUF_SIZE];
 	unsigned buf_len = sizeof(buf);
-	char *p = buf;
+	u8 *p = buf;
 	int i;
 	int l;
 
@@ -372,7 +372,7 @@ void cyapa_dump_data_block(const char *func, u8 reg, u8 length, void *data)
 	buf_len -= l;
 	p += l;
 	for (i = 0; i < length && buf_len; i++, p += l, buf_len -= l)
-		l = snprintf(p, buf_len, "%02x ", *((char *)data + i));
+		l = snprintf(p, buf_len, "%02x ", *((u8 *)data + i));
 	pr_info("%s: data block length = %d\n", func, length);
 	pr_info("%s: %s\n", func, buf);
 }
@@ -559,7 +559,7 @@ static s32 cyapa_i2c_reg_write_byte(struct cyapa_i2c *touch, u16 reg, u8 val)
  * is 256 bytes, so the max read block for I2C bus is 256 bytes.
  */
 static s32 cyapa_i2c_reg_read_block(struct cyapa_i2c *touch, u16 reg,
-		int length, char *values)
+		int length, u8 *values)
 {
 	int ret;
 	u8 buf[1];
@@ -612,7 +612,7 @@ error:
  * is 256 bytes, so the max write block for I2C bus is 256 bytes.
  */
 static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
-		int length, const char *values)
+		int length, const u8 *values)
 
 {
 	int ret;
@@ -767,7 +767,7 @@ static ssize_t cyapa_misc_read(struct file *file, char __user *usr_buf,
 	int ret;
 	int reg_len = (int)count;
 	unsigned long reg_offset = *offset;
-	char reg_buf[CYAPA_REG_MAP_SIZE];
+	u8 reg_buf[CYAPA_REG_MAP_SIZE];
 	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
 
 	ret = cyapa_miscdev_rw_params_check(touch, reg_offset, count);
@@ -801,7 +801,7 @@ static ssize_t cyapa_misc_write(struct file *file, const char __user *usr_buf,
 {
 	int ret;
 	unsigned long reg_offset = *offset;
-	char reg_buf[CYAPA_REG_MAP_SIZE];
+	u8 reg_buf[CYAPA_REG_MAP_SIZE];
 	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
 
 	ret = cyapa_miscdev_rw_params_check(touch, reg_offset, count);
@@ -829,7 +829,7 @@ int cyapa_get_trackpad_run_mode(struct cyapa_i2c *touch,
 		struct cyapa_trackpad_run_mode *run_mode)
 {
 	int ret;
-	char status[BL_HEAD_BYTES];
+	u8 status[BL_HEAD_BYTES];
 	int tries = 5;
 
 	/* reset to unknown status. */
@@ -1003,7 +1003,7 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
 	struct cyapa_misc_ioctl_data ioctl_data;
 	struct cyapa_trackpad_run_mode run_mode;
-	unsigned char buf[8];
+	u8 buf[8];
 
 	if (touch == NULL) {
 		pr_err("cypress trackpad device does not exist.\n");
@@ -1036,9 +1036,9 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 
 		ioctl_data.len = 3;
 		memset(buf, 0, sizeof(buf));
-		buf[0] = (unsigned char)CYAPA_MAJOR_VER;
-		buf[1] = (unsigned char)CYAPA_MINOR_VER;
-		buf[2] = (unsigned char)CYAPA_REVISION_VER;
+		buf[0] = (u8)CYAPA_MAJOR_VER;
+		buf[1] = (u8)CYAPA_MINOR_VER;
+		buf[2] = (u8)CYAPA_REVISION_VER;
 		if (copy_to_user(ioctl_data.buf, buf, ioctl_data.len))
 			return -EIO;
 		if (copy_to_user((void *)arg, &ioctl_data, ioctl_len))
@@ -1282,7 +1282,7 @@ static void cyapa_get_reg_offset(struct cyapa_i2c *touch)
  * is consistent with platform data setting or not.
  */
 static int cyapa_get_and_verify_firmware(struct cyapa_i2c *touch,
-	unsigned char *query_data, unsigned short offset, int length)
+	u8 *query_data, unsigned short offset, int length)
 {
 	int loop = 20;
 	int ret_read_size;
@@ -1292,7 +1292,7 @@ static int cyapa_get_and_verify_firmware(struct cyapa_i2c *touch,
 		ret_read_size = cyapa_i2c_reg_read_block(touch,
 				offset,
 				length,
-				(char *)query_data);
+				query_data);
 		if (ret_read_size == length)
 			break;
 
@@ -1319,7 +1319,7 @@ static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch)
 	int ret;
 	unsigned long flags;
 	unsigned short offset;
-	unsigned char query_data[40];
+	u8 query_data[40];
 
 	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
 	if (touch->fw_work_mode != CYAPA_STREAM_MODE) {
@@ -1382,7 +1382,7 @@ static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch)
 static int cyapa_get_query_data(struct cyapa_i2c *touch)
 {
 	unsigned long flags;
-	char query_data[40];
+	u8 query_data[40];
 	int query_bytes;
 	int ret_read_size;
 	int i;
@@ -1518,9 +1518,9 @@ static int cyapa_i2c_reset_config(struct cyapa_i2c *touch)
 static int cyapa_verify_data_device(struct cyapa_i2c *touch,
 				union cyapa_reg_data *reg_data)
 {
-	unsigned char device_status;
-	unsigned char flag;
-	unsigned char *reg = (unsigned char *)reg_data;
+	u8 device_status;
+	u8 flag;
+	u8 *reg = (u8 *)reg_data;
 
 	device_status = reg[REG_OP_STATUS];
 	flag = reg[REG_OP_DATA1];
@@ -1764,7 +1764,7 @@ static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
 	ret_read_size = cyapa_i2c_reg_read_block(touch,
 					DATA_REG_START_OFFSET,
 					read_length,
-					(char *)&reg_data);
+					(u8 *)&reg_data);
 	if (ret_read_size < 0)
 		return 0;
 
