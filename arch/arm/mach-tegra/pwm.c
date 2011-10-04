@@ -73,8 +73,10 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
 
 	/* convert from duty_ns / period_ns to a fixed number of duty
 	 * ticks per (1 << PWM_DUTY_WIDTH) cycles.
+	 * Also, make sure to round to the nearest integer during division.
 	 */
 	c = duty_ns * ((1 << PWM_DUTY_WIDTH) - 1);
+	c += (period_ns / 2);
 	do_div(c, period_ns);
 
 	val = (u32)c << PWM_DUTY_SHIFT;
