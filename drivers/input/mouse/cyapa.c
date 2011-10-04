@@ -161,12 +161,13 @@
 #define CYAPA_GEN3_OFFSET_SOFT_RESET  GEN3_REG_OFFSET_COMMAND_BASE
 
 #define REG_OFFSET_POWER_MODE (GEN3_REG_OFFSET_COMMAND_BASE + 1)
-#define OP_POWER_MODE_MASK   0xC0
-#define OP_POWER_MODE_SHIFT  6
-#define PWR_MODE_FULL_ACTIVE 3
-#define PWR_MODE_LIGHT_SLEEP 2
-#define PWR_MODE_DEEP_SLEEP  0
-#define SET_POWER_MODE_DELAY 10000  /* unit: us */
+#define OP_POWER_MODE_MASK     0xC0
+#define OP_POWER_MODE_SHIFT    6
+#define PWR_MODE_FULL_ACTIVE   3
+#define PWR_MODE_LIGHT_SLEEP   2
+#define PWR_MODE_MEDIUM_SLEEP  1
+#define PWR_MODE_DEEP_SLEEP    0
+#define SET_POWER_MODE_DELAY   10000  /* unit: us */
 
 /*
  * Status of the cyapa device detection worker.
