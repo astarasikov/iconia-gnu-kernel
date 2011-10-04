@@ -2276,15 +2276,6 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 		return -ENOMEM;
 	}
 
-	/* First, initialize pdata */
-	if (cyapa->pdata->init) {
-		ret = cyapa->pdata->init();
-		if (ret) {
-			pr_err("cyapa: board init failed: %d\n", ret);
-			goto err_mem_free;
-		}
-	}
-
 	cyapa->detect_wq = create_singlethread_workqueue("cyapa_detect_wq");
 	if (!cyapa->detect_wq) {
 		pr_err("cyapa: trackpad detect workqueue creation failed.\n");
@@ -2378,14 +2369,6 @@ static int cyapa_resume(struct device *dev)
 	 */
 	if (!cyapa)
 		return 0;
-
-	if (cyapa->pdata->wakeup) {
-		ret = cyapa->pdata->wakeup();
-		if (ret) {
-			pr_err("wakeup failed, %d\n", ret);
-			return ret;
-		}
-	}
 
 	ret = cyapa_resume_detect(cyapa);
 	if (ret < 0) {

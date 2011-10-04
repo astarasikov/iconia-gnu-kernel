@@ -56,9 +56,6 @@ struct cyapa_platform_data {
 	/* the gpio id used for interrupt to notify host data is ready. */
 	__s16 irq_gpio;
 	__u32 report_rate;  /* max limitation of data report rate. */
-
-	int (*wakeup)(void);
-	int (*init)(void);
 };
 
 
