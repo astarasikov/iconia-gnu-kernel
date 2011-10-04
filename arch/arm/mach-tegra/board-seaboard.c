@@ -102,10 +102,7 @@ static __initdata struct tegra_clk_init_table seaboard_clk_init_table[] = {
 
 static struct cyapa_platform_data cyapa_i2c_platform_data = {
 	.gen				= CYAPA_GEN3,
-	.polling_interval_time_active	= CYAPA_POLLING_INTERVAL_TIME_ACTIVE,
-	.polling_interval_time_lowpower	= CYAPA_POLLING_INTERVAL_TIME_LOWPOWER,
 	.irq_gpio			= TEGRA_GPIO_CYTP_INT,
-	.report_rate			= CYAPA_REPORT_RATE,
 };
 
 static struct tegra_i2c_platform_data seaboard_i2c1_platform_data = {
