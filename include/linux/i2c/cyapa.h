@@ -46,28 +46,13 @@ enum cyapa_gen {
 	CYAPA_GEN3 = 0x03,  /* support MT-protocol with tracking ID. */
 };
 
-/*
- * APA trackpad power states.
- * Used in register 0x00, bit3-2, PowerMode field.
- */
-enum cyapa_powerstate {
-	CYAPA_PWR_ACTIVE = 0x01,
-	CYAPA_PWR_LIGHT_SLEEP = 0x02,
-	CYAPA_PWR_MEDIUM_SLEEP = 0x03,
-	CYAPA_PWR_DEEP_SLEEP = 0x04,
-};
-
 struct cyapa_platform_data {
-	__u32 flag;   /* reserved for future use. */
 	enum cyapa_gen gen;  /* trackpad firmware generation. */
-	enum cyapa_powerstate power_state;
 
 	/* active mode, polling refresh interval; ms */
 	__u8 polling_interval_time_active;
 	/* low power mode, polling refresh interval; ms */
 	__u8 polling_interval_time_lowpower;
-	__u8 active_touch_timeout;  /* active touch timeout; ms */
-	char *name;  /* device name of Cypress I2C trackpad. */
 	/* the gpio id used for interrupt to notify host data is ready. */
 	__s16 irq_gpio;
 	__u32 report_rate;  /* max limitation of data report rate. */
