@@ -378,9 +378,14 @@ void __init arthur_pinmux_init(void)
 	seaboard_common_pinmux_init();
 }
 
+static __initdata struct tegra_pingroup_config asymptote_pinmux[] = {
+	{TEGRA_PINGROUP_UCB,  TEGRA_MUX_NONE,      TEGRA_PUPD_NORMAL, TEGRA_TRI_NORMAL},
+};
+
 void __init asymptote_pinmux_init(void)
 {
 	wm8903_gpio_init();
+	update_pinmux(asymptote_pinmux, ARRAY_SIZE(asymptote_pinmux));
 	seaboard_common_pinmux_init();
 	tegra_gpio_config(asymptote_gpio_table,
 			  ARRAY_SIZE(asymptote_gpio_table));

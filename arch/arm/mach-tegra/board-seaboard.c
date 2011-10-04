@@ -95,6 +95,7 @@ static __initdata struct tegra_clk_init_table seaboard_clk_init_table[] = {
 	{ "audio_2x",   "audio",        22579200,       false},
 	{ "spdif_out",  "pll_a_out0",   11289600,       false},
 	{ "uartb",      "pll_p",        216000000,      false},
+	{ "uartc",      "pll_c",        600000000,      false},
 	{ "uartd",      "pll_p",        216000000,      false},
 	{ "pwm",        "clk_m",        12000000,       false},
 	{ "blink",      "clk_32k",      32768,          true},
