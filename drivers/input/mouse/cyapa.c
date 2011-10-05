@@ -33,14 +33,6 @@
 #include <linux/workqueue.h>
 
 
-/*
- * Cypress I2C APA trackpad driver version is defined as below:
- * CYAPA_MAJOR_VER.CYAPA_MINOR_VER.CYAPA_REVISION_VER
- */
-#define CYAPA_MAJOR_VER	1
-#define CYAPA_MINOR_VER	1
-#define CYAPA_REVISION_VER	0
-
 #define CYAPA_MT_MAX_TOUCH  255
 #define CYAPA_MT_MAX_WIDTH  255
 
@@ -994,21 +986,6 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 			return -EIO;
 		return ioctl_data.len;
 
-	case CYAPA_GET_DRIVER_VER:
-		if (!ioctl_data.buf || ioctl_data.len < 3)
-			return -EINVAL;
-
-		ioctl_data.len = 3;
-		memset(buf, 0, sizeof(buf));
-		buf[0] = (u8)CYAPA_MAJOR_VER;
-		buf[1] = (u8)CYAPA_MINOR_VER;
-		buf[2] = (u8)CYAPA_REVISION_VER;
-		if (copy_to_user(ioctl_data.buf, buf, ioctl_data.len))
-			return -EIO;
-		if (copy_to_user((void *)arg, &ioctl_data, ioctl_len))
-			return -EIO;
-		return ioctl_data.len;
-
 	case CYAPA_GET_FIRMWARE_VER:
 		if (!ioctl_data.buf || ioctl_data.len < 2)
 			return -EINVAL;
@@ -1153,13 +1130,6 @@ ssize_t cyapa_show_fm_ver(struct device *dev,
 	return sprintf(buf, "%d.%d\n", cyapa->fw_maj_ver, cyapa->fw_min_ver);
 }
 
-ssize_t cyapa_show_driver_ver(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%d.%d.%d\n",
-		CYAPA_MAJOR_VER, CYAPA_MINOR_VER, CYAPA_REVISION_VER);
-}
-
 ssize_t cyapa_show_hw_ver(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -1202,14 +1172,12 @@ ssize_t cyapa_show_protocol_version(struct device *dev,
 }
 
 static DEVICE_ATTR(firmware_version, S_IRUGO, cyapa_show_fm_ver, NULL);
-static DEVICE_ATTR(driver_version, S_IRUGO, cyapa_show_driver_ver, NULL);
 static DEVICE_ATTR(hardware_version, S_IRUGO, cyapa_show_hw_ver, NULL);
 static DEVICE_ATTR(product_id, S_IRUGO, cyapa_show_product_id, NULL);
 static DEVICE_ATTR(protocol_version, S_IRUGO, cyapa_show_protocol_version, NULL);
 
 static struct attribute *cyapa_sysfs_entries[] = {
 	&dev_attr_firmware_version.attr,
-	&dev_attr_driver_version.attr,
 	&dev_attr_hardware_version.attr,
 	&dev_attr_product_id.attr,
 	&dev_attr_protocol_version.attr,
@@ -1460,14 +1428,12 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 			"    Protocol Generation:  %d\n" \
 			"    Firmware Version:  %d.%d\n" \
 			"    Hardware Version:  %d.%d\n" \
-			"    Driver Version:  %d.%d.%d\n" \
 			"    Max ABS X,Y:   %d,%d\n" \
 			"    Physical Size X,Y:   %d,%d\n",
 			cyapa->product_id,
 			cyapa->pdata->gen,
 			cyapa->fw_maj_ver, cyapa->fw_min_ver,
 			cyapa->hw_maj_ver, cyapa->hw_min_ver,
-			CYAPA_MAJOR_VER, CYAPA_MINOR_VER, CYAPA_REVISION_VER,
 			cyapa->max_abs_x, cyapa->max_abs_y,
 			cyapa->physical_size_x, cyapa->physical_size_y
 			);
