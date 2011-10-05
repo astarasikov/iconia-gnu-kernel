@@ -134,4 +134,6 @@ config ISCSI_IBFT
 	  detect iSCSI boot parameters dynamically during system boot, say Y.
 	  Otherwise, say N.
 
+source "drivers/firmware/google/Kconfig"
+
 endmenu
