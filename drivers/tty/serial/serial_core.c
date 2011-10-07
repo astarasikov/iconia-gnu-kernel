@@ -248,6 +248,14 @@ static void uart_shutdown(struct tty_struct *tty, struct uart_state *state)
 	}
 
 	/*
+	 * It's possible for shutdown to be called after suspend.  Specifically
+	 * if agetty() is listening to the serial port we get a HUP after the
+	 * suspend happend (and HUP calls shutdown).  Clear suspended bit so
+	 * we don't try to resume a port that has been shutdown.
+	 */
+	clear_bit(ASYNCB_SUSPENDED, &port->flags);
+
+	/*
 	 * kill off our tasklet
 	 */
 	tasklet_kill(&state->tlet);
