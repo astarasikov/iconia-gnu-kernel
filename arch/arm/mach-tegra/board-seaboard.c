@@ -641,7 +641,7 @@ static struct i2c_board_info __initdata ak8975_device = {
 };
 
 static struct i2c_board_info __initdata cyapa_device = {
-	I2C_BOARD_INFO("cypress_i2c_apa", 0x67),
+	I2C_BOARD_INFO(CYAPA_I2C_NAME, 0x67),
 	.irq		= TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CYTP_INT),
 	.platform_data	= &cyapa_i2c_platform_data,
 };
