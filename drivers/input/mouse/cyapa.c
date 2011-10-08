@@ -542,14 +542,13 @@ static s32 cyapa_reg_read_block(struct cyapa *cyapa, u16 reg, int length,
 	/* step2: read data. */
 	ret = i2c_master_recv(cyapa->client, values, length);
 	if (ret < 0) {
-		pr_debug("i2c_master_recv error, %d\n", ret);
+		dev_err(dev, "i2c_master_recv error, %d\n", ret);
 		goto error;
 	}
 
 	if (ret != length)
-		pr_warning("warning I2C block read bytes" \
-			"[%d] not equal to requested bytes [%d].\n",
-			ret, length);
+		dev_warn(dev, "I2C read [%d] bytes, but requested [%d].\n",
+			 ret, length);
 
 	dev_dbg(dev, "read block reg: 0x%02x length: %d\n", reg, length);
 	cyapa_dump_data(cyapa, ret, values);
@@ -601,7 +600,7 @@ static s32 cyapa_reg_write_block(struct cyapa *cyapa, u16 reg, int length,
 
 	/* one additional written byte is register offset. */
 	if (ret != (length + 1))
-		pr_warning("warning I2C block write bytes" \
+		dev_warn(dev, "warning I2C block write bytes" \
 			"[%d] not equal to requested bytes [%d].\n",
 			ret, length);
 
@@ -664,9 +663,10 @@ static loff_t cyapa_misc_llseek(struct file *file, loff_t offset, int origin)
 {
 	loff_t ret = -EINVAL;
 	struct cyapa *cyapa = (struct cyapa *)file->private_data;
+	struct device *dev = &cyapa->client->dev;
 
 	if (cyapa == NULL) {
-		pr_err("cypress trackpad device does not exit.\n");
+		dev_err(dev, "cypress trackpad device does not exit.\n");
 		return -ENODEV;
 	}
 
@@ -704,6 +704,7 @@ static loff_t cyapa_misc_llseek(struct file *file, loff_t offset, int origin)
 static int cyapa_miscdev_rw_params_check(struct cyapa *cyapa,
 	unsigned long offset, unsigned int length)
 {
+	struct device *dev = &cyapa->client->dev;
 	unsigned int max_offset;
 
 	if (cyapa == NULL)
@@ -719,8 +720,8 @@ static int cyapa_miscdev_rw_params_check(struct cyapa *cyapa,
 	if (cyapa_pos_validate(offset) && cyapa_pos_validate(max_offset))
 		return 0;
 
-	pr_debug("invalid parameters, length=%d, offset=0x%x\n",
-			length, (unsigned int)offset);
+	dev_warn(dev, "invalid parameters, length=%d, offset=0x%x\n", length,
+		 (unsigned int)offset);
 
 	return -EINVAL;
 }
@@ -733,6 +734,7 @@ static ssize_t cyapa_misc_read(struct file *file, char __user *usr_buf,
 	unsigned long reg_offset = *offset;
 	u8 reg_buf[CYAPA_REG_MAP_SIZE];
 	struct cyapa *cyapa = (struct cyapa *)file->private_data;
+	struct device *dev = &cyapa->client->dev;
 
 	ret = cyapa_miscdev_rw_params_check(cyapa, reg_offset, count);
 	if (ret < 0)
@@ -740,12 +742,12 @@ static ssize_t cyapa_misc_read(struct file *file, char __user *usr_buf,
 
 	ret = cyapa_reg_read_block(cyapa, (u16)reg_offset, reg_len, reg_buf);
 	if (ret < 0) {
-		pr_err("cyapa trackpad I2C read FAILED.\n");
+		dev_err(dev, "I2C read FAILED.\n");
 		return ret;
 	}
 
 	if (ret < reg_len)
-		pr_warning("Expected %d bytes, read %d bytes.\n",
+		dev_warn(dev, "Expected %d bytes, read %d bytes.\n",
 			reg_len, ret);
 	reg_len = ret;
 
@@ -771,17 +773,13 @@ static ssize_t cyapa_misc_write(struct file *file, const char __user *usr_buf,
 	if (ret < 0)
 		return ret;
 
-	if (copy_from_user(reg_buf, usr_buf, (int)count)) {
-		pr_err("copy data from user space failed.\n");
+	if (copy_from_user(reg_buf, usr_buf, (int)count))
 		return -EINVAL;
-	}
 
 	ret = cyapa_reg_write_block(cyapa,
 					(u16)reg_offset,
 					(int)count,
 					reg_buf);
-	if (ret < 0)
-		pr_err("cyapa trackpad I2C write FAILED.\n");
 
 	*offset = (ret < 0) ? reg_offset : (reg_offset + ret);
 
@@ -791,6 +789,7 @@ static ssize_t cyapa_misc_write(struct file *file, const char __user *usr_buf,
 int cyapa_get_trackpad_run_mode(struct cyapa *cyapa,
 		struct cyapa_trackpad_run_mode *run_mode)
 {
+	struct device *dev = &cyapa->client->dev;
 	int ret;
 	u8 status[BL_HEAD_BYTES];
 	int tries = 5;
@@ -842,7 +841,7 @@ int cyapa_get_trackpad_run_mode(struct cyapa *cyapa,
 
 	if (tries < 0) {
 		/* firmware may be in an unknown state. */
-		pr_err("cyapa unknown trackpad firmware state.\n");
+		dev_err(dev, "unknown trackpad firmware state.\n");
 		return -EINVAL;
 	}
 
@@ -852,6 +851,7 @@ int cyapa_get_trackpad_run_mode(struct cyapa *cyapa,
 static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		struct cyapa_trackpad_run_mode *run_mode)
 {
+	struct device *dev = &cyapa->client->dev;
 	int ret;
 	unsigned long flags;
 	unsigned short reset_offset;
@@ -870,7 +870,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 
 		ret = cyapa_reg_write_byte(cyapa, reset_offset, 0x01);
 		if (ret < 0) {
-			pr_err("send firmware reset cmd failed, %d\n",
+			dev_err(dev, "send firmware reset cmd failed, %d\n",
 				ret);
 			cyapa_bl_enable_irq(cyapa);
 			return -EIO;
@@ -883,7 +883,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_switch_active), bl_switch_active);
 		if (ret != sizeof(bl_switch_active)) {
-			pr_err("send active switch cmd failed, %d\n",
+			dev_err(dev, "send active switch cmd failed, %d\n",
 				ret);
 			return -EIO;
 		}
@@ -895,7 +895,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_switch_idle), bl_switch_idle);
 		if (ret != sizeof(bl_switch_idle)) {
-			pr_err("send idle switch cmd failed, %d\n",
+			dev_err(dev, "send idle switch cmd failed, %d\n",
 				ret);
 			return -EIO;
 		}
@@ -906,7 +906,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_app_launch), bl_app_launch);
 		if (ret != sizeof(bl_app_launch)) {
-			pr_err("send applaunch cmd failed, %d\n",
+			dev_err(dev, "send applaunch cmd failed, %d\n",
 				ret);
 			return -EIO;
 		}
@@ -964,12 +964,13 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 	int ret;
 	int ioctl_len;
 	struct cyapa *cyapa = (struct cyapa *)file->private_data;
+	struct device *dev = &cyapa->client->dev;
 	struct cyapa_misc_ioctl_data ioctl_data;
 	struct cyapa_trackpad_run_mode run_mode;
 	u8 buf[8];
 
 	if (cyapa == NULL) {
-		pr_err("cypress trackpad device does not exist.\n");
+		dev_err(dev, "device does not exist.\n");
 		return -ENODEV;
 	}
 
@@ -1422,6 +1423,7 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 
 static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 {
+	struct device *dev = &cyapa->client->dev;
 	int ret;
 	unsigned long flags;
 
@@ -1439,20 +1441,21 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 	if (cyapa_determine_firmware_gen(cyapa) < 0)
 		return -EINVAL;
 	if (cyapa->pdata->gen < CYAPA_GEN2) {
-		pr_info("cyapa driver unsupported firmware protocol version.\n");
+		dev_err(dev, "unsupported firmware protocol version (%d).\n",
+			cyapa->pdata->gen);
 		return -EINVAL;
 	}
 
 	cyapa_get_reg_offset(cyapa);
 	ret = cyapa_get_query_data(cyapa);
 	if (ret < 0) {
-		pr_err("Failed to get trackpad query data, %d.\n", ret);
+		dev_err(dev, "Failed to get trackpad query data, %d.\n", ret);
 		return ret;
 	}
 
 	if (boot) {
 		/* output in one time, avoid multi-lines output be separated. */
-		pr_info("Cypress Trackpad Information:\n" \
+		dev_info(dev, "Cypress Trackpad Information:\n" \
 			"    Product ID:  %s\n" \
 			"    Protocol Generation:  %d\n" \
 			"    Firmware Version:  %d.%d\n" \
@@ -1834,12 +1837,13 @@ static struct cyapa *cyapa_create(struct i2c_client *client)
 
 static int cyapa_create_input_dev(struct cyapa *cyapa)
 {
+	struct device *dev = &cyapa->client->dev;
 	int ret;
 	struct input_dev *input = NULL;
 
 	input = cyapa->input = input_allocate_device();
 	if (!cyapa->input) {
-		pr_err("Allocate memory for Input device failed\n");
+		dev_err(dev, "Allocate memory for input device failed\n");
 		return -ENOMEM;
 	}
 
@@ -1901,7 +1905,7 @@ static int cyapa_create_input_dev(struct cyapa *cyapa)
 	/* Register the device in input subsystem */
 	ret = input_register_device(cyapa->input);
 	if (ret) {
-		pr_err("Input device register failed, %d\n", ret);
+		dev_err(dev, "input device register failed, %d\n", ret);
 		input_free_device(input);
 	}
 
@@ -1992,10 +1996,11 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 	struct cyapa *cyapa =
 		container_of(work, struct cyapa, detect_work);
 	struct i2c_client *client = cyapa->client;
+	struct device *dev = &cyapa->client->dev;
 
 	ret = cyapa_check_exit_bootloader(cyapa);
 	if (ret < 0) {
-		pr_err("cyapa check and exit bootloader failed.\n");
+		dev_err(dev, "check and exit bootloader failed.\n");
 		goto out_probe_err;
 	}
 
@@ -2011,7 +2016,7 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 		cyapa->irq = gpio_to_irq(cyapa->pdata->irq_gpio);
 
 	if (cyapa->irq <= 0) {
-		pr_err("failed to allocate irq\n");
+		dev_err(dev, "failed to allocate irq\n");
 		ret = -EBUSY;
 		goto out_probe_err;
 	}
@@ -2023,7 +2028,7 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 			CYAPA_I2C_NAME,
 			cyapa);
 	if (ret) {
-		pr_err("IRQ request failed: %d\n, ", ret);
+		dev_err(dev, "IRQ request failed: %d\n, ", ret);
 		goto out_probe_err;
 	}
 
@@ -2046,7 +2051,7 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 	ret = cyapa_create_input_dev(cyapa);
 	if (ret) {
 		free_irq(cyapa->irq, cyapa);
-		pr_err("create input_dev instance failed.\n");
+		dev_err(dev, "create input_dev instance failed.\n");
 		goto out_probe_err;
 	}
 
@@ -2054,7 +2059,7 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 
 	ret = sysfs_create_group(&client->dev.kobj, &cyapa_sysfs_group);
 	if (ret)
-		pr_warning("error creating sysfs entries.\n");
+		dev_warn(dev, "error creating sysfs entries.\n");
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
 	cyapa->detect_status = CYAPA_DETECT_DONE_SUCCESS;
@@ -2100,6 +2105,7 @@ static void cyapa_resume_detect_work_handler(struct work_struct *work)
 	unsigned long flags;
 	struct cyapa *cyapa =
 		container_of(work, struct cyapa, detect_work);
+	struct device *dev = &cyapa->client->dev;
 
 	/*
 	 * when waking up, the first step that driver should do is to
@@ -2111,11 +2117,11 @@ static void cyapa_resume_detect_work_handler(struct work_struct *work)
 	 */
 	ret = cyapa_set_power_mode(cyapa, PWR_MODE_FULL_ACTIVE);
 	if (ret < 0)
-		pr_warning("set wake up power mode to trackpad failed\n");
+		dev_warn(dev, "set wake up power mode to trackpad failed\n");
 
 	ret = cyapa_check_exit_bootloader(cyapa);
 	if (ret < 0) {
-		pr_err("cyapa check and exit bootloader failed.\n");
+		dev_err(dev, "check and exit bootloader failed.\n");
 		goto out_resume_err;
 	}
 
@@ -2160,26 +2166,27 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 {
 	int ret;
 	struct cyapa *cyapa;
+	struct device *dev = &client->dev;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		return -EIO;
 
 	cyapa = cyapa_create(client);
 	if (!cyapa) {
-		pr_err("cyapa: allocate memory failed.\n");
+		dev_err(dev, "allocate memory for touch failed.\n");
 		return -ENOMEM;
 	}
 
 	cyapa->detect_wq = create_singlethread_workqueue("cyapa_detect_wq");
 	if (!cyapa->detect_wq) {
 		ret = -ENOMEM;
-		pr_err("cyapa: failed to create trackpad detect workqueue.\n");
+		dev_err(dev, "failed to create trackpad detect workqueue.\n");
 		goto err_mem_free;
 	}
 
 	ret = cyapa_probe_detect(cyapa);
 	if (ret < 0) {
-		pr_err("cyapa: trackpad device detect failed, %d\n", ret);
+		dev_err(dev, "trackpad device detect failed, %d\n", ret);
 		goto err_mem_free;
 	}
 
@@ -2240,7 +2247,7 @@ static int cyapa_suspend(struct device *dev)
 	/* set trackpad device to light sleep mode. */
 	ret = cyapa_set_power_mode(cyapa, PWR_MODE_LIGHT_SLEEP);
 	if (ret < 0)
-		pr_err("suspend cyapa trackpad device failed, %d\n", ret);
+		dev_err(dev, "suspend trackpad device failed, %d\n", ret);
 
 	return ret;
 }
@@ -2262,7 +2269,7 @@ static int cyapa_resume(struct device *dev)
 
 	ret = cyapa_resume_detect(cyapa);
 	if (ret < 0) {
-		pr_err("cyapa i2c trackpad device detect failed, %d\n", ret);
+		dev_err(dev, "trackpad detect failed, %d\n", ret);
 		return ret;
 	}
 
