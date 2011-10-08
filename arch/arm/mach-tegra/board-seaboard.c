@@ -154,7 +154,7 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 
 static struct cyapa_platform_data cyapa_i2c_platform_data = {
 	.flag				= 0,
-	.gen				= CYAPA_GEN2,
+	.gen				= CYAPA_GEN3,
 	.power_state			= CYAPA_PWR_ACTIVE,
 	.polling_interval_time_active	= CYAPA_POLLING_INTERVAL_TIME_ACTIVE,
 	.polling_interval_time_lowpower	= CYAPA_POLLING_INTERVAL_TIME_LOWPOWER,
