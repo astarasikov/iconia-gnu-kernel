@@ -4,7 +4,7 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
-#define CYAPA_I2C_NAME  "cypress_i2c_apa"
+#define CYAPA_I2C_NAME  "cyapa"
 #define CYAPA_MISC_NAME  "cyapa"
 
 /* Active power state scanning/processing refresh interval time. unit: ms. */

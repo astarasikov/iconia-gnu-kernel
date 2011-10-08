@@ -294,10 +294,10 @@ struct cyapa_mt_slot {
 };
 
 /* The main device structure */
-struct cyapa_i2c {
+struct cyapa {
 	/* synchronize i2c bus operations. */
 	struct semaphore reg_io_sem;
-	/* synchronize accessing members of cyapa_i2c data structure. */
+	/* synchronize accessing members of cyapa data structure. */
 	spinlock_t miscdev_spinlock;
 	/* synchronize accessing and updating file->f_pos. */
 	struct mutex misc_mutex;
@@ -351,15 +351,14 @@ static u8 bl_app_launch[] = { 0x00, 0xFF, 0xA5, 0x00, 0x01, 0x02, 0x03, 0x04,
 		0x05, 0x06, 0x07 };
 
 /* global pointer to trackpad touch data structure. */
-static struct cyapa_i2c *global_touch;
+static struct cyapa *global_cyapa;
 
-static int cyapa_get_query_data(struct cyapa_i2c *touch);
-static int cyapa_i2c_reconfig(struct cyapa_i2c *touch, int boot);
-static void cyapa_get_reg_offset(struct cyapa_i2c *touch);
-static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch);
-static int cyapa_create_input_dev(struct cyapa_i2c *touch);
-static void cyapa_i2c_reschedule_work(struct cyapa_i2c *touch,
-		unsigned long delay);
+static int cyapa_get_query_data(struct cyapa *cyapa);
+static int cyapa_reconfig(struct cyapa *cyapa, int boot);
+static void cyapa_get_reg_offset(struct cyapa *cyapa);
+static int cyapa_determine_firmware_gen(struct cyapa *cyapa);
+static int cyapa_create_input_dev(struct cyapa *cyapa);
+static void cyapa_reschedule_work(struct cyapa *cyapa, unsigned long delay);
 
 
 #if DBG_CYAPA_READ_BLOCK_DATA
@@ -428,129 +427,129 @@ void cyapa_dump_report_data(const char *func,
  * falls back to using polling mode.
  * In this case, do not actually enable/disable irq.
  */
-static void cyapa_enable_irq(struct cyapa_i2c *touch)
+static void cyapa_enable_irq(struct cyapa *cyapa)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (!touch->polling_mode_enabled &&
-		touch->bl_irq_enable &&
-		!touch->irq_enabled) {
-		touch->irq_enabled = true;
-		enable_irq(touch->irq);
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (!cyapa->polling_mode_enabled &&
+		cyapa->bl_irq_enable &&
+		!cyapa->irq_enabled) {
+		cyapa->irq_enabled = true;
+		enable_irq(cyapa->irq);
 	}
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 }
 
-static void cyapa_disable_irq(struct cyapa_i2c *touch)
+static void cyapa_disable_irq(struct cyapa *cyapa)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (!touch->polling_mode_enabled &&
-		touch->bl_irq_enable &&
-		touch->irq_enabled) {
-		touch->irq_enabled = false;
-		disable_irq(touch->irq);
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (!cyapa->polling_mode_enabled &&
+		cyapa->bl_irq_enable &&
+		cyapa->irq_enabled) {
+		cyapa->irq_enabled = false;
+		disable_irq(cyapa->irq);
 	}
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 }
 
-static void cyapa_bl_enable_irq(struct cyapa_i2c *touch)
+static void cyapa_bl_enable_irq(struct cyapa *cyapa)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (touch->polling_mode_enabled)
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (cyapa->polling_mode_enabled)
 		goto out;
 
-	touch->bl_irq_enable = true;
-	if (!touch->irq_enabled) {
-		touch->irq_enabled = true;
-		enable_irq(touch->irq);
+	cyapa->bl_irq_enable = true;
+	if (!cyapa->irq_enabled) {
+		cyapa->irq_enabled = true;
+		enable_irq(cyapa->irq);
 	}
 
 out:
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 }
 
-static void cyapa_bl_disable_irq(struct cyapa_i2c *touch)
+static void cyapa_bl_disable_irq(struct cyapa *cyapa)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (touch->polling_mode_enabled)
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (cyapa->polling_mode_enabled)
 		goto out;
 
-	touch->bl_irq_enable = false;
-	if (touch->irq_enabled) {
-		touch->irq_enabled = false;
-		disable_irq(touch->irq);
+	cyapa->bl_irq_enable = false;
+	if (cyapa->irq_enabled) {
+		cyapa->irq_enabled = false;
+		disable_irq(cyapa->irq);
 	}
 
 out:
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 }
 
-static int cyapa_acquire_i2c_bus(struct cyapa_i2c *touch)
+static int cyapa_acquire_i2c_bus(struct cyapa *cyapa)
 {
-	cyapa_disable_irq(touch);
-	if (down_interruptible(&touch->reg_io_sem)) {
-		cyapa_enable_irq(touch);
+	cyapa_disable_irq(cyapa);
+	if (down_interruptible(&cyapa->reg_io_sem)) {
+		cyapa_enable_irq(cyapa);
 		return -ERESTARTSYS;
 	}
 
 	return 0;
 }
 
-static void cyapa_release_i2c_bus(struct cyapa_i2c *touch)
+static void cyapa_release_i2c_bus(struct cyapa *cyapa)
 {
-	up(&touch->reg_io_sem);
-	cyapa_enable_irq(touch);
+	up(&cyapa->reg_io_sem);
+	cyapa_enable_irq(cyapa);
 }
 
-static s32 cyapa_i2c_reg_read_byte(struct cyapa_i2c *touch, u16 reg)
+static s32 cyapa_reg_read_byte(struct cyapa *cyapa, u16 reg)
 {
 	int ret;
 
-	ret = cyapa_acquire_i2c_bus(touch);
+	ret = cyapa_acquire_i2c_bus(cyapa);
 	if (ret < 0)
 		return ret;
 
-	ret = i2c_smbus_read_byte_data(touch->client, (u8)reg);
+	ret = i2c_smbus_read_byte_data(cyapa->client, (u8)reg);
 
-	cyapa_release_i2c_bus(touch);
+	cyapa_release_i2c_bus(cyapa);
 
 	return ret;
 }
 
 /*
- * cyapa_i2c_reg_write_byte - write one byte to i2c register map.
- * @touch - private data structure of the trackpad driver.
+ * cyapa_reg_write_byte - write one byte to i2c register map.
+ * @cyapa - private data structure of the trackpad driver.
  * @reg - the offset value of the i2c register map from offset 0.
  * @val - the value should be written to the register map.
  *
  * This function returns negative errno, else zero on success.
  */
-static s32 cyapa_i2c_reg_write_byte(struct cyapa_i2c *touch, u16 reg, u8 val)
+static s32 cyapa_reg_write_byte(struct cyapa *cyapa, u16 reg, u8 val)
 {
 	int ret;
 
-	ret = cyapa_acquire_i2c_bus(touch);
+	ret = cyapa_acquire_i2c_bus(cyapa);
 	if (ret < 0)
 		return ret;
 
-	ret = i2c_smbus_write_byte_data(touch->client, (u8)reg, val);
+	ret = i2c_smbus_write_byte_data(cyapa->client, (u8)reg, val);
 
-	cyapa_release_i2c_bus(touch);
+	cyapa_release_i2c_bus(cyapa);
 
 	return ret;
 }
 
 /*
- * cyapa_i2c_reg_read_block - read a block data from trackpad
+ * cyapa_reg_read_block - read a block data from trackpad
  *      i2c register map.
- * @touch - private data structure of the trackpad driver.
+ * @cyapa - private data structure of the trackpad driver.
  * @reg - the offset value of the i2c register map from offset 0.
  * @length - length of the block to be read in bytes.
  * @values - pointer to the buffer that used to store register block
@@ -562,13 +561,13 @@ static s32 cyapa_i2c_reg_write_byte(struct cyapa_i2c *touch, u16 reg, u8 val)
  * In trackpad device, the memory block allocated for I2C register map
  * is 256 bytes, so the max read block for I2C bus is 256 bytes.
  */
-static s32 cyapa_i2c_reg_read_block(struct cyapa_i2c *touch, u16 reg,
-		int length, u8 *values)
+static s32 cyapa_reg_read_block(struct cyapa *cyapa, u16 reg, int length,
+				u8 *values)
 {
 	int ret;
 	u8 buf[1];
 
-	ret = cyapa_acquire_i2c_bus(touch);
+	ret = cyapa_acquire_i2c_bus(cyapa);
 	if (ret < 0)
 		return ret;
 
@@ -576,12 +575,12 @@ static s32 cyapa_i2c_reg_read_block(struct cyapa_i2c *touch, u16 reg,
 	 * step1: set read pointer of easy I2C.
 	 */
 	buf[0] = (u8)reg;
-	ret = i2c_master_send(touch->client, buf, 1);
+	ret = i2c_master_send(cyapa->client, buf, 1);
 	if (ret < 0)
 		goto error;
 
 	/* step2: read data. */
-	ret = i2c_master_recv(touch->client, values, length);
+	ret = i2c_master_recv(cyapa->client, values, length);
 	if (ret < 0) {
 		pr_debug("i2c_master_recv error, %d\n", ret);
 		goto error;
@@ -596,15 +595,15 @@ static s32 cyapa_i2c_reg_read_block(struct cyapa_i2c *touch, u16 reg,
 	cyapa_dump_data_block(__func__, (u8)reg, ret, values);
 
 error:
-	cyapa_release_i2c_bus(touch);
+	cyapa_release_i2c_bus(cyapa);
 
 	return ret;
 }
 
 /*
- * cyapa_i2c_reg_write_block - write a block data to trackpad
+ * cyapa_reg_write_block - write a block data to trackpad
  *      i2c register map.
- * @touch - private data structure of the trackpad driver.
+ * @cyapa - private data structure of the trackpad driver.
  * @reg - the offset value of the i2c register map from offset 0.
  * @length - length of the block to be written in bytes.
  * @values - pointer to the block data buffur that will be written.
@@ -615,16 +614,15 @@ error:
  * In trackpad device, the memory block allocated for I2C register map
  * is 256 bytes, so the max write block for I2C bus is 256 bytes.
  */
-static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
-		int length, const u8 *values)
-
+static s32 cyapa_reg_write_block(struct cyapa *cyapa, u16 reg, int length,
+				 const u8 *values)
 {
 	int ret;
 	u8 buf[CYAPA_REG_MAP_SIZE + 1];
 
 	cyapa_dump_data_block(__func__, reg, length, (void *)values);
 
-	ret = cyapa_acquire_i2c_bus(touch);
+	ret = cyapa_acquire_i2c_bus(cyapa);
 	if (ret < 0)
 		return ret;
 
@@ -635,7 +633,7 @@ static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
 	/* copy data shoud be write to I2C slave device. */
 	memcpy((void *)&buf[1], (const void *)values, length);
 
-	ret = i2c_master_send(touch->client, buf, length+1);
+	ret = i2c_master_send(cyapa->client, buf, length+1);
 	if (ret < 0)
 		goto error;
 
@@ -646,7 +644,7 @@ static s32 cyapa_i2c_reg_write_block(struct cyapa_i2c *touch, u16 reg,
 			ret, length);
 
 error:
-	cyapa_release_i2c_bus(touch);
+	cyapa_release_i2c_bus(cyapa);
 
 	return (ret < 0) ? ret : (ret - 1);
 }
@@ -665,19 +663,19 @@ static int cyapa_misc_open(struct inode *inode, struct file *file)
 {
 	int count;
 	unsigned long flags;
-	struct cyapa_i2c *touch = global_touch;
+	struct cyapa *cyapa = global_cyapa;
 
-	if (touch == NULL)
+	if (cyapa == NULL)
 		return -ENODEV;
-	file->private_data = (void *)touch;
+	file->private_data = (void *)cyapa;
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (touch->misc_open_count) {
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (cyapa->misc_open_count) {
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return -EBUSY;
 	}
-	count = ++touch->misc_open_count;
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	count = ++cyapa->misc_open_count;
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	return 0;
 }
@@ -686,11 +684,11 @@ static int cyapa_misc_close(struct inode *inode, struct file *file)
 {
 	int count;
 	unsigned long flags;
-	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
+	struct cyapa *cyapa = (struct cyapa *)file->private_data;
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	count = --touch->misc_open_count;
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	count = --cyapa->misc_open_count;
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	return 0;
 }
@@ -703,14 +701,14 @@ static int cyapa_pos_validate(unsigned int pos)
 static loff_t cyapa_misc_llseek(struct file *file, loff_t offset, int origin)
 {
 	loff_t ret = -EINVAL;
-	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
+	struct cyapa *cyapa = (struct cyapa *)file->private_data;
 
-	if (touch == NULL) {
+	if (cyapa == NULL) {
 		pr_err("cypress trackpad device does not exit.\n");
 		return -ENODEV;
 	}
 
-	mutex_lock(&touch->misc_mutex);
+	mutex_lock(&cyapa->misc_mutex);
 	switch (origin) {
 	case SEEK_SET:
 		if (cyapa_pos_validate(offset)) {
@@ -736,17 +734,17 @@ static loff_t cyapa_misc_llseek(struct file *file, loff_t offset, int origin)
 	default:
 		break;
 	}
-	mutex_unlock(&touch->misc_mutex);
+	mutex_unlock(&cyapa->misc_mutex);
 
 	return ret;
 }
 
-static int cyapa_miscdev_rw_params_check(struct cyapa_i2c *touch,
+static int cyapa_miscdev_rw_params_check(struct cyapa *cyapa,
 	unsigned long offset, unsigned int length)
 {
 	unsigned int max_offset;
 
-	if (touch == NULL)
+	if (cyapa == NULL)
 		return -ENODEV;
 
 	/*
@@ -772,14 +770,13 @@ static ssize_t cyapa_misc_read(struct file *file, char __user *usr_buf,
 	int reg_len = (int)count;
 	unsigned long reg_offset = *offset;
 	u8 reg_buf[CYAPA_REG_MAP_SIZE];
-	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
+	struct cyapa *cyapa = (struct cyapa *)file->private_data;
 
-	ret = cyapa_miscdev_rw_params_check(touch, reg_offset, count);
+	ret = cyapa_miscdev_rw_params_check(cyapa, reg_offset, count);
 	if (ret < 0)
 		return ret;
 
-	ret = cyapa_i2c_reg_read_block(touch, (u16)reg_offset,
-				reg_len, reg_buf);
+	ret = cyapa_reg_read_block(cyapa, (u16)reg_offset, reg_len, reg_buf);
 	if (ret < 0) {
 		pr_err("cyapa trackpad I2C read FAILED.\n");
 		return ret;
@@ -806,9 +803,9 @@ static ssize_t cyapa_misc_write(struct file *file, const char __user *usr_buf,
 	int ret;
 	unsigned long reg_offset = *offset;
 	u8 reg_buf[CYAPA_REG_MAP_SIZE];
-	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
+	struct cyapa *cyapa = (struct cyapa *)file->private_data;
 
-	ret = cyapa_miscdev_rw_params_check(touch, reg_offset, count);
+	ret = cyapa_miscdev_rw_params_check(cyapa, reg_offset, count);
 	if (ret < 0)
 		return ret;
 
@@ -817,7 +814,7 @@ static ssize_t cyapa_misc_write(struct file *file, const char __user *usr_buf,
 		return -EINVAL;
 	}
 
-	ret = cyapa_i2c_reg_write_block(touch,
+	ret = cyapa_reg_write_block(cyapa,
 					(u16)reg_offset,
 					(int)count,
 					reg_buf);
@@ -829,7 +826,7 @@ static ssize_t cyapa_misc_write(struct file *file, const char __user *usr_buf,
 	return ret;
 }
 
-int cyapa_get_trackpad_run_mode(struct cyapa_i2c *touch,
+int cyapa_get_trackpad_run_mode(struct cyapa *cyapa,
 		struct cyapa_trackpad_run_mode *run_mode)
 {
 	int ret;
@@ -842,7 +839,7 @@ int cyapa_get_trackpad_run_mode(struct cyapa_i2c *touch,
 
 	do {
 		/* get trackpad status. */
-		ret = cyapa_i2c_reg_read_block(touch, 0, BL_HEAD_BYTES, status);
+		ret = cyapa_reg_read_block(cyapa, 0, BL_HEAD_BYTES, status);
 		if ((ret != BL_HEAD_BYTES) && (tries > 0)) {
 			/*
 			 * maybe, firmware is switching its states,
@@ -890,16 +887,16 @@ int cyapa_get_trackpad_run_mode(struct cyapa_i2c *touch,
 	return 0;
 }
 
-static int cyapa_send_mode_switch_cmd(struct cyapa_i2c *touch,
+static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		struct cyapa_trackpad_run_mode *run_mode)
 {
 	int ret;
 	unsigned long flags;
 	unsigned short reset_offset;
 
-	if (touch->pdata->gen == CYAPA_GEN3)
+	if (cyapa->pdata->gen == CYAPA_GEN3)
 		reset_offset = CYAPA_GEN3_OFFSET_SOFT_RESET;
-	else if (touch->pdata->gen == CYAPA_GEN2)
+	else if (cyapa->pdata->gen == CYAPA_GEN2)
 		reset_offset = CYAPA_GEN2_OFFSET_SOFT_RESET;
 	else
 		return -EINVAL;
@@ -907,21 +904,21 @@ static int cyapa_send_mode_switch_cmd(struct cyapa_i2c *touch,
 	switch (run_mode->rev_cmd) {
 	case CYAPA_CMD_APP_TO_IDLE:
 		/* do reset operation to switch to bootloader idle mode. */
-		cyapa_bl_disable_irq(touch);
+		cyapa_bl_disable_irq(cyapa);
 
-		ret = cyapa_i2c_reg_write_byte(touch, reset_offset, 0x01);
+		ret = cyapa_reg_write_byte(cyapa, reset_offset, 0x01);
 		if (ret < 0) {
 			pr_err("send firmware reset cmd failed, %d\n",
 				ret);
-			cyapa_bl_enable_irq(touch);
+			cyapa_bl_enable_irq(cyapa);
 			return -EIO;
 		}
 		break;
 
 	case CYAPA_CMD_IDLE_TO_ACTIVE:
-		cyapa_bl_disable_irq(touch);
+		cyapa_bl_disable_irq(cyapa);
 		/* send switch to active command. */
-		ret = cyapa_i2c_reg_write_block(touch, 0,
+		ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_switch_active), bl_switch_active);
 		if (ret != sizeof(bl_switch_active)) {
 			pr_err("send active switch cmd failed, %d\n",
@@ -931,9 +928,9 @@ static int cyapa_send_mode_switch_cmd(struct cyapa_i2c *touch,
 		break;
 
 	case CYAPA_CMD_ACTIVE_TO_IDLE:
-		cyapa_bl_disable_irq(touch);
+		cyapa_bl_disable_irq(cyapa);
 		/* send switch to idle command.*/
-		ret = cyapa_i2c_reg_write_block(touch, 0,
+		ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_switch_idle), bl_switch_idle);
 		if (ret != sizeof(bl_switch_idle)) {
 			pr_err("send idle switch cmd failed, %d\n",
@@ -944,7 +941,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa_i2c *touch,
 
 	case CYAPA_CMD_IDLE_TO_APP:
 		/* send command switch operational mode.*/
-		ret = cyapa_i2c_reg_write_block(touch, 0,
+		ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_app_launch), bl_app_launch);
 		if (ret != sizeof(bl_app_launch)) {
 			pr_err("send applaunch cmd failed, %d\n",
@@ -968,19 +965,19 @@ static int cyapa_send_mode_switch_cmd(struct cyapa_i2c *touch,
 		 * On all boots the driver waits 300 ms after switching to
 		 * operational mode.
 		 * For the first post-firmware-update boot,
-		 * additional waiting is done in cyapa_i2c_reconfig().
+		 * additional waiting is done in cyapa_reconfig().
 		 */
 		msleep(300);
 
 		/* update firmware working mode state in driver. */
-		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-		touch->fw_work_mode = CYAPA_STREAM_MODE;
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+		cyapa->fw_work_mode = CYAPA_STREAM_MODE;
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 		/* reconfig and update firmware information. */
-		cyapa_i2c_reconfig(touch, 0);
+		cyapa_reconfig(cyapa, 0);
 
-		cyapa_bl_enable_irq(touch);
+		cyapa_bl_enable_irq(cyapa);
 
 		break;
 
@@ -991,9 +988,9 @@ static int cyapa_send_mode_switch_cmd(struct cyapa_i2c *touch,
 
 	/* update firmware working mode state in driver. */
 	if (run_mode->rev_cmd != CYAPA_CMD_IDLE_TO_APP) {
-		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-		touch->fw_work_mode = CYAPA_BOOTLOAD_MODE;
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+		cyapa->fw_work_mode = CYAPA_BOOTLOAD_MODE;
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 	}
 
 	return 0;
@@ -1004,12 +1001,12 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 {
 	int ret;
 	int ioctl_len;
-	struct cyapa_i2c *touch = (struct cyapa_i2c *)file->private_data;
+	struct cyapa *cyapa = (struct cyapa *)file->private_data;
 	struct cyapa_misc_ioctl_data ioctl_data;
 	struct cyapa_trackpad_run_mode run_mode;
 	u8 buf[8];
 
-	if (touch == NULL) {
+	if (cyapa == NULL) {
 		pr_err("cypress trackpad device does not exist.\n");
 		return -ENODEV;
 	}
@@ -1024,11 +1021,11 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		if (!ioctl_data.buf || ioctl_data.len < 16)
 			return -EINVAL;
 
-		ret = cyapa_get_query_data(touch);
+		ret = cyapa_get_query_data(cyapa);
 		if (ret < 0)
 			return ret;
 		ioctl_data.len = 16;
-		if (copy_to_user(ioctl_data.buf, touch->product_id, 16))
+		if (copy_to_user(ioctl_data.buf, cyapa->product_id, 16))
 				return -EIO;
 		if (copy_to_user((void *)arg, &ioctl_data, ioctl_len))
 			return -EIO;
@@ -1053,13 +1050,13 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		if (!ioctl_data.buf || ioctl_data.len < 2)
 			return -EINVAL;
 
-		ret = cyapa_get_query_data(touch);
+		ret = cyapa_get_query_data(cyapa);
 		if (ret < 0)
 			return ret;
 		ioctl_data.len = 2;
 		memset(buf, 0, sizeof(buf));
-		buf[0] = touch->fw_maj_ver;
-		buf[1] = touch->fw_min_ver;
+		buf[0] = cyapa->fw_maj_ver;
+		buf[1] = cyapa->fw_min_ver;
 		if (copy_to_user(ioctl_data.buf, buf, ioctl_data.len))
 			return -EIO;
 		if (copy_to_user((void *)arg, &ioctl_data, ioctl_len))
@@ -1070,13 +1067,13 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		if (!ioctl_data.buf || ioctl_data.len < 2)
 			return -EINVAL;
 
-		ret = cyapa_get_query_data(touch);
+		ret = cyapa_get_query_data(cyapa);
 		if (ret < 0)
 			return ret;
 		ioctl_data.len = 2;
 		memset(buf, 0, sizeof(buf));
-		buf[0] = touch->hw_maj_ver;
-		buf[1] = touch->hw_min_ver;
+		buf[0] = cyapa->hw_maj_ver;
+		buf[1] = cyapa->hw_min_ver;
 		if (copy_to_user(ioctl_data.buf, buf, ioctl_data.len))
 			return -EIO;
 		if (copy_to_user((void *)arg, &ioctl_data, ioctl_len))
@@ -1087,12 +1084,12 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		if (!ioctl_data.buf || ioctl_data.len < 1)
 			return -EINVAL;
 
-		if (cyapa_determine_firmware_gen(touch) < 0)
+		if (cyapa_determine_firmware_gen(cyapa) < 0)
 			return -EINVAL;
-		cyapa_get_reg_offset(touch);
+		cyapa_get_reg_offset(cyapa);
 		ioctl_data.len = 1;
 		memset(buf, 0, sizeof(buf));
-		buf[0] = touch->pdata->gen;
+		buf[0] = cyapa->pdata->gen;
 		if (copy_to_user(ioctl_data.buf, buf, ioctl_data.len))
 			return -EIO;
 		if (copy_to_user((void *)arg, &ioctl_data, ioctl_len))
@@ -1105,7 +1102,7 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 
 		/* get trackpad status. */
-		ret = cyapa_get_trackpad_run_mode(touch, &run_mode);
+		ret = cyapa_get_trackpad_run_mode(cyapa, &run_mode);
 		if (ret < 0)
 			return ret;
 
@@ -1130,7 +1127,7 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		if (ret)
 			return -EINVAL;
 
-		return cyapa_send_mode_switch_cmd(touch, &run_mode);
+		return cyapa_send_mode_switch_cmd(cyapa, &run_mode);
 
 	default:
 		ret = -EINVAL;
@@ -1166,7 +1163,7 @@ static void __exit cyapa_misc_exit(void)
 	misc_deregister(&cyapa_misc_dev);
 }
 
-static void cyapa_update_firmware_dispatch(struct cyapa_i2c *touch)
+static void cyapa_update_firmware_dispatch(struct cyapa *cyapa)
 {
 	/* do something here to update trackpad firmware. */
 }
@@ -1184,13 +1181,13 @@ ssize_t cyapa_show_fm_ver(struct device *dev,
 {
 	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
-	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+	struct cyapa *cyapa = i2c_get_clientdata(client);
 
-	ret = cyapa_get_query_data(touch);
+	ret = cyapa_get_query_data(cyapa);
 	if (ret < 0)
 		return ret;
 
-	return sprintf(buf, "%d.%d\n", touch->fw_maj_ver, touch->fw_min_ver);
+	return sprintf(buf, "%d.%d\n", cyapa->fw_maj_ver, cyapa->fw_min_ver);
 }
 
 ssize_t cyapa_show_driver_ver(struct device *dev,
@@ -1205,13 +1202,13 @@ ssize_t cyapa_show_hw_ver(struct device *dev,
 {
 	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
-	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+	struct cyapa *cyapa = i2c_get_clientdata(client);
 
-	ret = cyapa_get_query_data(touch);
+	ret = cyapa_get_query_data(cyapa);
 	if (ret < 0)
 		return ret;
 
-	return sprintf(buf, "%d.%d\n", touch->hw_maj_ver, touch->hw_min_ver);
+	return sprintf(buf, "%d.%d\n", cyapa->hw_maj_ver, cyapa->hw_min_ver);
 }
 
 ssize_t cyapa_show_product_id(struct device *dev,
@@ -1219,26 +1216,26 @@ ssize_t cyapa_show_product_id(struct device *dev,
 {
 	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
-	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+	struct cyapa *cyapa = i2c_get_clientdata(client);
 
-	ret = cyapa_get_query_data(touch);
+	ret = cyapa_get_query_data(cyapa);
 	if (ret < 0)
 		return ret;
 
-	return sprintf(buf, "%s\n", touch->product_id);
+	return sprintf(buf, "%s\n", cyapa->product_id);
 }
 
 ssize_t cyapa_show_protocol_version(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
-	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+	struct cyapa *cyapa = i2c_get_clientdata(client);
 
-	if (cyapa_determine_firmware_gen(touch) < 0)
+	if (cyapa_determine_firmware_gen(cyapa) < 0)
 		return -EINVAL;
-	cyapa_get_reg_offset(touch);
+	cyapa_get_reg_offset(cyapa);
 
-	return sprintf(buf, "%d\n", touch->pdata->gen);
+	return sprintf(buf, "%d\n", cyapa->pdata->gen);
 }
 
 static DEVICE_ATTR(firmware_version, S_IRUGO, cyapa_show_fm_ver, NULL);
@@ -1265,18 +1262,18 @@ static struct attribute_group cyapa_sysfs_group = {
  * Cypress i2c trackpad input device driver.
  **************************************************************
 */
-static void cyapa_get_reg_offset(struct cyapa_i2c *touch)
+static void cyapa_get_reg_offset(struct cyapa *cyapa)
 {
-	if (touch->pdata->gen == CYAPA_GEN2) {
-		touch->data_base_offset = GEN2_REG_OFFSET_DATA_BASE;
-		touch->control_base_offset = GEN2_REG_OFFSET_CONTROL_BASE;
-		touch->command_base_offset = GEN2_REG_OFFSET_COMMAND_BASE;
-		touch->query_base_offset = GEN2_REG_OFFSET_QUERY_BASE;
+	if (cyapa->pdata->gen == CYAPA_GEN2) {
+		cyapa->data_base_offset = GEN2_REG_OFFSET_DATA_BASE;
+		cyapa->control_base_offset = GEN2_REG_OFFSET_CONTROL_BASE;
+		cyapa->command_base_offset = GEN2_REG_OFFSET_COMMAND_BASE;
+		cyapa->query_base_offset = GEN2_REG_OFFSET_QUERY_BASE;
 	} else {
-		touch->data_base_offset = GEN3_REG_OFFSET_DATA_BASE;
-		touch->control_base_offset = GEN3_REG_OFFSET_CONTROL_BASE;
-		touch->command_base_offset = GEN3_REG_OFFSET_COMMAND_BASE;
-		touch->query_base_offset = GEN3_REG_OFFSET_QUERY_BASE;
+		cyapa->data_base_offset = GEN3_REG_OFFSET_DATA_BASE;
+		cyapa->control_base_offset = GEN3_REG_OFFSET_CONTROL_BASE;
+		cyapa->command_base_offset = GEN3_REG_OFFSET_COMMAND_BASE;
+		cyapa->query_base_offset = GEN3_REG_OFFSET_QUERY_BASE;
 	}
 }
 
@@ -1285,15 +1282,15 @@ static void cyapa_get_reg_offset(struct cyapa_i2c *touch)
  * and use it to verify trackpad firmware protocol
  * is consistent with platform data setting or not.
  */
-static int cyapa_get_and_verify_firmware(struct cyapa_i2c *touch,
-	u8 *query_data, unsigned short offset, int length)
+static int cyapa_get_and_verify_firmware(struct cyapa *cyapa, u8 *query_data,
+					 unsigned short offset, int length)
 {
 	int loop = 20;
 	int ret_read_size;
 	char unique_str[] = "CYTRA";
 
 	while (loop--) {
-		ret_read_size = cyapa_i2c_reg_read_block(touch,
+		ret_read_size = cyapa_reg_read_block(cyapa,
 				offset,
 				length,
 				query_data);
@@ -1318,28 +1315,28 @@ static int cyapa_get_and_verify_firmware(struct cyapa_i2c *touch,
 		return 0;  /* unknown firmware query data. */
 }
 
-static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch)
+static int cyapa_determine_firmware_gen(struct cyapa *cyapa)
 {
 	int ret;
 	unsigned long flags;
 	unsigned short offset;
 	u8 query_data[40];
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (touch->fw_work_mode != CYAPA_STREAM_MODE) {
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (cyapa->fw_work_mode != CYAPA_STREAM_MODE) {
 		/* firmware works in bootloader mode. */
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return -EBUSY;
 	}
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/* determine firmware protocol consistent with driver setting. */
-	if (touch->pdata->gen == CYAPA_GEN2)
+	if (cyapa->pdata->gen == CYAPA_GEN2)
 		offset = GEN2_REG_OFFSET_QUERY_BASE;
 	else
 		offset = GEN3_REG_OFFSET_QUERY_BASE;
 	memset(query_data, 0, sizeof(query_data));
-	ret = cyapa_get_and_verify_firmware(touch, query_data, offset, PRODUCT_ID_SIZE);
+	ret = cyapa_get_and_verify_firmware(cyapa, query_data, offset, PRODUCT_ID_SIZE);
 	if (ret == 1) {
 		/*
 		 * current firmware protocol is consistent with the generation
@@ -1348,25 +1345,25 @@ static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch)
 		return 0;
 	}
 
-	if (touch->pdata->gen == CYAPA_GEN2) {
+	if (cyapa->pdata->gen == CYAPA_GEN2) {
 		/* guess its gen3 firmware protocol. */
 		offset = GEN3_REG_OFFSET_QUERY_BASE;
 		memset(query_data, 0, sizeof(query_data));
-		ret = cyapa_get_and_verify_firmware(touch,
+		ret = cyapa_get_and_verify_firmware(cyapa,
 					query_data, offset, GEN3_QUERY_DATA_SIZE);
 		if (ret == 1) {
 			/* gen3 firmware protocol is verified successfully. */
-			touch->pdata->gen = query_data[REG_PROTOCOL_GEN_QUERY_OFFSET] & 0x0F;
+			cyapa->pdata->gen = query_data[REG_PROTOCOL_GEN_QUERY_OFFSET] & 0x0F;
 		}
 	} else {
 		/* guess its gen2 firmware protocol. */
 		offset = GEN2_REG_OFFSET_QUERY_BASE;
 		memset(query_data, 0, sizeof(query_data));
-		ret = cyapa_get_and_verify_firmware(touch,
+		ret = cyapa_get_and_verify_firmware(cyapa,
 					query_data, offset, PRODUCT_ID_SIZE);
 		if (ret == 1) {
 			/* gen2 firmware protocol is verified successfully. */
-			touch->pdata->gen = CYAPA_GEN2;
+			cyapa->pdata->gen = CYAPA_GEN2;
 		}
 	}
 
@@ -1383,7 +1380,7 @@ static int cyapa_determine_firmware_gen(struct cyapa_i2c *touch)
 	return ret == 1 ? 0 : -1;
 }
 
-static int cyapa_get_query_data(struct cyapa_i2c *touch)
+static int cyapa_get_query_data(struct cyapa *cyapa)
 {
 	unsigned long flags;
 	u8 query_data[40];
@@ -1391,101 +1388,101 @@ static int cyapa_get_query_data(struct cyapa_i2c *touch)
 	int ret_read_size;
 	int i;
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (touch->fw_work_mode != CYAPA_STREAM_MODE) {
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (cyapa->fw_work_mode != CYAPA_STREAM_MODE) {
 		/* firmware works in bootloader mode. */
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return -EBUSY;
 	}
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/* query data is supported only in GEN2 or later firmware protocol. */
-	if (touch->pdata->gen == CYAPA_GEN2)
+	if (cyapa->pdata->gen == CYAPA_GEN2)
 		query_bytes = GEN2_QUERY_DATA_SIZE;
 	else
 		query_bytes = GEN3_QUERY_DATA_SIZE;
-	ret_read_size = cyapa_i2c_reg_read_block(touch,
-				touch->query_base_offset,
+	ret_read_size = cyapa_reg_read_block(cyapa,
+				cyapa->query_base_offset,
 				query_bytes,
 				query_data);
 	if (ret_read_size < 0)
 		return ret_read_size;
 
-	touch->product_id[0] = query_data[0];
-	touch->product_id[1] = query_data[1];
-	touch->product_id[2] = query_data[2];
-	touch->product_id[3] = query_data[3];
-	touch->product_id[4] = query_data[4];
-	touch->product_id[5] = '-';
-	touch->product_id[6] = query_data[5];
-	touch->product_id[7] = query_data[6];
-	touch->product_id[8] = query_data[7];
-	touch->product_id[9] = query_data[8];
-	touch->product_id[10] = query_data[9];
-	touch->product_id[11] = query_data[10];
-	touch->product_id[12] = '-';
-	touch->product_id[13] = query_data[11];
-	touch->product_id[14] = query_data[12];
-	touch->product_id[15] = '\0';
+	cyapa->product_id[0] = query_data[0];
+	cyapa->product_id[1] = query_data[1];
+	cyapa->product_id[2] = query_data[2];
+	cyapa->product_id[3] = query_data[3];
+	cyapa->product_id[4] = query_data[4];
+	cyapa->product_id[5] = '-';
+	cyapa->product_id[6] = query_data[5];
+	cyapa->product_id[7] = query_data[6];
+	cyapa->product_id[8] = query_data[7];
+	cyapa->product_id[9] = query_data[8];
+	cyapa->product_id[10] = query_data[9];
+	cyapa->product_id[11] = query_data[10];
+	cyapa->product_id[12] = '-';
+	cyapa->product_id[13] = query_data[11];
+	cyapa->product_id[14] = query_data[12];
+	cyapa->product_id[15] = '\0';
 
-	touch->fw_maj_ver = query_data[15];
-	touch->fw_min_ver = query_data[16];
-	touch->hw_maj_ver = query_data[17];
-	touch->hw_min_ver = query_data[18];
+	cyapa->fw_maj_ver = query_data[15];
+	cyapa->fw_min_ver = query_data[16];
+	cyapa->hw_maj_ver = query_data[17];
+	cyapa->hw_min_ver = query_data[18];
 
-	if (touch->pdata->gen == CYAPA_GEN2) {
+	if (cyapa->pdata->gen == CYAPA_GEN2) {
 		for (i = 0; i < 13; i++)
-			touch->capability[i] = query_data[19+i];
+			cyapa->capability[i] = query_data[19+i];
 
-		touch->max_abs_x =
+		cyapa->max_abs_x =
 			(((query_data[32] & 0xF0) << 4) | query_data[33]);
-		touch->max_abs_y =
+		cyapa->max_abs_y =
 			(((query_data[32] & 0x0F) << 8) | query_data[34]);
 
-		touch->physical_size_x =
+		cyapa->physical_size_x =
 			(((query_data[35] & 0xF0) << 4) | query_data[36]);
-		touch->physical_size_y =
+		cyapa->physical_size_y =
 			(((query_data[35] & 0x0F) << 8) | query_data[37]);
 	} else {
-		touch->max_abs_x =
+		cyapa->max_abs_x =
 			(((query_data[21] & 0xF0) << 4) | query_data[22]);
-		touch->max_abs_y =
+		cyapa->max_abs_y =
 			(((query_data[21] & 0x0F) << 8) | query_data[23]);
 
-		touch->physical_size_x =
+		cyapa->physical_size_x =
 			(((query_data[24] & 0xF0) << 4) | query_data[25]);
-		touch->physical_size_y =
+		cyapa->physical_size_y =
 			(((query_data[24] & 0x0F) << 8) | query_data[26]);
 	}
 
 	return 0;
 }
 
-static int cyapa_i2c_reconfig(struct cyapa_i2c *touch, int boot)
+static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 {
 	int ret;
 	unsigned long flags;
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (touch->fw_work_mode != CYAPA_STREAM_MODE) {
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (cyapa->fw_work_mode != CYAPA_STREAM_MODE) {
 		/* firmware works in bootloader mode. */
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return -EINVAL;
 	}
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/*
 	 * only support trackpad firmware gen2 or later protocol.
 	 */
-	if (cyapa_determine_firmware_gen(touch) < 0)
+	if (cyapa_determine_firmware_gen(cyapa) < 0)
 		return -EINVAL;
-	if (touch->pdata->gen < CYAPA_GEN2) {
+	if (cyapa->pdata->gen < CYAPA_GEN2) {
 		pr_info("cyapa driver unsupported firmware protocol version.\n");
 		return -EINVAL;
 	}
 
-	cyapa_get_reg_offset(touch);
-	ret = cyapa_get_query_data(touch);
+	cyapa_get_reg_offset(cyapa);
+	ret = cyapa_get_query_data(cyapa);
 	if (ret < 0) {
 		pr_err("Failed to get trackpad query data, %d.\n", ret);
 		return ret;
@@ -1501,20 +1498,20 @@ static int cyapa_i2c_reconfig(struct cyapa_i2c *touch, int boot)
 			"    Driver Version:  %d.%d.%d\n" \
 			"    Max ABS X,Y:   %d,%d\n" \
 			"    Physical Size X,Y:   %d,%d\n",
-			touch->product_id,
-			touch->pdata->gen,
-			touch->fw_maj_ver, touch->fw_min_ver,
-			touch->hw_maj_ver, touch->hw_min_ver,
+			cyapa->product_id,
+			cyapa->pdata->gen,
+			cyapa->fw_maj_ver, cyapa->fw_min_ver,
+			cyapa->hw_maj_ver, cyapa->hw_min_ver,
 			CYAPA_MAJOR_VER, CYAPA_MINOR_VER, CYAPA_REVISION_VER,
-			touch->max_abs_x, touch->max_abs_y,
-			touch->physical_size_x, touch->physical_size_y
+			cyapa->max_abs_x, cyapa->max_abs_y,
+			cyapa->physical_size_x, cyapa->physical_size_y
 			);
 	}
 
 	return 0;
 }
 
-static int cyapa_verify_data_device(struct cyapa_i2c *touch,
+static int cyapa_verify_data_device(struct cyapa *cyapa,
 				union cyapa_reg_data *reg_data)
 {
 	u8 device_status;
@@ -1543,7 +1540,7 @@ static inline void cyapa_report_fingers(struct input_dev *input, int fingers)
 	input_report_key(input, BTN_TOOL_QUADTAP, (fingers > 3));
 }
 
-static void cyapa_parse_gen2_data(struct cyapa_i2c *touch,
+static void cyapa_parse_gen2_data(struct cyapa *cyapa,
 		struct cyapa_reg_data_gen2 *reg_data,
 		struct cyapa_report_data *report_data)
 {
@@ -1586,7 +1583,7 @@ static void cyapa_parse_gen2_data(struct cyapa_i2c *touch,
 	cyapa_dump_report_data(__func__, report_data);
 }
 
-static void cyapa_parse_gen3_data(struct cyapa_i2c *touch,
+static void cyapa_parse_gen3_data(struct cyapa *cyapa,
 		struct cyapa_reg_data_gen3 *reg_data,
 		struct cyapa_report_data *report_data)
 {
@@ -1620,54 +1617,53 @@ static void cyapa_parse_gen3_data(struct cyapa_i2c *touch,
 }
 
 
-static int cyapa_find_mt_slot(struct cyapa_i2c *touch,
-		struct cyapa_touch *contact)
+static int cyapa_find_mt_slot(struct cyapa *cyapa, struct cyapa_touch *contact)
 {
 	int i;
 	int empty_slot = -1;
 
 	for (i = 0; i < MAX_MT_SLOTS; i++) {
-		if ((touch->mt_slots[i].contact.tracking_id == contact->tracking_id) &&
-			touch->mt_slots[i].touch_state)
+		if ((cyapa->mt_slots[i].contact.tracking_id == contact->tracking_id) &&
+			cyapa->mt_slots[i].touch_state)
 			return i;
 
-		if (!touch->mt_slots[i].touch_state && empty_slot == -1)
+		if (!cyapa->mt_slots[i].touch_state && empty_slot == -1)
 			empty_slot = i;
 	}
 
 	return empty_slot;
 }
 
-static void cyapa_update_mt_slots(struct cyapa_i2c *touch,
+static void cyapa_update_mt_slots(struct cyapa *cyapa,
 		struct cyapa_report_data *report_data)
 {
 	int i;
 	int slotnum;
 
 	for (i = 0; i < report_data->touch_fingers; i++) {
-		slotnum = cyapa_find_mt_slot(touch, &report_data->touches[i]);
+		slotnum = cyapa_find_mt_slot(cyapa, &report_data->touches[i]);
 		if (slotnum < 0)
 			continue;
 
-		memcpy(&touch->mt_slots[slotnum].contact,
+		memcpy(&cyapa->mt_slots[slotnum].contact,
 				&report_data->touches[i],
 				sizeof(struct cyapa_touch));
-		touch->mt_slots[slotnum].slot_updated = true;
-		touch->mt_slots[slotnum].touch_state = true;
+		cyapa->mt_slots[slotnum].slot_updated = true;
+		cyapa->mt_slots[slotnum].touch_state = true;
 	}
 }
 
-static void cyapa_send_mtb_event(struct cyapa_i2c *touch,
+static void cyapa_send_mtb_event(struct cyapa *cyapa,
 		struct cyapa_report_data *report_data)
 {
 	int i;
 	struct cyapa_mt_slot *slot;
-	struct input_dev *input = touch->input;
+	struct input_dev *input = cyapa->input;
 
-	cyapa_update_mt_slots(touch, report_data);
+	cyapa_update_mt_slots(cyapa, report_data);
 
 	for (i = 0; i < MAX_MT_SLOTS; i++) {
-		slot = &touch->mt_slots[i];
+		slot = &cyapa->mt_slots[i];
 		if (!slot->slot_updated)
 			slot->touch_state = false;
 
@@ -1690,11 +1686,11 @@ static void cyapa_send_mtb_event(struct cyapa_i2c *touch,
  * for compatible with gen2 and previous firmware
  * that do not support MT-B protocol
  */
-static void cyapa_send_mta_event(struct cyapa_i2c *touch,
+static void cyapa_send_mta_event(struct cyapa *cyapa,
 		struct cyapa_report_data *report_data)
 {
 	int i;
-	struct input_dev *input = touch->input;
+	struct input_dev *input = cyapa->input;
 
 	/* report raw trackpad data. */
 	for (i = 0; i < report_data->touch_fingers; i++) {
@@ -1732,18 +1728,18 @@ static void cyapa_send_mta_event(struct cyapa_i2c *touch,
 	input_sync(input);
 }
 
-static int cyapa_handle_input_report_data(struct cyapa_i2c *touch,
+static int cyapa_handle_input_report_data(struct cyapa *cyapa,
 		struct cyapa_report_data *report_data)
 {
-	if (touch->pdata->gen > CYAPA_GEN2)
-		cyapa_send_mtb_event(touch, report_data);
+	if (cyapa->pdata->gen > CYAPA_GEN2)
+		cyapa_send_mtb_event(cyapa, report_data);
 	else
-		cyapa_send_mta_event(touch, report_data);
+		cyapa_send_mta_event(cyapa, report_data);
 
 	return report_data->touch_fingers | report_data->button;
 }
 
-static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
+static bool cyapa_get_input(struct cyapa *cyapa)
 {
 	int ret_read_size;
 	int read_length;
@@ -1755,52 +1751,51 @@ static bool cyapa_i2c_get_input(struct cyapa_i2c *touch)
 	/* read register data from trackpad. */
 	gen2_data = &reg_data.gen2_data;
 	gen3_data = &reg_data.gen3_data;
-	if (touch->pdata->gen == CYAPA_GEN2)
+	if (cyapa->pdata->gen == CYAPA_GEN2)
 		read_length = (int)sizeof(struct cyapa_reg_data_gen2);
 	else
 		read_length = (int)sizeof(struct cyapa_reg_data_gen3);
 
-	ret_read_size = cyapa_i2c_reg_read_block(touch,
+	ret_read_size = cyapa_reg_read_block(cyapa,
 					DATA_REG_START_OFFSET,
 					read_length,
 					(u8 *)&reg_data);
 	if (ret_read_size < 0)
 		return 0;
 
-	if (cyapa_verify_data_device(touch, &reg_data) < 0)
+	if (cyapa_verify_data_device(cyapa, &reg_data) < 0)
 		return 0;
 
 	/* process and parse raw data read from Trackpad. */
-	if (touch->pdata->gen == CYAPA_GEN2)
-		cyapa_parse_gen2_data(touch, gen2_data, &report_data);
+	if (cyapa->pdata->gen == CYAPA_GEN2)
+		cyapa_parse_gen2_data(cyapa, gen2_data, &report_data);
 	else
-		cyapa_parse_gen3_data(touch, gen3_data, &report_data);
+		cyapa_parse_gen3_data(cyapa, gen3_data, &report_data);
 
 	/* report data to input subsystem. */
-	return cyapa_handle_input_report_data(touch, &report_data);
+	return cyapa_handle_input_report_data(cyapa, &report_data);
 }
 
 /* Control driver polling read rate and work handler sleep time */
-static unsigned long cyapa_i2c_adjust_delay(struct cyapa_i2c *touch,
-		bool have_data)
+static unsigned long cyapa_adjust_delay(struct cyapa *cyapa, bool have_data)
 {
 	unsigned long delay, nodata_count_thres;
 
-	if (!touch->polling_mode_enabled) {
+	if (!cyapa->polling_mode_enabled) {
 		delay = msecs_to_jiffies(CYAPA_THREAD_IRQ_SLEEP_MSECS);
 		return round_jiffies_relative(delay);
 	}
 
-	if (touch->scan_ms <= 0)
-		touch->scan_ms = CYAPA_POLLING_REPORTRATE_DEFAULT;
-	delay = touch->pdata->polling_interval_time_active;
+	if (cyapa->scan_ms <= 0)
+		cyapa->scan_ms = CYAPA_POLLING_REPORTRATE_DEFAULT;
+	delay = cyapa->pdata->polling_interval_time_active;
 	if (have_data) {
-		touch->no_data_count = 0;
+		cyapa->no_data_count = 0;
 	} else {
 		nodata_count_thres =
-			CYAPA_NO_DATA_THRES / touch->scan_ms;
-		if (touch->no_data_count < nodata_count_thres)
-			touch->no_data_count++;
+			CYAPA_NO_DATA_THRES / cyapa->scan_ms;
+		if (cyapa->no_data_count < nodata_count_thres)
+			cyapa->no_data_count++;
 		else
 			delay = CYAPA_NO_DATA_SLEEP_MSECS;
 	}
@@ -1808,11 +1803,11 @@ static unsigned long cyapa_i2c_adjust_delay(struct cyapa_i2c *touch,
 }
 
 /* Work Handler */
-static void cyapa_i2c_work_handler(struct work_struct *work)
+static void cyapa_work_handler(struct work_struct *work)
 {
 	bool have_data;
-	struct cyapa_i2c *touch =
-		container_of(work, struct cyapa_i2c, dwork.work);
+	struct cyapa *cyapa =
+		container_of(work, struct cyapa, dwork.work);
 	unsigned long delay;
 	unsigned long flags;
 
@@ -1820,19 +1815,19 @@ static void cyapa_i2c_work_handler(struct work_struct *work)
 	 * use spinlock to avoid confict accessing
 	 * when firmware switching into bootloader mode.
 	 */
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (touch->detect_status != CYAPA_DETECT_DONE_SUCCESS) {
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (cyapa->detect_status != CYAPA_DETECT_DONE_SUCCESS) {
 		/* still detecting trackpad device in work queue. */
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return;
 	}
-	if (touch->fw_work_mode == CYAPA_BOOTLOAD_MODE) {
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
-		cyapa_update_firmware_dispatch(touch);
+	if (cyapa->fw_work_mode == CYAPA_BOOTLOAD_MODE) {
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
+		cyapa_update_firmware_dispatch(cyapa);
 	} else {
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
-		have_data = cyapa_i2c_get_input(touch);
+		have_data = cyapa_get_input(cyapa);
 		/*
 		 * While interrupt driven, there is no real need to poll the
 		 * device. But trackpads are very sensitive, so there could be
@@ -1842,119 +1837,118 @@ static void cyapa_i2c_work_handler(struct work_struct *work)
 		 * CYAPA_THREAD_IRQ_SLEEP_SECS and if error is detected,
 		 * we try to reset and reconfigure the trackpad.
 		 */
-		delay = cyapa_i2c_adjust_delay(touch, have_data);
-		if (touch->polling_mode_enabled)
-			cyapa_i2c_reschedule_work(touch, delay);
+		delay = cyapa_adjust_delay(cyapa, have_data);
+		if (cyapa->polling_mode_enabled)
+			cyapa_reschedule_work(cyapa, delay);
 	}
 
 	return;
 }
 
-static void cyapa_i2c_reschedule_work(struct cyapa_i2c *touch,
-		unsigned long delay)
+static void cyapa_reschedule_work(struct cyapa *cyapa, unsigned long delay)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&touch->lock, flags);
+	spin_lock_irqsave(&cyapa->lock, flags);
 
 	/*
 	 * If work is already scheduled then subsequent schedules will not
 	 * change the scheduled time that's why we have to cancel it first.
 	 */
-	__cancel_delayed_work(&touch->dwork);
+	__cancel_delayed_work(&cyapa->dwork);
 	/*
 	 * check bl_irq_enable value to avoid mistriggered interrupt
 	 * when switching from operational mode
 	 * to bootloader mode.
 	 */
-	if (touch->polling_mode_enabled || touch->bl_irq_enable)
-		schedule_delayed_work(&touch->dwork, delay);
+	if (cyapa->polling_mode_enabled || cyapa->bl_irq_enable)
+		schedule_delayed_work(&cyapa->dwork, delay);
 
-	spin_unlock_irqrestore(&touch->lock, flags);
+	spin_unlock_irqrestore(&cyapa->lock, flags);
 }
 
-static irqreturn_t cyapa_i2c_irq(int irq, void *dev_id)
+static irqreturn_t cyapa_irq(int irq, void *dev_id)
 {
-	struct cyapa_i2c *touch = dev_id;
+	struct cyapa *cyapa = dev_id;
 
-	cyapa_i2c_reschedule_work(touch, 0);
+	cyapa_reschedule_work(cyapa, 0);
 
 	return IRQ_HANDLED;
 }
 
-static int cyapa_i2c_open(struct input_dev *input)
+static int cyapa_open(struct input_dev *input)
 {
-	struct cyapa_i2c *touch = input_get_drvdata(input);
+	struct cyapa *cyapa = input_get_drvdata(input);
 
-	if (touch->polling_mode_enabled) {
+	if (cyapa->polling_mode_enabled) {
 		/*
 		 * In polling mode, by default, initialize the polling interval
 		 * to CYAPA_NO_DATA_SLEEP_MSECS,
 		 * Once data is read, the polling rate will be automatically
 		 * increased.
 		 */
-		cyapa_i2c_reschedule_work(touch,
+		cyapa_reschedule_work(cyapa,
 			msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
 	}
 
 	return 0;
 }
 
-static void cyapa_i2c_close(struct input_dev *input)
+static void cyapa_close(struct input_dev *input)
 {
-	struct cyapa_i2c *touch = input_get_drvdata(input);
+	struct cyapa *cyapa = input_get_drvdata(input);
 
-	cancel_delayed_work_sync(&touch->dwork);
+	cancel_delayed_work_sync(&cyapa->dwork);
 }
 
-static struct cyapa_i2c *cyapa_i2c_touch_create(struct i2c_client *client)
+static struct cyapa *cyapa_create(struct i2c_client *client)
 {
-	struct cyapa_i2c *touch;
+	struct cyapa *cyapa;
 
-	touch = kzalloc(sizeof(struct cyapa_i2c), GFP_KERNEL);
-	if (!touch)
+	cyapa = kzalloc(sizeof(struct cyapa), GFP_KERNEL);
+	if (!cyapa)
 		return NULL;
 
-	touch->pdata = (struct cyapa_platform_data *)client->dev.platform_data;
+	cyapa->pdata = (struct cyapa_platform_data *)client->dev.platform_data;
 
-	touch->scan_ms = touch->pdata->report_rate ?
-		(1000 / touch->pdata->report_rate) : 0;
-	touch->client = client;
-	touch->polling_mode_enabled = false;
-	global_touch = touch;
-	touch->fw_work_mode = CYAPA_BOOTLOAD_MODE;
-	touch->misc_open_count = 0;
-	sema_init(&touch->reg_io_sem, 1);
-	spin_lock_init(&touch->miscdev_spinlock);
-	mutex_init(&touch->misc_mutex);
+	cyapa->scan_ms = cyapa->pdata->report_rate ?
+		(1000 / cyapa->pdata->report_rate) : 0;
+	cyapa->client = client;
+	cyapa->polling_mode_enabled = false;
+	global_cyapa = cyapa;
+	cyapa->fw_work_mode = CYAPA_BOOTLOAD_MODE;
+	cyapa->misc_open_count = 0;
+	sema_init(&cyapa->reg_io_sem, 1);
+	spin_lock_init(&cyapa->miscdev_spinlock);
+	mutex_init(&cyapa->misc_mutex);
 
-	INIT_DELAYED_WORK(&touch->dwork, cyapa_i2c_work_handler);
-	spin_lock_init(&touch->lock);
+	INIT_DELAYED_WORK(&cyapa->dwork, cyapa_work_handler);
+	spin_lock_init(&cyapa->lock);
 
-	return touch;
+	return cyapa;
 }
 
-static int cyapa_create_input_dev(struct cyapa_i2c *touch)
+static int cyapa_create_input_dev(struct cyapa *cyapa)
 {
 	int ret;
 	struct input_dev *input = NULL;
 
-	input = touch->input = input_allocate_device();
-	if (!touch->input) {
+	input = cyapa->input = input_allocate_device();
+	if (!cyapa->input) {
 		pr_err("Allocate memory for Input device failed\n");
 		return -ENOMEM;
 	}
 
-	input->name = "cyapa_i2c_trackpad";
-	input->phys = touch->client->adapter->name;
+	input->name = "cyapa_trackpad";
+	input->phys = cyapa->client->adapter->name;
 	input->id.bustype = BUS_I2C;
 	input->id.version = 1;
 	input->id.product = 0;  /* means any product in eventcomm. */
-	input->dev.parent = &touch->client->dev;
+	input->dev.parent = &cyapa->client->dev;
 
-	input->open = cyapa_i2c_open;
-	input->close = cyapa_i2c_close;
-	input_set_drvdata(input, touch);
+	input->open = cyapa_open;
+	input->close = cyapa_close;
+	input_set_drvdata(input, cyapa);
 
 	__set_bit(EV_ABS, input->evbit);
 
@@ -1963,16 +1957,16 @@ static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 	 * When multi-fingers on trackpad, only the first finger touch
 	 * will be reported as X/Y axes values.
 	 */
-	input_set_abs_params(input, ABS_X, 0, touch->max_abs_x, 0, 0);
-	input_set_abs_params(input, ABS_Y, 0, touch->max_abs_y, 0, 0);
+	input_set_abs_params(input, ABS_X, 0, cyapa->max_abs_x, 0, 0);
+	input_set_abs_params(input, ABS_Y, 0, cyapa->max_abs_y, 0, 0);
 	input_set_abs_params(input, ABS_PRESSURE, 0, 255, 0, 0);
 	input_set_abs_params(input, ABS_TOOL_WIDTH, 0, 255, 0, 0);
 
 	/* finger position */
-	input_set_abs_params(input, ABS_MT_POSITION_X, 0, touch->max_abs_x, 0, 0);
-	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, touch->max_abs_y, 0, 0);
+	input_set_abs_params(input, ABS_MT_POSITION_X, 0, cyapa->max_abs_x, 0, 0);
+	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, cyapa->max_abs_y, 0, 0);
 	input_set_abs_params(input, ABS_MT_PRESSURE, 0, 255, 0, 0);
-	if (touch->pdata->gen > CYAPA_GEN2) {
+	if (cyapa->pdata->gen > CYAPA_GEN2) {
 		ret = input_mt_init_slots(input, MAX_MT_SLOTS);
 		if (ret < 0)
 			return ret;
@@ -1980,15 +1974,15 @@ static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 	} else
 		input_set_events_per_packet(input, 60);
 
-	if (touch->physical_size_x && touch->physical_size_y) {
+	if (cyapa->physical_size_x && cyapa->physical_size_y) {
 		input_abs_set_res(input, ABS_X,
-			touch->max_abs_x / touch->physical_size_x);
+			cyapa->max_abs_x / cyapa->physical_size_x);
 		input_abs_set_res(input, ABS_Y,
-			touch->max_abs_y / touch->physical_size_y);
+			cyapa->max_abs_y / cyapa->physical_size_y);
 		input_abs_set_res(input, ABS_MT_POSITION_X,
-			touch->max_abs_x / touch->physical_size_x);
+			cyapa->max_abs_x / cyapa->physical_size_x);
 		input_abs_set_res(input, ABS_MT_POSITION_Y,
-			touch->max_abs_y / touch->physical_size_y);
+			cyapa->max_abs_y / cyapa->physical_size_y);
 	}
 
 	__set_bit(EV_KEY, input->evbit);
@@ -2001,7 +1995,7 @@ static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 	__set_bit(BTN_LEFT, input->keybit);
 
 	/* Register the device in input subsystem */
-	ret = input_register_device(touch->input);
+	ret = input_register_device(cyapa->input);
 	if (ret) {
 		pr_err("Input device register failed, %d\n", ret);
 		input_free_device(input);
@@ -2010,7 +2004,7 @@ static int cyapa_create_input_dev(struct cyapa_i2c *touch)
 	return ret;
 }
 
-static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch)
+static int cyapa_check_exit_bootloader(struct cyapa *cyapa)
 {
 	int ret;
 	int tries = 15;
@@ -2018,16 +2012,16 @@ static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch)
 	struct cyapa_trackpad_run_mode run_mode;
 
 	do {
-		if ((cyapa_get_trackpad_run_mode(touch, &run_mode) < 0) &&
+		if ((cyapa_get_trackpad_run_mode(cyapa, &run_mode) < 0) &&
 			(tries > 0)) {
 			msleep(300);
 			continue;
 		}
 
 		if (run_mode.run_mode == CYAPA_OPERATIONAL_MODE) {
-			spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-			touch->fw_work_mode = CYAPA_STREAM_MODE;
-			spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+			spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+			cyapa->fw_work_mode = CYAPA_STREAM_MODE;
+			spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 			break;
 		}
 
@@ -2035,7 +2029,7 @@ static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch)
 			(run_mode.bootloader_state ==
 				CYAPA_BOOTLOADER_ACTIVE_STATE)) {
 			/* bootloader active state. */
-			ret = cyapa_i2c_reg_write_block(touch, 0,
+			ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_switch_idle), bl_switch_idle);
 
 			if (ret != sizeof(bl_switch_idle))
@@ -2050,7 +2044,7 @@ static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch)
 			(run_mode.bootloader_state ==
 				CYAPA_BOOTLOADER_IDLE_STATE)) {
 			/* send command switch to operational mode. */
-			ret = cyapa_i2c_reg_write_block(touch, 0,
+			ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_app_launch), bl_app_launch);
 
 			if (ret != sizeof(bl_app_launch))
@@ -2068,17 +2062,17 @@ static int cyapa_check_exit_bootloader(struct cyapa_i2c *touch)
 	return 0;
 }
 
-static int cyapa_set_power_mode(struct cyapa_i2c *touch, u8 power_mode)
+static int cyapa_set_power_mode(struct cyapa *cyapa, u8 power_mode)
 {
 	int ret;
 	u8 power;
 	int tries = 3;
 
-	power = cyapa_i2c_reg_read_byte(touch, REG_OFFSET_POWER_MODE);
+	power = cyapa_reg_read_byte(cyapa, REG_OFFSET_POWER_MODE);
 	power &= ~OP_POWER_MODE_MASK;
 	power |= ((power_mode << OP_POWER_MODE_SHIFT) & OP_POWER_MODE_MASK);
 	do {
-		ret = cyapa_i2c_reg_write_byte(touch,
+		ret = cyapa_reg_write_byte(cyapa,
 				REG_OFFSET_POWER_MODE, power);
 		/* sleep at least 10 ms. */
 		usleep_range(SET_POWER_MODE_DELAY, 2 * SET_POWER_MODE_DELAY);
@@ -2091,11 +2085,11 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 {
 	int ret;
 	unsigned long flags;
-	struct cyapa_i2c *touch =
-		container_of(work, struct cyapa_i2c, detect_work);
-	struct i2c_client *client = touch->client;
+	struct cyapa *cyapa =
+		container_of(work, struct cyapa, detect_work);
+	struct i2c_client *client = cyapa->client;
 
-	ret = cyapa_check_exit_bootloader(touch);
+	ret = cyapa_check_exit_bootloader(cyapa);
 	if (ret < 0) {
 		pr_err("cyapa check and exit bootloader failed.\n");
 		goto out_probe_err;
@@ -2107,39 +2101,39 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 	 * when special platform that do not support slave interrupt.
 	 * or allocate irq number to it failed.
 	 */
-	if (touch->pdata->irq_gpio <= 0)
-		touch->irq = client->irq ? client->irq : -1;
+	if (cyapa->pdata->irq_gpio <= 0)
+		cyapa->irq = client->irq ? client->irq : -1;
 	else
-		touch->irq = gpio_to_irq(touch->pdata->irq_gpio);
+		cyapa->irq = gpio_to_irq(cyapa->pdata->irq_gpio);
 
-	if (touch->irq <= 0) {
+	if (cyapa->irq <= 0) {
 		pr_err("failed to allocate irq\n");
 		ret = -EBUSY;
 		goto out_probe_err;
 	}
 
-	set_irq_type(touch->irq, IRQF_TRIGGER_FALLING);
-	ret = request_irq(touch->irq,
-			cyapa_i2c_irq,
+	set_irq_type(cyapa->irq, IRQF_TRIGGER_FALLING);
+	ret = request_irq(cyapa->irq,
+			cyapa_irq,
 			0,
 			CYAPA_I2C_NAME,
-			touch);
+			cyapa);
 	if (ret) {
 		pr_warning("IRQ request failed: %d, "
 			"falling back to polling mode.\n", ret);
 
-		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-		touch->polling_mode_enabled = true;
-		touch->bl_irq_enable = false;
-		touch->irq_enabled = false;
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+		cyapa->polling_mode_enabled = true;
+		cyapa->bl_irq_enable = false;
+		cyapa->irq_enabled = false;
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 	} else {
-		spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-		touch->polling_mode_enabled = false;
-		touch->bl_irq_enable = false;
-		touch->irq_enabled = true;
-		enable_irq_wake(touch->irq);
-		spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+		spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+		cyapa->polling_mode_enabled = false;
+		cyapa->bl_irq_enable = false;
+		cyapa->irq_enabled = true;
+		enable_irq_wake(cyapa->irq);
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 	}
 
 	/*
@@ -2149,48 +2143,48 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 	 * that user can update trackpad firmware through cyapa interface
 	 * when current firmware protocol is not supported.
 	 */
-	cyapa_i2c_reconfig(touch, true);
+	cyapa_reconfig(cyapa, true);
 
 	/* create an input_dev instance for trackpad device. */
-	ret = cyapa_create_input_dev(touch);
+	ret = cyapa_create_input_dev(cyapa);
 	if (ret) {
-		free_irq(touch->irq, touch);
+		free_irq(cyapa->irq, cyapa);
 		pr_err("create input_dev instance failed.\n");
 		goto out_probe_err;
 	}
 
-	i2c_set_clientdata(client, touch);
+	i2c_set_clientdata(client, cyapa);
 
 	ret = sysfs_create_group(&client->dev.kobj, &cyapa_sysfs_group);
 	if (ret)
 		pr_warning("error creating sysfs entries.\n");
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	touch->detect_status = CYAPA_DETECT_DONE_SUCCESS;
-	if (touch->irq_enabled)
-		touch->bl_irq_enable = true;
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	cyapa->detect_status = CYAPA_DETECT_DONE_SUCCESS;
+	if (cyapa->irq_enabled)
+		cyapa->bl_irq_enable = true;
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	return;
 
 out_probe_err:
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	touch->detect_status = CYAPA_DETECT_DONE_FAILED;
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	cyapa->detect_status = CYAPA_DETECT_DONE_FAILED;
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/* release previous allocated input_dev instances. */
-	if (touch->input) {
-		if (touch->input->mt)
-			input_mt_destroy_slots(touch->input);
-		input_free_device(touch->input);
-		touch->input = NULL;
+	if (cyapa->input) {
+		if (cyapa->input->mt)
+			input_mt_destroy_slots(cyapa->input);
+		input_free_device(cyapa->input);
+		cyapa->input = NULL;
 	}
 
-	kfree(touch);
-	global_touch = NULL;
+	kfree(cyapa);
+	global_cyapa = NULL;
 }
 
-static int cyapa_probe_detect(struct cyapa_i2c *touch)
+static int cyapa_probe_detect(struct cyapa *cyapa)
 {
 	/*
 	 * Maybe trackpad device is not connected,
@@ -2199,16 +2193,16 @@ static int cyapa_probe_detect(struct cyapa_i2c *touch)
 	 * So use work queue to wait for it ready
 	 * to avoid block system booting or resuming.
 	 */
-	INIT_WORK(&touch->detect_work, cyapa_probe_detect_work_handler);
-	return queue_work(touch->detect_wq, &touch->detect_work);
+	INIT_WORK(&cyapa->detect_work, cyapa_probe_detect_work_handler);
+	return queue_work(cyapa->detect_wq, &cyapa->detect_work);
 }
 
 static void cyapa_resume_detect_work_handler(struct work_struct *work)
 {
 	int ret;
 	unsigned long flags;
-	struct cyapa_i2c *touch =
-		container_of(work, struct cyapa_i2c, detect_work);
+	struct cyapa *cyapa =
+		container_of(work, struct cyapa, detect_work);
 
 	/*
 	 * when waking up, the first step that driver should do is to
@@ -2218,43 +2212,43 @@ static void cyapa_resume_detect_work_handler(struct work_struct *work)
 	 * is working in bootloader mode, so do not check the return
 	 * result here.
 	 */
-	ret = cyapa_set_power_mode(touch, PWR_MODE_FULL_ACTIVE);
+	ret = cyapa_set_power_mode(cyapa, PWR_MODE_FULL_ACTIVE);
 	if (ret < 0)
 		pr_warning("set wake up power mode to trackpad failed\n");
 
-	ret = cyapa_check_exit_bootloader(touch);
+	ret = cyapa_check_exit_bootloader(cyapa);
 	if (ret < 0) {
 		pr_err("cyapa check and exit bootloader failed.\n");
 		goto out_resume_err;
 	}
 
 	/* re-enable interrupt work handler routine. */
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	if (touch->irq_enabled)
-		touch->bl_irq_enable = true;
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (cyapa->irq_enabled)
+		cyapa->bl_irq_enable = true;
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
-	cyapa_i2c_reschedule_work(touch,
+	cyapa_reschedule_work(cyapa,
 		msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
 
 out_resume_err:
 	/* trackpad device resumed from sleep state successfully. */
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	touch->detect_status = ret ? CYAPA_DETECT_DONE_FAILED :
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	cyapa->detect_status = ret ? CYAPA_DETECT_DONE_FAILED :
 					CYAPA_DETECT_DONE_SUCCESS;
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	return;
 }
 
-static int cyapa_resume_detect(struct cyapa_i2c *touch)
+static int cyapa_resume_detect(struct cyapa *cyapa)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&touch->miscdev_spinlock, flags);
-	touch->bl_irq_enable = false;
-	touch->fw_work_mode = CYAPA_BOOTLOAD_MODE;
-	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	cyapa->bl_irq_enable = false;
+	cyapa->fw_work_mode = CYAPA_BOOTLOAD_MODE;
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/*
 	 * Maybe trackpad device is not connected,
@@ -2263,137 +2257,137 @@ static int cyapa_resume_detect(struct cyapa_i2c *touch)
 	 * So use work queue to wait for it ready
 	 * to avoid block system booting or resuming.
 	 */
-	INIT_WORK(&touch->detect_work, cyapa_resume_detect_work_handler);
-	return queue_work(touch->detect_wq, &touch->detect_work);
+	INIT_WORK(&cyapa->detect_work, cyapa_resume_detect_work_handler);
+	return queue_work(cyapa->detect_wq, &cyapa->detect_work);
 }
 
-static int __devinit cyapa_i2c_probe(struct i2c_client *client,
+static int __devinit cyapa_probe(struct i2c_client *client,
 			       const struct i2c_device_id *dev_id)
 {
 	int ret;
-	struct cyapa_i2c *touch;
+	struct cyapa *cyapa;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		return -EIO;
 
-	touch = cyapa_i2c_touch_create(client);
-	if (!touch) {
-		pr_err("allocate memory for touch failed.\n");
+	cyapa = cyapa_create(client);
+	if (!cyapa) {
+		pr_err("cyapa: allocate memory failed.\n");
 		return -ENOMEM;
 	}
 
 	/* First, initialize pdata */
-	if (touch->pdata->init) {
-		ret = touch->pdata->init();
+	if (cyapa->pdata->init) {
+		ret = cyapa->pdata->init();
 		if (ret) {
-			pr_err("board initialize failed: %d\n", ret);
+			pr_err("cyapa: board init failed: %d\n", ret);
 			goto err_mem_free;
 		}
 	}
 
-	touch->detect_wq = create_singlethread_workqueue("cyapa_detect_wq");
-	if (!touch->detect_wq) {
-		pr_err("failed to create cyapa trackpad detect workqueue.\n");
+	cyapa->detect_wq = create_singlethread_workqueue("cyapa_detect_wq");
+	if (!cyapa->detect_wq) {
+		pr_err("cyapa: trackpad detect workqueue creation failed.\n");
 		goto err_mem_free;
 	}
 
-	ret = cyapa_probe_detect(touch);
+	ret = cyapa_probe_detect(cyapa);
 	if (ret < 0) {
-		pr_err("cyapa i2c trackpad device detect failed, %d\n", ret);
+		pr_err("cyapa: trackpad device detect failed, %d\n", ret);
 		goto err_mem_free;
 	}
 
 	return 0;
 
 err_mem_free:
-	if (touch->detect_wq)
-		destroy_workqueue(touch->detect_wq);
-	kfree(touch);
-	global_touch = NULL;
+	if (cyapa->detect_wq)
+		destroy_workqueue(cyapa->detect_wq);
+	kfree(cyapa);
+	global_cyapa = NULL;
 
 	return ret;
 }
 
-static int __devexit cyapa_i2c_remove(struct i2c_client *client)
+static int __devexit cyapa_remove(struct i2c_client *client)
 {
-	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+	struct cyapa *cyapa = i2c_get_clientdata(client);
 
 	sysfs_remove_group(&client->dev.kobj, &cyapa_sysfs_group);
 
-	cancel_delayed_work_sync(&touch->dwork);
+	cancel_delayed_work_sync(&cyapa->dwork);
 
-	if (!touch->polling_mode_enabled) {
-		disable_irq_wake(touch->irq);
-		free_irq(touch->irq, touch);
+	if (!cyapa->polling_mode_enabled) {
+		disable_irq_wake(cyapa->irq);
+		free_irq(cyapa->irq, cyapa);
 	}
 
-	if (touch->input) {
-		if (touch->input->mt)
-			input_mt_destroy_slots(touch->input);
-		input_unregister_device(touch->input);
+	if (cyapa->input) {
+		if (cyapa->input->mt)
+			input_mt_destroy_slots(cyapa->input);
+		input_unregister_device(cyapa->input);
 	}
 
-	if (touch->detect_wq)
-		destroy_workqueue(touch->detect_wq);
-	kfree(touch);
-	global_touch = NULL;
+	if (cyapa->detect_wq)
+		destroy_workqueue(cyapa->detect_wq);
+	kfree(cyapa);
+	global_cyapa = NULL;
 
 	return 0;
 }
 
 #ifdef CONFIG_PM
-static int cyapa_i2c_suspend(struct device *dev)
+static int cyapa_suspend(struct device *dev)
 {
 	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
-	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+	struct cyapa *cyapa = i2c_get_clientdata(client);
 
 	/*
 	 * When cyapa driver probing failed and haven't been removed,
-	 * then when system do suspending, the value of touch is NULL.
+	 * then when system do suspending, the value of cyapa is NULL.
 	 * e.g.: this situation will happen when system booted
 	 * without trackpad connected.
 	 */
-	if (!touch)
+	if (!cyapa)
 		return 0;
 
-	if (touch->detect_wq)
-		flush_workqueue(touch->detect_wq);
+	if (cyapa->detect_wq)
+		flush_workqueue(cyapa->detect_wq);
 
-	cancel_delayed_work_sync(&touch->dwork);
+	cancel_delayed_work_sync(&cyapa->dwork);
 
 	/* set trackpad device to light sleep mode. */
-	ret = cyapa_set_power_mode(touch, PWR_MODE_LIGHT_SLEEP);
+	ret = cyapa_set_power_mode(cyapa, PWR_MODE_LIGHT_SLEEP);
 	if (ret < 0)
 		pr_err("suspend cyapa trackpad device failed, %d\n", ret);
 
 	return ret;
 }
 
-static int cyapa_i2c_resume(struct device *dev)
+static int cyapa_resume(struct device *dev)
 {
 	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
-	struct cyapa_i2c *touch = i2c_get_clientdata(client);
+	struct cyapa *cyapa = i2c_get_clientdata(client);
 
 	/*
 	 * When cyapa driver probing failed and haven't been removed,
-	 * then when system do suspending, the value of touch is NULL.
+	 * then when system do suspending, the value of cyapa is NULL.
 	 * e.g.: this situation will happen when system booted
 	 * without trackpad connected.
 	 */
-	if (!touch)
+	if (!cyapa)
 		return 0;
 
-	if (touch->pdata->wakeup) {
-		ret = touch->pdata->wakeup();
+	if (cyapa->pdata->wakeup) {
+		ret = cyapa->pdata->wakeup();
 		if (ret) {
 			pr_err("wakeup failed, %d\n", ret);
 			return ret;
 		}
 	}
 
-	ret = cyapa_resume_detect(touch);
+	ret = cyapa_resume_detect(cyapa);
 	if (ret < 0) {
 		pr_err("cyapa i2c trackpad device detect failed, %d\n", ret);
 		return ret;
@@ -2403,18 +2397,18 @@ static int cyapa_i2c_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops cyapa_pm_ops = {
-	.suspend = cyapa_i2c_suspend,
-	.resume = cyapa_i2c_resume,
+	.suspend = cyapa_suspend,
+	.resume = cyapa_resume,
 };
 #endif
 
-static const struct i2c_device_id cypress_i2c_id_table[] = {
+static const struct i2c_device_id cyapa_id_table[] = {
 	{ CYAPA_I2C_NAME, 0 },
 	{ },
 };
-MODULE_DEVICE_TABLE(i2c, cypress_i2c_id_table);
+MODULE_DEVICE_TABLE(i2c, cyapa_id_table);
 
-static struct i2c_driver cypress_i2c_driver = {
+static struct i2c_driver cyapa_driver = {
 	.driver = {
 		.name = CYAPA_I2C_NAME,
 		.owner = THIS_MODULE,
@@ -2423,18 +2417,18 @@ static struct i2c_driver cypress_i2c_driver = {
 #endif
 	},
 
-	.probe = cyapa_i2c_probe,
-	.remove = __devexit_p(cyapa_i2c_remove),
-	.id_table = cypress_i2c_id_table,
+	.probe = cyapa_probe,
+	.remove = __devexit_p(cyapa_remove),
+	.id_table = cyapa_id_table,
 };
 
-static int __init cyapa_i2c_init(void)
+static int __init cyapa_init(void)
 {
 	int ret;
 
-	ret = i2c_add_driver(&cypress_i2c_driver);
+	ret = i2c_add_driver(&cyapa_driver);
 	if (ret) {
-		pr_err("cypress i2c driver register FAILED.\n");
+		pr_err("cyapa driver register FAILED.\n");
 		return ret;
 	}
 
@@ -2450,16 +2444,16 @@ static int __init cyapa_i2c_init(void)
 	return ret;
 }
 
-static void __exit cyapa_i2c_exit(void)
+static void __exit cyapa_exit(void)
 {
 	cyapa_misc_exit();
 
-	i2c_del_driver(&cypress_i2c_driver);
+	i2c_del_driver(&cyapa_driver);
 }
 
-module_init(cyapa_i2c_init);
-module_exit(cyapa_i2c_exit);
+module_init(cyapa_init);
+module_exit(cyapa_exit);
 
-MODULE_DESCRIPTION("Cypress I2C Trackpad Driver");
+MODULE_DESCRIPTION("Cypress APA I2C Trackpad Driver");
 MODULE_AUTHOR("Dudley Du <dudl@cypress.com>");
 MODULE_LICENSE("GPL");
