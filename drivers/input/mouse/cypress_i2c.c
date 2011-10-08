@@ -313,7 +313,6 @@ struct cyapa_i2c {
 	spinlock_t lock;
 	int no_data_count;
 	int scan_ms;
-	int open_count;
 
 	int irq;
 	/* driver using polling mode if failed to request irq. */
@@ -1510,11 +1509,6 @@ static int cyapa_i2c_reconfig(struct cyapa_i2c *touch, int boot)
 	return 0;
 }
 
-static int cyapa_i2c_reset_config(struct cyapa_i2c *touch)
-{
-	return 0;
-}
-
 static int cyapa_verify_data_device(struct cyapa_i2c *touch,
 				union cyapa_reg_data *reg_data)
 {
@@ -1886,16 +1880,6 @@ static irqreturn_t cyapa_i2c_irq(int irq, void *dev_id)
 static int cyapa_i2c_open(struct input_dev *input)
 {
 	struct cyapa_i2c *touch = input_get_drvdata(input);
-	int ret;
-
-	if (0 == touch->open_count) {
-		ret = cyapa_i2c_reset_config(touch);
-		if (ret < 0) {
-			pr_err("reset i2c trackpad error code, %d.\n", ret);
-			return ret;
-		}
-	}
-	touch->open_count++;
 
 	if (touch->polling_mode_enabled) {
 		/*
@@ -1913,16 +1897,9 @@ static int cyapa_i2c_open(struct input_dev *input)
 
 static void cyapa_i2c_close(struct input_dev *input)
 {
-	unsigned long flags;
 	struct cyapa_i2c *touch = input_get_drvdata(input);
 
-	touch->open_count--;
-
-	if (0 == touch->open_count) {
-		spin_lock_irqsave(&touch->lock, flags);
-		cancel_delayed_work_sync(&touch->dwork);
-		spin_unlock_irqrestore(&touch->lock, flags);
-	}
+	cancel_delayed_work_sync(&touch->dwork);
 }
 
 static struct cyapa_i2c *cyapa_i2c_touch_create(struct i2c_client *client)
@@ -1937,7 +1914,6 @@ static struct cyapa_i2c *cyapa_i2c_touch_create(struct i2c_client *client)
 
 	touch->scan_ms = touch->pdata->report_rate ?
 		(1000 / touch->pdata->report_rate) : 0;
-	touch->open_count = 0;
 	touch->client = client;
 	touch->polling_mode_enabled = false;
 	global_touch = touch;
@@ -2252,12 +2228,6 @@ static void cyapa_resume_detect_work_handler(struct work_struct *work)
 	if (touch->irq_enabled)
 		touch->bl_irq_enable = true;
 	spin_unlock_irqrestore(&touch->miscdev_spinlock, flags);
-
-	ret = cyapa_i2c_reset_config(touch);
-	if (ret < 0) {
-		pr_err("reset and config trackpad device failed.\n");
-		goto out_resume_err;
-	}
 
 	cyapa_i2c_reschedule_work(touch,
 		msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
