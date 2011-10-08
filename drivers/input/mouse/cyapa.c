@@ -2216,11 +2216,8 @@ static int __devexit cyapa_remove(struct i2c_client *client)
 	disable_irq_wake(cyapa->irq);
 	free_irq(cyapa->irq, cyapa);
 
-	if (cyapa->input) {
-		if (cyapa->input->mt)
-			input_mt_destroy_slots(cyapa->input);
+	if (cyapa->input)
 		input_unregister_device(cyapa->input);
-	}
 
 	if (cyapa->detect_wq)
 		destroy_workqueue(cyapa->detect_wq);
