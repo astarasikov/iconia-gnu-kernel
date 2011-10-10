@@ -18794,7 +18794,7 @@ static struct snd_kcontrol_new alc272_mario_mixer[] = {
 
 	HDA_CODEC_VOLUME("Mic Playback Volume", 0x0b, 0x0, HDA_INPUT),
 	HDA_CODEC_MUTE("Mic Playback Switch", 0x0b, 0x0, HDA_INPUT),
-	HDA_CODEC_VOLUME("Mic Boost", 0x18, 0, HDA_INPUT),
+	HDA_CODEC_VOLUME("Mic Boost Volume", 0x18, 0, HDA_INPUT),
 	{ } /* end */
 };
 
