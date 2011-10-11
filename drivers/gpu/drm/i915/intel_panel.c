@@ -83,11 +83,15 @@ intel_pch_panel_fitting(struct drm_device *dev,
 			u32 scaled_height = mode->hdisplay * adjusted_mode->vdisplay;
 			if (scaled_width > scaled_height) { /* pillar */
 				width = scaled_height / mode->vdisplay;
+				if (width & 1)
+				    	width++;
 				x = (adjusted_mode->hdisplay - width + 1) / 2;
 				y = 0;
 				height = adjusted_mode->vdisplay;
 			} else if (scaled_width < scaled_height) { /* letter */
 				height = scaled_width / mode->hdisplay;
+				if (height & 1)
+				    height++;
 				y = (adjusted_mode->vdisplay - height + 1) / 2;
 				x = 0;
 				width = adjusted_mode->hdisplay;
@@ -279,4 +283,29 @@ void intel_panel_setup_backlight(struct drm_device *dev)
 
 	dev_priv->backlight_level = intel_panel_get_backlight(dev);
 	dev_priv->backlight_enabled = dev_priv->backlight_level != 0;
+}
+
+enum drm_connector_status
+intel_panel_detect(struct drm_device *dev)
+{
+#if 0
+	struct drm_i915_private *dev_priv = dev->dev_private;
+#endif
+
+	if (i915_panel_ignore_lid)
+		return i915_panel_ignore_lid > 0 ?
+			connector_status_connected :
+			connector_status_disconnected;
+
+	/* opregion lid state on HP 2540p is wrong at boot up,
+	 * appears to be either the BIOS or Linux ACPI fault */
+#if 0
+	/* Assume that the BIOS does not lie through the OpRegion... */
+	if (dev_priv->opregion.lid_state)
+		return ioread32(dev_priv->opregion.lid_state) & 0x1 ?
+			connector_status_connected :
+			connector_status_disconnected;
+#endif
+
+	return connector_status_unknown;
 }
