@@ -63,15 +63,9 @@
  */
 #define MAX_MT_SLOTS  (2 * MAX_FINGERS)
 
-/* When in IRQ mode read the device every THREAD_IRQ_SLEEP_SECS */
+/* Read the device every THREAD_IRQ_SLEEP_SECS, even if no irqs. */
 #define CYAPA_THREAD_IRQ_SLEEP_SECS	2
 #define CYAPA_THREAD_IRQ_SLEEP_MSECS (CYAPA_THREAD_IRQ_SLEEP_SECS * MSEC_PER_SEC)
-/*
- * When in Polling mode and no data received for CYAPA_NO_DATA_THRES msecs
- * reduce the polling rate to CYAPA_NO_DATA_SLEEP_MSECS
- */
-#define CYAPA_NO_DATA_THRES	(MSEC_PER_SEC)
-#define CYAPA_NO_DATA_SLEEP_MSECS	(MSEC_PER_SEC / 4)
 
 /* report data start reg offset address. */
 #define DATA_REG_START_OFFSET  0x0000
@@ -316,12 +310,8 @@ struct cyapa {
 	enum cyapa_detect_status detect_status;
 	/* synchronize access to dwork. */
 	spinlock_t lock;
-	int no_data_count;
-	int scan_ms;
-
 	int irq;
-	/* driver using polling mode if failed to request irq. */
-	bool polling_mode_enabled;
+
 	struct cyapa_platform_data *pdata;
 	unsigned short data_base_offset;
 	unsigned short control_base_offset;
@@ -432,9 +422,7 @@ static void cyapa_enable_irq(struct cyapa *cyapa)
 	unsigned long flags;
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-	if (!cyapa->polling_mode_enabled &&
-		cyapa->bl_irq_enable &&
-		!cyapa->irq_enabled) {
+	if (cyapa->bl_irq_enable && !cyapa->irq_enabled) {
 		cyapa->irq_enabled = true;
 		enable_irq(cyapa->irq);
 	}
@@ -446,9 +434,7 @@ static void cyapa_disable_irq(struct cyapa *cyapa)
 	unsigned long flags;
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-	if (!cyapa->polling_mode_enabled &&
-		cyapa->bl_irq_enable &&
-		cyapa->irq_enabled) {
+	if (cyapa->bl_irq_enable && cyapa->irq_enabled) {
 		cyapa->irq_enabled = false;
 		disable_irq(cyapa->irq);
 	}
@@ -460,16 +446,11 @@ static void cyapa_bl_enable_irq(struct cyapa *cyapa)
 	unsigned long flags;
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-	if (cyapa->polling_mode_enabled)
-		goto out;
-
 	cyapa->bl_irq_enable = true;
 	if (!cyapa->irq_enabled) {
 		cyapa->irq_enabled = true;
 		enable_irq(cyapa->irq);
 	}
-
-out:
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 }
 
@@ -478,16 +459,11 @@ static void cyapa_bl_disable_irq(struct cyapa *cyapa)
 	unsigned long flags;
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-	if (cyapa->polling_mode_enabled)
-		goto out;
-
 	cyapa->bl_irq_enable = false;
 	if (cyapa->irq_enabled) {
 		cyapa->irq_enabled = false;
 		disable_irq(cyapa->irq);
 	}
-
-out:
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 }
 
@@ -1779,27 +1755,8 @@ static bool cyapa_get_input(struct cyapa *cyapa)
 /* Control driver polling read rate and work handler sleep time */
 static unsigned long cyapa_adjust_delay(struct cyapa *cyapa, bool have_data)
 {
-	unsigned long delay, nodata_count_thres;
-
-	if (!cyapa->polling_mode_enabled) {
-		delay = msecs_to_jiffies(CYAPA_THREAD_IRQ_SLEEP_MSECS);
-		return round_jiffies_relative(delay);
-	}
-
-	if (cyapa->scan_ms <= 0)
-		cyapa->scan_ms = CYAPA_POLLING_REPORTRATE_DEFAULT;
-	delay = cyapa->pdata->polling_interval_time_active;
-	if (have_data) {
-		cyapa->no_data_count = 0;
-	} else {
-		nodata_count_thres =
-			CYAPA_NO_DATA_THRES / cyapa->scan_ms;
-		if (cyapa->no_data_count < nodata_count_thres)
-			cyapa->no_data_count++;
-		else
-			delay = CYAPA_NO_DATA_SLEEP_MSECS;
-	}
-	return msecs_to_jiffies(delay);
+	unsigned long delay = msecs_to_jiffies(CYAPA_THREAD_IRQ_SLEEP_MSECS);
+	return round_jiffies_relative(delay);
 }
 
 /* Work Handler */
@@ -1838,8 +1795,6 @@ static void cyapa_work_handler(struct work_struct *work)
 		 * we try to reset and reconfigure the trackpad.
 		 */
 		delay = cyapa_adjust_delay(cyapa, have_data);
-		if (cyapa->polling_mode_enabled)
-			cyapa_reschedule_work(cyapa, delay);
 	}
 
 	return;
@@ -1861,7 +1816,7 @@ static void cyapa_reschedule_work(struct cyapa *cyapa, unsigned long delay)
 	 * when switching from operational mode
 	 * to bootloader mode.
 	 */
-	if (cyapa->polling_mode_enabled || cyapa->bl_irq_enable)
+	if (cyapa->bl_irq_enable)
 		schedule_delayed_work(&cyapa->dwork, delay);
 
 	spin_unlock_irqrestore(&cyapa->lock, flags);
@@ -1878,19 +1833,6 @@ static irqreturn_t cyapa_irq(int irq, void *dev_id)
 
 static int cyapa_open(struct input_dev *input)
 {
-	struct cyapa *cyapa = input_get_drvdata(input);
-
-	if (cyapa->polling_mode_enabled) {
-		/*
-		 * In polling mode, by default, initialize the polling interval
-		 * to CYAPA_NO_DATA_SLEEP_MSECS,
-		 * Once data is read, the polling rate will be automatically
-		 * increased.
-		 */
-		cyapa_reschedule_work(cyapa,
-			msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
-	}
-
 	return 0;
 }
 
@@ -1911,10 +1853,7 @@ static struct cyapa *cyapa_create(struct i2c_client *client)
 
 	cyapa->pdata = (struct cyapa_platform_data *)client->dev.platform_data;
 
-	cyapa->scan_ms = cyapa->pdata->report_rate ?
-		(1000 / cyapa->pdata->report_rate) : 0;
 	cyapa->client = client;
-	cyapa->polling_mode_enabled = false;
 	global_cyapa = cyapa;
 	cyapa->fw_work_mode = CYAPA_BOOTLOAD_MODE;
 	cyapa->misc_open_count = 0;
@@ -2119,22 +2058,15 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 			CYAPA_I2C_NAME,
 			cyapa);
 	if (ret) {
-		pr_warning("IRQ request failed: %d, "
-			"falling back to polling mode.\n", ret);
-
-		spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-		cyapa->polling_mode_enabled = true;
-		cyapa->bl_irq_enable = false;
-		cyapa->irq_enabled = false;
-		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
-	} else {
-		spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-		cyapa->polling_mode_enabled = false;
-		cyapa->bl_irq_enable = false;
-		cyapa->irq_enabled = true;
-		enable_irq_wake(cyapa->irq);
-		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
+		pr_err("IRQ request failed: %d\n, ", ret);
+		goto out_probe_err;
 	}
+
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	cyapa->bl_irq_enable = false;
+	cyapa->irq_enabled = true;
+	enable_irq_wake(cyapa->irq);
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/*
 	 * reconfig trackpad depending on platform setting.
@@ -2228,9 +2160,6 @@ static void cyapa_resume_detect_work_handler(struct work_struct *work)
 		cyapa->bl_irq_enable = true;
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
-	cyapa_reschedule_work(cyapa,
-		msecs_to_jiffies(CYAPA_NO_DATA_SLEEP_MSECS));
-
 out_resume_err:
 	/* trackpad device resumed from sleep state successfully. */
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
@@ -2278,7 +2207,8 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 
 	cyapa->detect_wq = create_singlethread_workqueue("cyapa_detect_wq");
 	if (!cyapa->detect_wq) {
-		pr_err("cyapa: trackpad detect workqueue creation failed.\n");
+		ret = -ENOMEM;
+		pr_err("cyapa: failed to create trackpad detect workqueue.\n");
 		goto err_mem_free;
 	}
 
@@ -2307,10 +2237,8 @@ static int __devexit cyapa_remove(struct i2c_client *client)
 
 	cancel_delayed_work_sync(&cyapa->dwork);
 
-	if (!cyapa->polling_mode_enabled) {
-		disable_irq_wake(cyapa->irq);
-		free_irq(cyapa->irq, cyapa);
-	}
+	disable_irq_wake(cyapa->irq);
+	free_irq(cyapa->irq, cyapa);
 
 	if (cyapa->input) {
 		if (cyapa->input->mt)
