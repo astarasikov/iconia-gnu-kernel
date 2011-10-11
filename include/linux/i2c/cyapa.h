@@ -21,18 +21,6 @@
 #define CYAPA_I2C_NAME  "cyapa"
 #define CYAPA_MISC_NAME  "cyapa"
 
-/* Active power state scanning/processing refresh interval time. unit: ms. */
-#define CYAPA_POLLING_INTERVAL_TIME_ACTIVE  0x00
-/* Low power state scanning/processing refresh interval time. unit: ms. */
-#define CYAPA_POLLING_INTERVAL_TIME_LOWPOWER 0x10
-/* Touch timeout for active power state. unit: ms. */
-#define CYAPA_ACTIVE_TOUCH_TIMEOUT  0xFF
-
-/* Max report rate limited for Cypress Trackpad. */
-#define CYAPA_NO_LIMITED_REPORT_RATE  0
-#define CYAPA_REPORT_RATE  (CYAPA_NO_LIMITED_REPORT_RATE)
-#define CYAPA_POLLING_REPORTRATE_DEFAULT 60
-
 /* trackpad device */
 enum cyapa_work_mode {
 	CYAPA_STREAM_MODE = 0x00,
@@ -49,13 +37,8 @@ enum cyapa_gen {
 struct cyapa_platform_data {
 	enum cyapa_gen gen;  /* trackpad firmware generation. */
 
-	/* active mode, polling refresh interval; ms */
-	__u8 polling_interval_time_active;
-	/* low power mode, polling refresh interval; ms */
-	__u8 polling_interval_time_lowpower;
 	/* the gpio id used for interrupt to notify host data is ready. */
 	__s16 irq_gpio;
-	__u32 report_rate;  /* max limitation of data report rate. */
 };
 
 
