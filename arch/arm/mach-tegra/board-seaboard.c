@@ -1402,11 +1402,22 @@ void __init tegra_common_reserve(void)
 		pr_warn("Cannot reserve first 4K of memory for safety\n");
 
 	/*
-	 * reserve 128MB for carveout, 1368*910*4*2 (=9959040) for fb_size,
+	 * reserve 256MB for carveout, 1368*910*4*2 (=9959040) for fb_size,
 	 * and 0 for fb2_size.
 	 */
 	fb_size = round_up((1368 * 910 * 4 * 2), PAGE_SIZE);
-	tegra_reserve(256 * 1024 * 1024, fb_size, 0);
+
+	if (machine_is_asymptote()) {
+		/*
+		 * This is a temporary hack for Asymptote only. Asymptotes will
+		 * not boot with 256MB carveout and without new firmware, so
+		 * in the meantime, only carve out 128MB. Once all of the
+		 * Asymptotes have been flashed, this will be removed.
+		 */
+		tegra_reserve(SZ_128M, fb_size, 0);
+	} else {
+		tegra_reserve(SZ_256M, fb_size, 0);
+	}
 }
 
 static const char *seaboard_dt_board_compat[] = {
