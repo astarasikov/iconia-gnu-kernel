@@ -63,10 +63,6 @@
  */
 #define MAX_MT_SLOTS  (2 * MAX_FINGERS)
 
-/* Read the device every THREAD_IRQ_SLEEP_SECS, even if no irqs. */
-#define CYAPA_THREAD_IRQ_SLEEP_SECS	2
-#define CYAPA_THREAD_IRQ_SLEEP_MSECS (CYAPA_THREAD_IRQ_SLEEP_SECS * MSEC_PER_SEC)
-
 /* report data start reg offset address. */
 #define DATA_REG_START_OFFSET  0x0000
 
@@ -1752,20 +1748,11 @@ static bool cyapa_get_input(struct cyapa *cyapa)
 	return cyapa_handle_input_report_data(cyapa, &report_data);
 }
 
-/* Control driver polling read rate and work handler sleep time */
-static unsigned long cyapa_adjust_delay(struct cyapa *cyapa, bool have_data)
-{
-	unsigned long delay = msecs_to_jiffies(CYAPA_THREAD_IRQ_SLEEP_MSECS);
-	return round_jiffies_relative(delay);
-}
-
 /* Work Handler */
 static void cyapa_work_handler(struct work_struct *work)
 {
-	bool have_data;
 	struct cyapa *cyapa =
 		container_of(work, struct cyapa, dwork.work);
-	unsigned long delay;
 	unsigned long flags;
 
 	/*
@@ -1784,17 +1771,7 @@ static void cyapa_work_handler(struct work_struct *work)
 	} else {
 		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
-		have_data = cyapa_get_input(cyapa);
-		/*
-		 * While interrupt driven, there is no real need to poll the
-		 * device. But trackpads are very sensitive, so there could be
-		 * errors related to physical environment and the attention
-		 * line isn't necessarily asserted. In such case we can lose
-		 * the trackpad. We poll the device once in
-		 * CYAPA_THREAD_IRQ_SLEEP_SECS and if error is detected,
-		 * we try to reset and reconfigure the trackpad.
-		 */
-		delay = cyapa_adjust_delay(cyapa, have_data);
+		cyapa_get_input(cyapa);
 	}
 
 	return;
