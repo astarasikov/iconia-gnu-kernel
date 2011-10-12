@@ -94,12 +94,9 @@ config DRM_I915
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
-	# i915 depends on ACPI_VIDEO when ACPI is enabled
-	# but for select to work, need to select ACPI_VIDEO's dependencies, ick
 	select BACKLIGHT_CLASS_DEVICE if ACPI
 	select VIDEO_OUTPUT_CONTROL if ACPI
 	select INPUT if ACPI
-	select ACPI_VIDEO if ACPI
 	select ACPI_BUTTON if ACPI
 	help
 	  Choose this option if you have a system that has "Intel Graphics
