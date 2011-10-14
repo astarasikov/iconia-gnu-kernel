@@ -140,7 +140,7 @@ static struct tegra_camera_platform_data tegra_camera_platform_data = {
 	.enable_camera		= tegra_camera_enable,
 	.disable_camera		= tegra_camera_disable,
 	.flip_v			= 0,
-	.flip_h			= 0,
+	.flip_h			= 1,
 };
 
 int __init kaen_sensors_init(void)
