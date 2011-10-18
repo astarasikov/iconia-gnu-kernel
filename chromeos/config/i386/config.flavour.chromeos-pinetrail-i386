@@ -4,6 +4,7 @@
 # CONFIG_8139CP is not set
 # CONFIG_8139TOO is not set
 # CONFIG_ACPI_VIDEO is not set
+CONFIG_ACPI_WMI=m
 # CONFIG_AMD8111_ETH is not set
 # CONFIG_ATL1 is not set
 # CONFIG_ATL1C is not set
