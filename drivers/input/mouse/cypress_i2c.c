@@ -1,8 +1,13 @@
 /*
  * Cypress APA trackpad with I2C interface
  *
- * Copyright (C) 2009 Compulab, Ltd.
- * Dudley Du <dudl@cypress.com>
+ * Author: Dudley Du <dudl@cypress.com>
+ *
+ * Copyright (C) 2011 Cypress Semiconductor, Inc.
+ * Copyright (C) 2011 Google, Inc.
+ *
+ * Based on synaptics_i2c driver:
+ *   Copyright (C) 2009 Compulab, Ltd.
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive for
