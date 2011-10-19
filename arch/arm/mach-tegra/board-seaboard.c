@@ -21,6 +21,7 @@
 #include <linux/i2c.h>
 #include <linux/i2c-tegra.h>
 #include <linux/i2c/atmel_mxt_ts.h>
+#include <linux/i2c/cyapa.h>
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/io.h>
@@ -30,7 +31,6 @@
 #include <linux/platform_data/tegra_usb.h>
 #include <linux/nct1008.h>
 #include <linux/power/bq20z75.h>
-#include <linux/cyapa.h>
 #include <linux/rfkill-gpio.h>
 #include <linux/leds.h>
 #include <linux/leds_pwm.h>
