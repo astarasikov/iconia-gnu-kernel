@@ -26,10 +26,10 @@
 #include <linux/gpio_keys.h>
 #include <linux/i2c-tegra.h>
 #include <linux/i2c/atmel_mxt_ts.h>
+#include <linux/i2c/cyapa.h>
 #include <linux/clk.h>
 #include <linux/power/bq20z75.h>
 #include <linux/rfkill-gpio.h>
-#include <linux/cyapa.h>
 #include <linux/platform_data/tegra_usb.h>
 #include <linux/memblock.h>
 

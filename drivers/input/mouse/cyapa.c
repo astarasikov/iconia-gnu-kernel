@@ -19,6 +19,7 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/i2c.h>
+#include <linux/i2c/cyapa.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/input.h>
@@ -32,8 +33,6 @@
 #include <linux/miscdevice.h>
 #include <linux/fs.h>
 #include <linux/input/mt.h>
-
-#include <linux/cyapa.h>
 
 
 /* DEBUG: debug switch macro */

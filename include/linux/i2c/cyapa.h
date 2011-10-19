@@ -1,5 +1,19 @@
-#ifndef _CYAPA_H
-#define _CYAPA_H
+/*
+ * Cypress APA I2C Touchpad Driver
+ *
+ * Author: Dudley Du <dudl@cypress.com>
+ *
+ * Copyright (C) 2011 Cypress Semiconductor, Inc.
+ * Copyright (C) 2011 Google, Inc.
+ *
+ * This program is free software; you can redistribute  it and/or modify it
+ * under  the terms of  the GNU General  Public License as published by the
+ * Free Software Foundation;  either version 2 of the  License, or (at your
+ * option) any later version.
+ */
+
+#ifndef __LINUX_I2C_CYAPA_H
+#define __LINUX_I2C_CYAPA_H
 
 #include <linux/types.h>
 #include <linux/ioctl.h>
@@ -143,4 +157,4 @@ struct cyapa_trackpad_run_mode {
 #define CYAPA_GET_TRACKPAD_RUN_MODE CYAPA_IOC_R(0x40, 2)
 #define CYAYA_SEND_MODE_SWITCH_CMD CYAPA_IOC(0x50)
 
-#endif  /* #ifndef _CYAPA_H */
+#endif  /* __LINUX_I2C_CYAPA_H */
