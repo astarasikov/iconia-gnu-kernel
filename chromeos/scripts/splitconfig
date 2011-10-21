@@ -9,7 +9,13 @@ allconfigs = {}
 # Parse config files
 for config in os.listdir("."):
     # Only config.*
-    if not config.endswith(".config"):
+    if not config.startswith("config."):
+        continue
+    # Ignore emacs backups
+    if config.endswith("~"):
+        continue
+    # Nothing that is disabled, or remnant
+    if re.search("\.(default|disabled|stub)$", config):
         continue
 
     allconfigs[config] = set()
@@ -27,7 +33,7 @@ for config in allconfigs.keys():
     common &= allconfigs[config]
 for config in allconfigs.keys():
     allconfigs[config] -= common
-allconfigs["common.config"] = common
+allconfigs["config.common"] = common
 
 # Generate new splitconfigs
 for config in allconfigs.keys():

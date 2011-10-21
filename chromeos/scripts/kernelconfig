@@ -20,8 +20,9 @@ esac
 kerneldir="`pwd`"
 confdir="$kerneldir/chromeos/config"
 archs="x86_64 i386 armel"
+family='chromeos'
 bindir="`pwd`/chromeos/scripts"
-base_conf="$confdir/base.config"
+common_conf="$confdir/config.common.$family"
 tmpdir=`mktemp -d`
 
 if [ "$mode" = "genconfig" ]; then
@@ -46,38 +47,52 @@ for arch in $archs; do
 	echo "***************************************"
 	echo "* Processing $arch ($kernarch) ... "
 	archconfdir=$confdir/$arch
-	flavourconfigs=$(cd $archconfdir && ls *.flavour.config)
+	flavourconfigs=$(cd $archconfdir && ls config.flavour.*[^~])
 
 	# Merge configs
-	# We merge base.config + common.config + <flavour>.flavour.config
+	# We merge config.common.ubuntu + config.common.<arch> +
+	# config.flavour.<flavour>
 
 	for config in $flavourconfigs; do
 		fullconf="$tmpdir/$arch-$config-full"
-		cp $base_conf "$fullconf"
-		cat $archconfdir/common.config >> "$fullconf"
-		cat $archconfdir/$config >> "$fullconf"
+		case $config in
+		*)
+			: >"$fullconf"
+			if [ -f $common_conf ]; then
+				cat $common_conf >> "$fullconf"
+			fi
+			if [ -f $archconfdir/config.common.$arch ]; then
+				cat $archconfdir/config.common.$arch >> "$fullconf"
+			fi
+			cat "$archconfdir/$config" >>"$fullconf"
+			;;
+		esac
 	done
 
 	for config in $flavourconfigs; do
-		fullconf="$tmpdir/$arch-$config-full"
-		mv "$fullconf" build/.config
-		# Call oldconfig or menuconfig
-		case "$mode" in
-		    oldconfig)
-			# Weed out incorrect config parameters
-			echo "* Run silentoldconfig on $arch/$config ..."
-			make O=`pwd`/build ARCH=$kernarch silentoldconfig ;;
-		    editconfig)
-			# Interactively edit config parameters
-			echo "* Run menuconfig on $arch/$config... Press a key."
-			read
-			make O=`pwd`/build ARCH=$kernarch menuconfig ;;
-		    *)  # Bad!
-			exit 1 ;;
-		esac
-		cat build/.config > $archconfdir/$config
-		if [ "$keep" = "1" ]; then
-			mv build/.config CONFIGS/$arch-$config
+		if [ -f $archconfdir/$config ]; then
+			fullconf="$tmpdir/$arch-$config-full"
+			cat "$fullconf" > build/.config
+			# Call oldconfig or menuconfig
+			case "$mode" in
+			    oldconfig)
+				# Weed out incorrect config parameters
+				echo "* Run silentoldconfig on $arch/$config ..."
+				make O=`pwd`/build ARCH=$kernarch silentoldconfig ;;
+			    editconfig)
+				# Interactively edit config parameters
+				echo " * Run menuconfig on $arch/$config... Press a key."
+				read
+				make O=`pwd`/build ARCH=$kernarch menuconfig ;;
+			    *)  # Bad!
+				exit 1 ;;
+			esac
+			cat build/.config > $archconfdir/$config
+			if [ "$keep" = "1" ]; then
+				cat build/.config > CONFIGS/$arch-$config
+			fi
+		else
+			echo "!! Config not found $archconfdir/$config..."
 		fi
 	done
 
@@ -87,16 +102,22 @@ for arch in $archs; do
 	# Can we make this more robust by avoiding $tmpdir completely?
 	# This approach was used for now because I didn't want to change
 	# splitconfig
-	(cd $archconfdir; rm common.config; $bindir/splitconfig; \
-	    mv common.config $tmpdir/$arch.config)
+	(cd $archconfdir; rm config.common.$arch; $bindir/splitconfig; \
+	    mv config.common config.common.$arch; \
+	    cp config.common.$arch $tmpdir)
 done
 
-# Now run splitconfig on all the <arch>.common.config copied to
+rm -f $common_conf
+
+# Now run splitconfig on all the config.common.<arch> copied to
 # $tmpdir
 (cd $tmpdir; $bindir/splitconfig)
-mv $tmpdir/common.config $base_conf
-for arch in $archs; do
-	mv $tmpdir/$arch.config $confdir/$arch/common.config
-done
-
-rm -rf $tmpdir
+(
+	cd $confdir;
+	rm -f *-full
+	grep -v 'is UNMERGABLE' <$tmpdir/config.common >$common_conf
+	for arch in $archs; do
+		grep -v 'is UNMERGABLE' <$tmpdir/config.common.$arch \
+			>$arch/config.common.$arch
+	done
+)
