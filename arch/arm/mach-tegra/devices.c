@@ -615,6 +615,31 @@ struct platform_device tegra_das_device = {
 	.resource	= tegra_das_resources,
 };
 
+static struct resource spdif_resource[] = {
+	[0] = {
+		.start	= INT_SPDIF,
+		.end	= INT_SPDIF,
+		.flags	= IORESOURCE_IRQ
+	},
+	[1] = {
+		.start	= TEGRA_DMA_REQ_SEL_SPD_I,
+		.end	= TEGRA_DMA_REQ_SEL_SPD_I,
+		.flags	= IORESOURCE_DMA
+	},
+	[2] = {
+		.start	= TEGRA_SPDIF_BASE,
+		.end	= TEGRA_SPDIF_BASE + TEGRA_SPDIF_SIZE - 1,
+		.flags	= IORESOURCE_MEM
+	}
+};
+
+struct platform_device tegra_spdif_device = {
+	.name		= "tegra-spdif",
+	.id		= -1,
+	.resource	= spdif_resource,
+	.num_resources	= ARRAY_SIZE(spdif_resource),
+};
+
 struct platform_device tegra_pcm_device = {
 	.name = "tegra-pcm-audio",
 	.id = -1,
