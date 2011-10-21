@@ -191,6 +191,7 @@ static const struct snd_soc_dapm_widget tegra_wm8903_dapm_widgets[] = {
 	SND_SOC_DAPM_SPK("Int Spk", tegra_wm8903_event_int_spk),
 	SND_SOC_DAPM_HP("Headphone Jack", tegra_wm8903_event_hp),
 	SND_SOC_DAPM_MIC("Mic Jack", NULL),
+	SND_SOC_DAPM_MIC("Digital Mic", NULL),
 };
 
 static const struct snd_soc_dapm_route harmony_audio_map[] = {
@@ -213,6 +214,7 @@ static const struct snd_soc_dapm_route seaboard_audio_map[] = {
 	{"Int Spk", NULL, "LON"},
 	{"Mic Bias", NULL, "Mic Jack"},
 	{"IN1R", NULL, "Mic Bias"},
+	{"DMICDAT", NULL, "Digital Mic"},
 };
 
 static const struct snd_soc_dapm_route kaen_audio_map[] = {
@@ -224,6 +226,7 @@ static const struct snd_soc_dapm_route kaen_audio_map[] = {
 	{"Int Spk", NULL, "LON"},
 	{"Mic Bias", NULL, "Mic Jack"},
 	{"IN2R", NULL, "Mic Bias"},
+	{"DMICDAT", NULL, "Digital Mic"},
 };
 
 static const struct snd_soc_dapm_route aebl_audio_map[] = {
@@ -233,6 +236,7 @@ static const struct snd_soc_dapm_route aebl_audio_map[] = {
 	{"Int Spk", NULL, "LINEOUTL"},
 	{"Mic Bias", NULL, "Mic Jack"},
 	{"IN1R", NULL, "Mic Bias"},
+	{"DMICDAT", NULL, "Digital Mic"},
 };
 
 static const struct snd_kcontrol_new tegra_wm8903_controls[] = {
