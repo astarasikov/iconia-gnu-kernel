@@ -43,8 +43,27 @@
  */
 #define CYAPA_MAX_MT_SLOTS  (2 * CYAPA_MAX_TOUCHES)
 
+/* commands for read/write registers of Cypress trackpad */
+#define CYAPA_CMD_SOFT_RESET       0x00
+#define CYAPA_CMD_IO_SYNC          0x01
+#define CYAPA_CMD_DEV_STATUS       0x02
+#define CYAPA_CMD_GROUP_DATA       0x03
+#define CYAPA_CMD_GROUP_CTRL       0x04
+#define CYAPA_CMD_GROUP_CMD        0x05
+#define CYAPA_CMD_GROUP_QUERY      0x06
+#define CYAPA_CMD_BL_STATUS        0x07
+#define CYAPA_CMD_BL_HEAD          0x08
+#define CYAPA_CMD_BL_CMD           0x09
+#define CYAPA_CMD_BL_DATA          0x0A
+#define CYAPA_CMD_BL_ALL           0x0B
+#define CYAPA_CMD_BLK_PRODUCT_ID   0x0C
+#define CYAPA_CMD_BLK_HEAD         0x0D
+
 /* report data start reg offset address. */
 #define DATA_REG_START_OFFSET  0x0000
+
+#define BL_HEAD_CMD_STATUS_OFFSET 0x00
+#define BL_DATA_OFFSET 0x10
 
 /*
  * bit 7: Valid interrupt source
@@ -263,6 +282,27 @@ static int cyapa_determine_firmware_gen3(struct cyapa *cyapa);
 static int cyapa_create_input_dev(struct cyapa *cyapa);
 static void cyapa_reschedule_work(struct cyapa *cyapa, unsigned long delay);
 
+struct cyapa_cmd_len {
+	unsigned char cmd;
+	unsigned char len;
+};
+
+static const struct cyapa_cmd_len cyapa_i2c_cmds[] = {
+	{CYAPA_OFFSET_SOFT_RESET, 1},
+	{REG_OFFSET_COMMAND_BASE + 1, 1},
+	{REG_OFFSET_DATA_BASE, 1},
+	{REG_OFFSET_DATA_BASE, sizeof(struct cyapa_reg_data)},
+	{REG_OFFSET_CONTROL_BASE, 0},
+	{REG_OFFSET_COMMAND_BASE, 0},
+	{REG_OFFSET_QUERY_BASE, QUERY_DATA_SIZE},
+	{BL_HEAD_CMD_STATUS_OFFSET, 3},
+	{BL_HEAD_CMD_STATUS_OFFSET, 16},
+	{BL_HEAD_CMD_STATUS_OFFSET, 16},
+	{BL_DATA_OFFSET, 16},
+	{BL_HEAD_CMD_STATUS_OFFSET, 32},
+	{REG_OFFSET_QUERY_BASE, PRODUCT_ID_SIZE},
+	{REG_OFFSET_DATA_BASE, 32}
+};
 
 #define BYTE_PER_LINE  8
 void cyapa_dump_data(struct cyapa *cyapa, size_t length, const u8 *data)
@@ -949,6 +989,7 @@ static const struct attribute_group cyapa_sysfs_group = {
  * Cypress i2c trackpad input device driver.
  **************************************************************
 */
+
 static int cyapa_get_query_data(struct cyapa *cyapa)
 {
 	unsigned long flags;
