@@ -43,7 +43,7 @@ struct cyapa_platform_data {
 
 
 /*
- * Data structures for /dev/cyapa device ioclt read/write.
+ * Data structures for /dev/cyapa device ioctl read/write.
  */
 struct cyapa_misc_ioctl_data {
 	__u8 *buf;  /* pointer to a buffer for read/write data. */

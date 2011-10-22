@@ -15,24 +15,22 @@
  */
 
 
-#include <linux/module.h>
-#include <linux/init.h>
-#include <linux/kernel.h>
+#include <linux/delay.h>
+#include <linux/gpio.h>
 #include <linux/i2c.h>
 #include <linux/i2c/cyapa.h>
-#include <linux/irq.h>
-#include <linux/interrupt.h>
 #include <linux/input.h>
-#include <linux/delay.h>
-#include <linux/workqueue.h>
-#include <linux/slab.h>
-#include <linux/gpio.h>
-#include <linux/spinlock.h>
-#include <linux/mutex.h>
-#include <linux/uaccess.h>
-#include <linux/miscdevice.h>
-#include <linux/fs.h>
 #include <linux/input/mt.h>
+#include <linux/interrupt.h>
+#include <linux/irq.h>
+#include <linux/miscdevice.h>
+#include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/semaphore.h>
+#include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/uaccess.h>
+#include <linux/workqueue.h>
 
 
 /* DEBUG: debug switch macro */
@@ -50,9 +48,9 @@
 #define CYAPA_MT_MAX_TOUCH  255
 #define CYAPA_MT_MAX_WIDTH  255
 
-#define MAX_FINGERS	5
-#define CYAPA_TOOL_WIDTH 50
-#define CYAPA_DEFAULT_TOUCH_PRESSURE 50
+#define CYAPA_MAX_TOUCHES  5
+#define CYAPA_TOOL_WIDTH   50
+#define CYAPA_DEFAULT_TOUCH_PRESSURE  50
 #define CYAPA_MT_TOUCH_MAJOR  50
 /*
  * In the special case, where a finger is removed and makes contact
@@ -61,7 +59,7 @@
  * Thus, the maximum number of slots must be twice the maximum number
  * of fingers.
  */
-#define MAX_MT_SLOTS  (2 * MAX_FINGERS)
+#define CYAPA_MAX_MT_SLOTS  (2 * CYAPA_MAX_TOUCHES)
 
 /* report data start reg offset address. */
 #define DATA_REG_START_OFFSET  0x0000
@@ -95,7 +93,7 @@
 /*
  * bit 7: Busy
  * bit 6 - 5: Reserved
- * bit 4: Booloader running
+ * bit 4: Bootloader running
  * bit 3 - 1: Reserved
  * bit 0: Checksum valid
  */
@@ -183,7 +181,6 @@ enum cyapa_devicestate {
 	 */
 };
 
-#define CYAPA_MAX_TOUCHES (MAX_FINGERS)
 #define CYAPA_ONE_TIME_GESTURES  (1)
 struct cyapa_touch_gen2 {
 	u8 xy;
@@ -314,7 +311,7 @@ struct cyapa {
 	unsigned short command_base_offset;
 	unsigned short query_base_offset;
 
-	struct cyapa_mt_slot mt_slots[MAX_MT_SLOTS];
+	struct cyapa_mt_slot mt_slots[CYAPA_MAX_MT_SLOTS];
 
 	/* read from query data region. */
 	char product_id[16];
@@ -329,12 +326,12 @@ struct cyapa {
 	int physical_size_y;
 };
 
-static u8 bl_switch_active[] = { 0x00, 0xFF, 0x38, 0x00, 0x01, 0x02, 0x03,
+static const u8 bl_switch_active[] = { 0x00, 0xFF, 0x38, 0x00, 0x01, 0x02,
+		0x03, 0x04, 0x05, 0x06, 0x07 };
+static const u8 bl_switch_idle[] = { 0x00, 0xFF, 0x3B, 0x00, 0x01, 0x02, 0x03,
 		0x04, 0x05, 0x06, 0x07 };
-static u8 bl_switch_idle[] = { 0x00, 0xFF, 0x3B, 0x00, 0x01, 0x02, 0x03, 0x04,
-		0x05, 0x06, 0x07 };
-static u8 bl_app_launch[] = { 0x00, 0xFF, 0xA5, 0x00, 0x01, 0x02, 0x03, 0x04,
-		0x05, 0x06, 0x07 };
+static const u8 bl_app_launch[] = { 0x00, 0xFF, 0xA5, 0x00, 0x01, 0x02, 0x03,
+		0x04, 0x05, 0x06, 0x07 };
 
 /* global pointer to trackpad touch data structure. */
 static struct cyapa *global_cyapa;
@@ -1225,7 +1222,7 @@ static struct attribute *cyapa_sysfs_entries[] = {
 	NULL,
 };
 
-static struct attribute_group cyapa_sysfs_group = {
+static const struct attribute_group cyapa_sysfs_group = {
 	.attrs = cyapa_sysfs_entries,
 };
 
@@ -1362,7 +1359,7 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
 	if (cyapa->fw_work_mode != CYAPA_STREAM_MODE) {
-		/* firmware works in bootloader mode. */
+		/* firmware is in bootloader mode. */
 		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return -EBUSY;
 	}
@@ -1407,24 +1404,24 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 			cyapa->capability[i] = query_data[19+i];
 
 		cyapa->max_abs_x =
-			(((query_data[32] & 0xF0) << 4) | query_data[33]);
+			((query_data[32] & 0xF0) << 4) | query_data[33];
 		cyapa->max_abs_y =
-			(((query_data[32] & 0x0F) << 8) | query_data[34]);
+			((query_data[32] & 0x0F) << 8) | query_data[34];
 
 		cyapa->physical_size_x =
-			(((query_data[35] & 0xF0) << 4) | query_data[36]);
+			((query_data[35] & 0xF0) << 4) | query_data[36];
 		cyapa->physical_size_y =
-			(((query_data[35] & 0x0F) << 8) | query_data[37]);
+			((query_data[35] & 0x0F) << 8) | query_data[37];
 	} else {
 		cyapa->max_abs_x =
-			(((query_data[21] & 0xF0) << 4) | query_data[22]);
+			((query_data[21] & 0xF0) << 4) | query_data[22];
 		cyapa->max_abs_y =
-			(((query_data[21] & 0x0F) << 8) | query_data[23]);
+			((query_data[21] & 0x0F) << 8) | query_data[23];
 
 		cyapa->physical_size_x =
-			(((query_data[24] & 0xF0) << 4) | query_data[25]);
+			((query_data[24] & 0xF0) << 4) | query_data[25];
 		cyapa->physical_size_y =
-			(((query_data[24] & 0x0F) << 8) | query_data[26]);
+			((query_data[24] & 0x0F) << 8) | query_data[26];
 	}
 
 	return 0;
@@ -1437,7 +1434,7 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
 	if (cyapa->fw_work_mode != CYAPA_STREAM_MODE) {
-		/* firmware works in bootloader mode. */
+		/* firmware is in bootloader mode. */
 		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return -EINVAL;
 	}
@@ -1594,7 +1591,7 @@ static int cyapa_find_mt_slot(struct cyapa *cyapa, struct cyapa_touch *contact)
 	int i;
 	int empty_slot = -1;
 
-	for (i = 0; i < MAX_MT_SLOTS; i++) {
+	for (i = 0; i < CYAPA_MAX_MT_SLOTS; i++) {
 		if ((cyapa->mt_slots[i].contact.tracking_id == contact->tracking_id) &&
 			cyapa->mt_slots[i].touch_state)
 			return i;
@@ -1634,17 +1631,21 @@ static void cyapa_send_mtb_event(struct cyapa *cyapa,
 
 	cyapa_update_mt_slots(cyapa, report_data);
 
-	for (i = 0; i < MAX_MT_SLOTS; i++) {
+	for (i = 0; i < CYAPA_MAX_MT_SLOTS; i++) {
 		slot = &cyapa->mt_slots[i];
 		if (!slot->slot_updated)
 			slot->touch_state = false;
 
 		input_mt_slot(input, i);
-		input_mt_report_slot_state(input, MT_TOOL_FINGER, slot->touch_state);
+		input_mt_report_slot_state(input, MT_TOOL_FINGER,
+					   slot->touch_state);
 		if (slot->touch_state) {
-			input_report_abs(input, ABS_MT_POSITION_X, slot->contact.x);
-			input_report_abs(input, ABS_MT_POSITION_Y, slot->contact.y);
-			input_report_abs(input, ABS_MT_PRESSURE, slot->contact.pressure);
+			input_report_abs(input, ABS_MT_POSITION_X,
+					 slot->contact.x);
+			input_report_abs(input, ABS_MT_POSITION_Y,
+					 slot->contact.y);
+			input_report_abs(input, ABS_MT_PRESSURE,
+					 slot->contact.pressure);
 		}
 		slot->slot_updated = false;
 	}
@@ -1733,10 +1734,10 @@ static bool cyapa_get_input(struct cyapa *cyapa)
 					read_length,
 					(u8 *)&reg_data);
 	if (ret_read_size < 0)
-		return 0;
+		return false;
 
 	if (cyapa_verify_data_device(cyapa, &reg_data) < 0)
-		return 0;
+		return false;
 
 	/* process and parse raw data read from Trackpad. */
 	if (cyapa->pdata->gen == CYAPA_GEN2)
@@ -1756,7 +1757,7 @@ static void cyapa_work_handler(struct work_struct *work)
 	unsigned long flags;
 
 	/*
-	 * use spinlock to avoid confict accessing
+	 * use spinlock to avoid conflict accessing
 	 * when firmware switching into bootloader mode.
 	 */
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
@@ -1773,8 +1774,6 @@ static void cyapa_work_handler(struct work_struct *work)
 
 		cyapa_get_input(cyapa);
 	}
-
-	return;
 }
 
 static void cyapa_reschedule_work(struct cyapa *cyapa, unsigned long delay)
@@ -1828,7 +1827,7 @@ static struct cyapa *cyapa_create(struct i2c_client *client)
 	if (!cyapa)
 		return NULL;
 
-	cyapa->pdata = (struct cyapa_platform_data *)client->dev.platform_data;
+	cyapa->pdata = client->dev.platform_data;
 
 	cyapa->client = client;
 	global_cyapa = cyapa;
@@ -1883,7 +1882,7 @@ static int cyapa_create_input_dev(struct cyapa *cyapa)
 	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, cyapa->max_abs_y, 0, 0);
 	input_set_abs_params(input, ABS_MT_PRESSURE, 0, 255, 0, 0);
 	if (cyapa->pdata->gen > CYAPA_GEN2) {
-		ret = input_mt_init_slots(input, MAX_MT_SLOTS);
+		ret = input_mt_init_slots(input, CYAPA_MAX_MT_SLOTS);
 		if (ret < 0)
 			return ret;
 
