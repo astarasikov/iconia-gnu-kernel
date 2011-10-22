@@ -270,8 +270,6 @@ struct cyapa_mt_slot {
 
 /* The main device structure */
 struct cyapa {
-	/* synchronize i2c bus operations. */
-	struct semaphore reg_io_sem;
 	/* synchronize accessing members of cyapa data structure. */
 	spinlock_t miscdev_spinlock;
 	/* synchronize accessing and updating file->f_pos. */
@@ -387,35 +385,6 @@ void cyapa_dump_report(struct cyapa *cyapa,
 	dev_dbg(dev, "-------------------------------------\n");
 }
 
-/*
- * When requested IRQ number is not available, the trackpad driver
- * falls back to using polling mode.
- * In this case, do not actually enable/disable irq.
- */
-static void cyapa_enable_irq(struct cyapa *cyapa)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-	if (cyapa->bl_irq_enable && !cyapa->irq_enabled) {
-		cyapa->irq_enabled = true;
-		enable_irq(cyapa->irq);
-	}
-	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
-}
-
-static void cyapa_disable_irq(struct cyapa *cyapa)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-	if (cyapa->bl_irq_enable && cyapa->irq_enabled) {
-		cyapa->irq_enabled = false;
-		disable_irq(cyapa->irq);
-	}
-	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
-}
-
 static void cyapa_bl_enable_irq(struct cyapa *cyapa)
 {
 	unsigned long flags;
@@ -442,36 +411,9 @@ static void cyapa_bl_disable_irq(struct cyapa *cyapa)
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 }
 
-static int cyapa_acquire_i2c_bus(struct cyapa *cyapa)
+static s32 cyapa_reg_read_byte(struct cyapa *cyapa, u8 reg)
 {
-	cyapa_disable_irq(cyapa);
-	if (down_interruptible(&cyapa->reg_io_sem)) {
-		cyapa_enable_irq(cyapa);
-		return -ERESTARTSYS;
-	}
-
-	return 0;
-}
-
-static void cyapa_release_i2c_bus(struct cyapa *cyapa)
-{
-	up(&cyapa->reg_io_sem);
-	cyapa_enable_irq(cyapa);
-}
-
-static s32 cyapa_reg_read_byte(struct cyapa *cyapa, u16 reg)
-{
-	int ret;
-
-	ret = cyapa_acquire_i2c_bus(cyapa);
-	if (ret < 0)
-		return ret;
-
-	ret = i2c_smbus_read_byte_data(cyapa->client, (u8)reg);
-
-	cyapa_release_i2c_bus(cyapa);
-
-	return ret;
+	return i2c_smbus_read_byte_data(cyapa->client, reg);
 }
 
 /*
@@ -482,124 +424,59 @@ static s32 cyapa_reg_read_byte(struct cyapa *cyapa, u16 reg)
  *
  * This function returns negative errno, else zero on success.
  */
-static s32 cyapa_reg_write_byte(struct cyapa *cyapa, u16 reg, u8 val)
+static s32 cyapa_reg_write_byte(struct cyapa *cyapa, u8 reg, u8 val)
 {
-	int ret;
-
-	ret = cyapa_acquire_i2c_bus(cyapa);
-	if (ret < 0)
-		return ret;
-
-	ret = i2c_smbus_write_byte_data(cyapa->client, (u8)reg, val);
-
-	cyapa_release_i2c_bus(cyapa);
-
-	return ret;
+	return i2c_smbus_write_byte_data(cyapa->client, reg, val);
 }
 
 /*
- * cyapa_reg_read_block - read a block data from trackpad
- *      i2c register map.
- * @cyapa - private data structure of the trackpad driver.
- * @reg - the offset value of the i2c register map from offset 0.
- * @length - length of the block to be read in bytes.
- * @values - pointer to the buffer that used to store register block
- *           valuse read.
+ * cyapa_reg_read_block - read a block of data from trackpad registers.
+ * @cyapa - private data structure of trackpad driver.
+ * @reg - register at which to start reading.
+ * @length - length of block to read, in bytes.
+ * @values - buffer to store values read from register block.
  *
- * Returns negative errno, else the number of bytes written.
+ * Returns negative errno, else number of bytes read.
  *
- * Note:
- * In trackpad device, the memory block allocated for I2C register map
- * is 256 bytes, so the max read block for I2C bus is 256 bytes.
+ * Note: The trackpad register block is 256 bytes.
  */
-static s32 cyapa_reg_read_block(struct cyapa *cyapa, u16 reg, int length,
-				u8 *values)
+static ssize_t cyapa_reg_read_block(struct cyapa *cyapa, u8 reg, size_t len,
+				    u8 *values)
 {
 	struct device *dev = &cyapa->client->dev;
-	int ret;
-	u8 buf[1];
+	ssize_t ret;
 
-	ret = cyapa_acquire_i2c_bus(cyapa);
-	if (ret < 0)
-		return ret;
-
-	/*
-	 * step1: set read pointer of easy I2C.
-	 */
-	buf[0] = (u8)reg;
-	ret = i2c_master_send(cyapa->client, buf, 1);
-	if (ret < 0)
-		goto error;
-
-	/* step2: read data. */
-	ret = i2c_master_recv(cyapa->client, values, length);
-	if (ret < 0) {
-		dev_err(dev, "i2c_master_recv error, %d\n", ret);
-		goto error;
+	ret = i2c_smbus_read_i2c_block_data(cyapa->client, reg, len, values);
+	if (ret > 0) {
+		dev_dbg(dev, "read block reg: 0x%02x length: %d\n", reg, len);
+		cyapa_dump_data(cyapa, ret, values);
 	}
 
-	if (ret != length)
-		dev_warn(dev, "I2C read [%d] bytes, but requested [%d].\n",
-			 ret, length);
-
-	dev_dbg(dev, "read block reg: 0x%02x length: %d\n", reg, length);
-	cyapa_dump_data(cyapa, ret, values);
-
-error:
-	cyapa_release_i2c_bus(cyapa);
-
 	return ret;
 }
 
 /*
- * cyapa_reg_write_block - write a block data to trackpad
- *      i2c register map.
- * @cyapa - private data structure of the trackpad driver.
- * @reg - the offset value of the i2c register map from offset 0.
- * @length - length of the block to be written in bytes.
- * @values - pointer to the block data buffur that will be written.
+ * cyapa_reg_write_block - write a block of data to trackpad registers.
+ * @cyapa - private data structure of trackpad driver.
+ * @reg - register at which to start writing.
+ * @length - length of block to write, in bytes.
+ * @values - buffer to write to register block.
  *
- * Returns negative errno, else the number of bytes written.
+ * Returns negative errno, else number of bytes written.
  *
- * Note:
- * In trackpad device, the memory block allocated for I2C register map
- * is 256 bytes, so the max write block for I2C bus is 256 bytes.
+ * Note: The trackpad register block is 256 bytes.
  */
-static s32 cyapa_reg_write_block(struct cyapa *cyapa, u16 reg, int length,
-				 const u8 *values)
+static ssize_t cyapa_reg_write_block(struct cyapa *cyapa, u8 reg,
+				     size_t len, const u8 *values)
 {
 	struct device *dev = &cyapa->client->dev;
-	int ret;
-	u8 buf[CYAPA_REG_MAP_SIZE + 1];
+	ssize_t ret;
 
-	dev_dbg(dev, "write block reg: 0x%02x length: %d\n", reg, length);
-	cyapa_dump_data(cyapa, length, values);
+	dev_dbg(dev, "write block reg: 0x%02x length: %d\n", reg, len);
+	cyapa_dump_data(cyapa, len, values);
 
-	ret = cyapa_acquire_i2c_bus(cyapa);
-	if (ret < 0)
-		return ret;
-
-	/*
-	 * step1: write data to easy I2C in one command.
-	 */
-	buf[0] = (u8)reg;
-	/* copy data shoud be write to I2C slave device. */
-	memcpy((void *)&buf[1], (const void *)values, length);
-
-	ret = i2c_master_send(cyapa->client, buf, length+1);
-	if (ret < 0)
-		goto error;
-
-	/* one additional written byte is register offset. */
-	if (ret != (length + 1))
-		dev_warn(dev, "warning I2C block write bytes" \
-			"[%d] not equal to requested bytes [%d].\n",
-			ret, length);
-
-error:
-	cyapa_release_i2c_bus(cyapa);
-
-	return (ret < 0) ? ret : (ret - 1);
+	ret = i2c_smbus_write_i2c_block_data(cyapa->client, reg, len, values);
+	return (ret == 0) ? len : ret;
 }
 
 
@@ -1791,7 +1668,6 @@ static struct cyapa *cyapa_create(struct i2c_client *client)
 	global_cyapa = cyapa;
 	cyapa->fw_work_mode = CYAPA_BOOTLOAD_MODE;
 	cyapa->misc_open_count = 0;
-	sema_init(&cyapa->reg_io_sem, 1);
 	spin_lock_init(&cyapa->miscdev_spinlock);
 	mutex_init(&cyapa->misc_mutex);
 
