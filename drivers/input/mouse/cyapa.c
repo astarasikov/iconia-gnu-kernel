@@ -33,10 +33,6 @@
 #include <linux/workqueue.h>
 
 
-/* DEBUG: debug switch macro */
-#define DBG_CYAPA_READ_BLOCK_DATA 0
-
-
 /*
  * Cypress I2C APA trackpad driver version is defined as below:
  * CYAPA_MAJOR_VER.CYAPA_MINOR_VER.CYAPA_REVISION_VER
@@ -344,66 +340,60 @@ static int cyapa_create_input_dev(struct cyapa *cyapa);
 static void cyapa_reschedule_work(struct cyapa *cyapa, unsigned long delay);
 
 
-#if DBG_CYAPA_READ_BLOCK_DATA
-#define DUMP_BUF_SIZE (40 * 3 + 20)  /* max will dump 40 bytes data. */
-void cyapa_dump_data_block(const char *func, u8 reg, u8 length, void *data)
+#define BYTE_PER_LINE  8
+void cyapa_dump_data(struct cyapa *cyapa, size_t length, const u8 *data)
 {
-	u8 buf[DUMP_BUF_SIZE];
-	unsigned buf_len = sizeof(buf);
-	u8 *p = buf;
+	struct device *dev = &cyapa->client->dev;
 	int i;
-	int l;
+	char buf[BYTE_PER_LINE * 3 + 1];
+	char *s = buf;
 
-	l = snprintf(p, buf_len, "reg 0x%04x: ", reg);
-	buf_len -= l;
-	p += l;
-	for (i = 0; i < length && buf_len; i++, p += l, buf_len -= l)
-		l = snprintf(p, buf_len, "%02x ", *((u8 *)data + i));
-	pr_info("%s: data block length = %d\n", func, length);
-	pr_info("%s: %s\n", func, buf);
+	for (i = 0; i < length; i++) {
+		s += sprintf(s, " %02x", data[i]);
+		if ((i + 1) == length || ((i + 1) % BYTE_PER_LINE) == 0) {
+			dev_dbg(dev, "%s\n", buf);
+			s = buf;
+		}
+	}
 }
+#undef BYTE_PER_LINE
 
-void cyapa_dump_report_data(const char *func,
-				struct cyapa_report_data *report_data)
+void cyapa_dump_report(struct cyapa *cyapa,
+		       const struct cyapa_report_data *report_data)
 {
+	struct device *dev = &cyapa->client->dev;
 	int i;
 
-	pr_info("%s: ------------------------------------\n", func);
-	pr_info("%s: report_data.button = 0x%02x\n",
-		func, report_data->button);
-	pr_info("%s: report_data.avg_pressure = %d\n",
-		func, report_data->avg_pressure);
-	pr_info("%s: report_data.touch_fingers = %d\n",
-		func, report_data->touch_fingers);
+	dev_dbg(dev, "------------------------------------\n");
+	dev_dbg(dev, "button = 0x%02x\n",
+		report_data->button);
+	dev_dbg(dev, "avg_pressure = %d\n",
+		report_data->avg_pressure);
+	dev_dbg(dev, "touch_fingers = %d\n",
+		report_data->touch_fingers);
 	for (i = 0; i < report_data->touch_fingers; i++) {
-		pr_info("%s: report_data.touches[%d].x = %d\n",
-			func, i, report_data->touches[i].x);
-		pr_info("%s: report_data.touches[%d].y = %d\n",
-			func, i, report_data->touches[i].y);
-		pr_info("%s: report_data.touches[%d].pressure = %d\n",
-			func, i, report_data->touches[i].pressure);
+		dev_dbg(dev, "touch[%d].x = %d\n",
+			i, report_data->touches[i].x);
+		dev_dbg(dev, "touch[%d].y = %d\n",
+			i, report_data->touches[i].y);
+		dev_dbg(dev, "touch[%d].pressure = %d\n",
+			i, report_data->touches[i].pressure);
 		if (report_data->touches[i].tracking_id != -1)
-			pr_info("%s: report_data.touches[%d].tracking_id = %d\n",
-				func, i, report_data->touches[i].tracking_id);
+			dev_dbg(dev, "touch[%d].tracking_id = %d\n",
+				i, report_data->touches[i].tracking_id);
 	}
-	pr_info("%s: report_data.gesture_count = %d\n",
-			func, report_data->gesture_count);
+	dev_dbg(dev, "gesture_count = %d\n",
+			report_data->gesture_count);
 	for (i = 0; i < report_data->gesture_count; i++) {
-		pr_info("%s: report_data.gestures[%d].id = 0x%02x\n",
-			func, i, report_data->gestures[i].id);
-		pr_info("%s: report_data.gestures[%d].param1 = 0x%02x\n",
-			func, i, report_data->gestures[i].param1);
-		pr_info("%s: report_data.gestures[%d].param2 = 0x%02x\n",
-			func, i, report_data->gestures[i].param2);
+		dev_dbg(dev, "gesture[%d].id = 0x%02x\n",
+			i, report_data->gestures[i].id);
+		dev_dbg(dev, "gesture[%d].param1 = 0x%02x\n",
+			i, report_data->gestures[i].param1);
+		dev_dbg(dev, "gesture[%d].param2 = 0x%02x\n",
+			i, report_data->gestures[i].param2);
 	}
-	pr_info("%s: -------------------------------------\n", func);
+	dev_dbg(dev, "-------------------------------------\n");
 }
-#else
-void cyapa_dump_data_block(const char *func, u8 reg, u8 length, void *data) {}
-void cyapa_dump_report_data(const char *func,
-		struct cyapa_report_data *report_data) {}
-#endif
-
 
 /*
  * When requested IRQ number is not available, the trackpad driver
@@ -533,6 +523,7 @@ static s32 cyapa_reg_write_byte(struct cyapa *cyapa, u16 reg, u8 val)
 static s32 cyapa_reg_read_block(struct cyapa *cyapa, u16 reg, int length,
 				u8 *values)
 {
+	struct device *dev = &cyapa->client->dev;
 	int ret;
 	u8 buf[1];
 
@@ -560,8 +551,8 @@ static s32 cyapa_reg_read_block(struct cyapa *cyapa, u16 reg, int length,
 			"[%d] not equal to requested bytes [%d].\n",
 			ret, length);
 
-	/* DEBUG: dump read block data */
-	cyapa_dump_data_block(__func__, (u8)reg, ret, values);
+	dev_dbg(dev, "read block reg: 0x%02x length: %d\n", reg, length);
+	cyapa_dump_data(cyapa, ret, values);
 
 error:
 	cyapa_release_i2c_bus(cyapa);
@@ -586,10 +577,12 @@ error:
 static s32 cyapa_reg_write_block(struct cyapa *cyapa, u16 reg, int length,
 				 const u8 *values)
 {
+	struct device *dev = &cyapa->client->dev;
 	int ret;
 	u8 buf[CYAPA_REG_MAP_SIZE + 1];
 
-	cyapa_dump_data_block(__func__, reg, length, (void *)values);
+	dev_dbg(dev, "write block reg: 0x%02x length: %d\n", reg, length);
+	cyapa_dump_data(cyapa, length, values);
 
 	ret = cyapa_acquire_i2c_bus(cyapa);
 	if (ret < 0)
@@ -1547,9 +1540,6 @@ static void cyapa_parse_gen2_data(struct cyapa *cyapa,
 		report_data->gestures[i].param1 = reg_data->gesture[i].param1;
 		report_data->gestures[i].param2 = reg_data->gesture[i].param2;
 	}
-
-	/* DEBUG: dump parsed report data */
-	cyapa_dump_report_data(__func__, report_data);
 }
 
 static void cyapa_parse_gen3_data(struct cyapa *cyapa,
@@ -1580,9 +1570,6 @@ static void cyapa_parse_gen3_data(struct cyapa *cyapa,
 			reg_data->touches[i].tracking_id;
 	}
 	report_data->gesture_count = 0;
-
-	/* DEBUG: dump parsed report data */
-	cyapa_dump_report_data(__func__, report_data);
 }
 
 
@@ -1744,6 +1731,8 @@ static bool cyapa_get_input(struct cyapa *cyapa)
 		cyapa_parse_gen2_data(cyapa, gen2_data, &report_data);
 	else
 		cyapa_parse_gen3_data(cyapa, gen3_data, &report_data);
+
+	cyapa_dump_report(cyapa, &report_data);
 
 	/* report data to input subsystem. */
 	return cyapa_handle_input_report_data(cyapa, &report_data);
