@@ -310,6 +310,7 @@ static void tegra_wm8903_disconnect_pins(struct snd_soc_card *card,
 {
 #define MACHINES                                \
 	M(aebl)                                 \
+	M(asymptote)                            \
 	M(harmony)                              \
 	M(kaen)                                 \
 	M(seaboard)                             \
@@ -355,6 +356,7 @@ static void tegra_wm8903_disconnect_pins(struct snd_soc_card *card,
 			CONNECT(ventana),
 			CONNECT(seaboard),
 			CONNECT(kaen),
+			CONNECT(asymptote),
 		},
 		{
 			.name = "RON",
@@ -362,6 +364,7 @@ static void tegra_wm8903_disconnect_pins(struct snd_soc_card *card,
 			CONNECT(ventana),
 			CONNECT(seaboard),
 			CONNECT(kaen),
+			CONNECT(asymptote),
 		},
 		{
 			.name = "ROP",
@@ -369,6 +372,7 @@ static void tegra_wm8903_disconnect_pins(struct snd_soc_card *card,
 			CONNECT(ventana),
 			CONNECT(seaboard),
 			CONNECT(kaen),
+			CONNECT(asymptote),
 		},
 		{
 			.name = "LOP",
@@ -376,6 +380,7 @@ static void tegra_wm8903_disconnect_pins(struct snd_soc_card *card,
 			CONNECT(ventana),
 			CONNECT(seaboard),
 			CONNECT(kaen),
+			CONNECT(asymptote),
 		},
 		{
 			.name = "LINEOUTR",
@@ -544,7 +549,7 @@ static __devinit int tegra_wm8903_driver_probe(struct platform_device *pdev)
 	if (machine_is_harmony() || machine_is_ventana()) {
 		card->dapm_routes = harmony_audio_map;
 		card->num_dapm_routes = ARRAY_SIZE(harmony_audio_map);
-	} else if (machine_is_seaboard()) {
+	} else if (machine_is_seaboard() || machine_is_asymptote()) {
 		card->dapm_routes = seaboard_audio_map;
 		card->num_dapm_routes = ARRAY_SIZE(seaboard_audio_map);
 	} else if (machine_is_kaen()) {
