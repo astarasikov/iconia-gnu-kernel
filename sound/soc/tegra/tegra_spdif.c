@@ -261,7 +261,7 @@ static __devinit int tegra_spdif_platform_probe(struct platform_device *pdev)
 
 	spdif->clk_spdif_out = clk_get(&pdev->dev, "spdif_out");
 	if (IS_ERR(spdif->clk_spdif_out)) {
-		pr_err("Can't retrieve spdif clock\n");
+		dev_err(&pdev->dev, "Can't retrieve spdif clock\n");
 		ret = PTR_ERR(spdif->clk_spdif_out);
 		goto err_free;
 	}
