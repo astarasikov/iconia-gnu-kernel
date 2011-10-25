@@ -1,7 +1,7 @@
 /*
  * arch/arm/mach-tegra/board-harmony.c
  *
- * Copyright (C) 2010 Google, Inc.
+ * Copyright (C) 2010, 2011 Google, Inc.
  * Copyright (C) 2011 NVIDIA, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
@@ -199,6 +199,7 @@ static struct tegra_wm8903_platform_data harmony_audio_pdata = {
 	.gpio_hp_mute		= -1,
 	.gpio_int_mic_en	= TEGRA_GPIO_INT_MIC_EN,
 	.gpio_ext_mic_en	= TEGRA_GPIO_EXT_MIC_EN,
+	.gpio_hp_invert		= 1,
 };
 
 static struct platform_device harmony_audio_device = {

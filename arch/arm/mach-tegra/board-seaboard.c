@@ -354,6 +354,7 @@ static struct tegra_wm8903_platform_data seaboard_audio_pdata = {
 	.gpio_hp_mute		= -1,
 	.gpio_int_mic_en	= -1,
 	.gpio_ext_mic_en	= -1,
+	.gpio_hp_invert		= 1,
 };
 
 static struct platform_device seaboard_audio_device = {
@@ -1080,6 +1081,7 @@ static void __init tegra_asymptote_init(void)
 {
 	struct clk *c, *p;
 
+	seaboard_audio_pdata.gpio_hp_invert = 0;
 	tegra_init_suspend(&seaboard_suspend);
 
 	__init_debug_uart_B();

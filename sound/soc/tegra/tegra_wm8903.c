@@ -461,6 +461,7 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 
 	if (gpio_is_valid(pdata->gpio_hp_det)) {
 		tegra_wm8903_hp_jack_gpio.gpio = pdata->gpio_hp_det;
+		tegra_wm8903_hp_jack_gpio.invert = pdata->gpio_hp_invert;
 		snd_soc_jack_new(codec, "Headphone Jack", SND_JACK_HEADPHONE,
 				&tegra_wm8903_hp_jack);
 		snd_soc_jack_add_pins(&tegra_wm8903_hp_jack,
