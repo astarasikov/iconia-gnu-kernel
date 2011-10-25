@@ -1312,12 +1312,14 @@ static int patch_cs420x(struct hda_codec *codec)
 /* CS4210 boards */
 enum {
 	CS421X_CDB4210,
+	STUMPY_CDB4210,
 	CS421X_MODELS
 };
 
 /* CS4210 board names */
 static const char *cs421x_models[CS421X_MODELS] = {
 	[CS421X_CDB4210] = "cdb4210",
+	[STUMPY_CDB4210] = "stumpy",
 };
 
 static struct snd_pci_quirk cs421x_cfg_tbl[] = {
@@ -1340,6 +1342,7 @@ static struct cs_pincfg cdb4210_pincfgs[] = {
 
 static struct cs_pincfg *cs421x_pincfgs[CS421X_MODELS] = {
 	[CS421X_CDB4210] = cdb4210_pincfgs,
+	[STUMPY_CDB4210] = cdb4210_pincfgs,
 };
 
 static struct hda_verb cs421x_coef_init_verbs[] = {
