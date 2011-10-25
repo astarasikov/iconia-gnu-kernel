@@ -557,6 +557,7 @@ static __devinit int tegra_wm8903_driver_probe(struct platform_device *pdev)
 		card->dapm_routes = kaen_audio_map;
 		card->num_dapm_routes = ARRAY_SIZE(kaen_audio_map);
 	} else {
+		BUG_ON(!machine_is_aebl());
 		card->dapm_routes = aebl_audio_map;
 		card->num_dapm_routes = ARRAY_SIZE(aebl_audio_map);
 	}
