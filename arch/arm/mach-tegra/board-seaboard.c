@@ -87,7 +87,7 @@ static __initdata struct tegra_clk_init_table seaboard_clk_init_table[] = {
 	{ "pll_p_out4",	"pll_p",	24000000,	true},
 	{ "pll_a",      "pll_p_out1",   56448000,       true},
 	{ "pll_a_out0", "pll_a",        11289600,       true},
-	{ "cdev1",      "pll_a_out0",   11289600,       true},
+	{ "cdev1",      NULL,           0,              true},
 	{ "i2s1",       "pll_a_out0",   11289600,       false},
 	{ "audio",      "pll_a_out0",   11289600,       false},
 	{ "audio_2x",   "audio",        22579200,       false},
