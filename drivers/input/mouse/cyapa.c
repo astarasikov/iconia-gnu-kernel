@@ -1958,8 +1958,6 @@ out_resume_err:
 	cyapa->detect_status = ret ? CYAPA_DETECT_DONE_FAILED :
 					CYAPA_DETECT_DONE_SUCCESS;
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
-
-	return;
 }
 
 static int cyapa_resume_detect(struct cyapa *cyapa)
@@ -2008,14 +2006,14 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 	ret = cyapa_probe_detect(cyapa);
 	if (ret < 0) {
 		dev_err(dev, "trackpad device detect failed, %d\n", ret);
-		goto err_mem_free;
+		goto err_wq_free;
 	}
 
 	return 0;
 
+err_wq_free:
+	destroy_workqueue(cyapa->detect_wq);
 err_mem_free:
-	if (cyapa->detect_wq)
-		destroy_workqueue(cyapa->detect_wq);
 	kfree(cyapa);
 	global_cyapa = NULL;
 
