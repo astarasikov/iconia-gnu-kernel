@@ -441,6 +441,42 @@ static ssize_t cyapa_reg_write_block(struct cyapa *cyapa, u8 reg,
 	return (ret == 0) ? len : ret;
 }
 
+static s32 cyapa_read_byte(struct cyapa *cyapa, u8 cmd_idx)
+{
+	u8 cmd;
+	cmd = cyapa_i2c_cmds[cmd_idx].cmd;
+	return cyapa_reg_read_byte(cyapa, cmd);
+}
+
+static s32 cyapa_write_byte(struct cyapa *cyapa, u8 cmd_idx, u8 value)
+{
+	u8 cmd;
+	cmd = cyapa_i2c_cmds[cmd_idx].cmd;
+	return cyapa_reg_write_byte(cyapa, cmd, value);
+}
+
+static ssize_t cyapa_read_block(struct cyapa *cyapa, u8 cmd_idx, u8 *values)
+{
+	u8 cmd;
+	size_t len;
+
+	cmd = cyapa_i2c_cmds[cmd_idx].cmd;
+	len = cyapa_i2c_cmds[cmd_idx].len;
+
+	return cyapa_reg_read_block(cyapa, cmd, len, values);
+}
+
+static ssize_t cyapa_write_block(struct cyapa *cyapa, u8 cmd_idx, u8 *values)
+{
+	u8 cmd;
+	size_t len;
+
+	cmd = cyapa_i2c_cmds[cmd_idx].cmd;
+	len = cyapa_i2c_cmds[cmd_idx].len;
+
+	return cyapa_reg_write_block(cyapa, cmd, len, values);
+}
+
 
 /*
  **************************************************************
@@ -631,7 +667,12 @@ int cyapa_get_trackpad_run_mode(struct cyapa *cyapa,
 
 	do {
 		/* get trackpad status. */
-		ret = cyapa_reg_read_block(cyapa, 0, BL_HEAD_BYTES, status);
+		if (cyapa->in_bootloader)
+			ret = cyapa_read_block(cyapa, CYAPA_CMD_BL_HEAD,
+					       status);
+		else
+			ret = cyapa_read_block(cyapa, CYAPA_CMD_BLK_HEAD,
+					       status);
 		if ((ret != BL_HEAD_BYTES) && (tries > 0)) {
 			/*
 			 * maybe firmware is switching its states,
@@ -694,8 +735,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		/* do reset operation to switch to bootloader idle mode. */
 		cyapa_bl_disable_irq(cyapa);
 
-		ret = cyapa_reg_write_byte(cyapa, CYAPA_OFFSET_SOFT_RESET,
-					   0x01);
+		ret = cyapa_write_byte(cyapa, CYAPA_CMD_SOFT_RESET, 0x01);
 		if (ret < 0) {
 			dev_err(dev, "firmware reset cmd failed, %d\n", ret);
 			cyapa_bl_enable_irq(cyapa);
@@ -1004,8 +1044,9 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 	}
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
-	ret = cyapa_reg_read_block(cyapa, REG_OFFSET_QUERY_BASE,
-				   QUERY_DATA_SIZE, query_data);
+	ret = cyapa_read_block(cyapa,
+			       CYAPA_CMD_GROUP_QUERY,
+			       query_data);
 	if (ret < 0)
 		return ret;
 
@@ -1240,11 +1281,9 @@ static bool cyapa_get_input(struct cyapa *cyapa)
 	struct cyapa_reg_data reg_data;
 	struct cyapa_report_data report_data;
 
-	/* read register data from trackpad. */
-	ret_read_size = cyapa_reg_read_block(cyapa,
-					DATA_REG_START_OFFSET,
-					sizeof(struct cyapa_reg_data),
-					(u8 *)&reg_data);
+	ret_read_size = cyapa_read_block(cyapa,
+					 CYAPA_CMD_GROUP_DATA,
+					 (u8 *)&reg_data);
 	if (ret_read_size < 0)
 		return false;
 
