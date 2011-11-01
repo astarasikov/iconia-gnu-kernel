@@ -1494,6 +1494,7 @@ static int cyapa_create_input_dev(struct cyapa *cyapa)
 	__set_bit(BTN_TOOL_DOUBLETAP, input->keybit);
 	__set_bit(BTN_TOOL_TRIPLETAP, input->keybit);
 	__set_bit(BTN_TOOL_QUADTAP, input->keybit);
+	__set_bit(BTN_TOOL_QUINTTAP, input->keybit);
 
 	__set_bit(BTN_LEFT, input->keybit);
 
