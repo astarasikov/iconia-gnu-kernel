@@ -292,10 +292,6 @@ struct cyapa {
 	int irq;
 
 	struct cyapa_platform_data *pdata;
-	unsigned short data_base_offset;
-	unsigned short control_base_offset;
-	unsigned short command_base_offset;
-	unsigned short query_base_offset;
 
 	struct cyapa_mt_slot mt_slots[CYAPA_MAX_MT_SLOTS];
 
@@ -324,7 +320,6 @@ static struct cyapa *global_cyapa;
 
 static int cyapa_get_query_data(struct cyapa *cyapa);
 static int cyapa_reconfig(struct cyapa *cyapa, int boot);
-static void cyapa_get_reg_offset(struct cyapa *cyapa);
 static int cyapa_determine_firmware_gen(struct cyapa *cyapa);
 static int cyapa_create_input_dev(struct cyapa *cyapa);
 static void cyapa_reschedule_work(struct cyapa *cyapa, unsigned long delay);
@@ -903,7 +898,6 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 
 		if (cyapa_determine_firmware_gen(cyapa) < 0)
 			return -EINVAL;
-		cyapa_get_reg_offset(cyapa);
 		ioctl_data.len = 1;
 		memset(buf, 0, sizeof(buf));
 		buf[0] = cyapa->pdata->gen;
@@ -1043,7 +1037,6 @@ ssize_t cyapa_show_protocol_version(struct device *dev,
 
 	if (cyapa_determine_firmware_gen(cyapa) < 0)
 		return -EINVAL;
-	cyapa_get_reg_offset(cyapa);
 
 	return sprintf(buf, "%d\n", cyapa->pdata->gen);
 }
@@ -1070,21 +1063,6 @@ static const struct attribute_group cyapa_sysfs_group = {
  * Cypress i2c trackpad input device driver.
  **************************************************************
 */
-static void cyapa_get_reg_offset(struct cyapa *cyapa)
-{
-	if (cyapa->pdata->gen == CYAPA_GEN2) {
-		cyapa->data_base_offset = GEN2_REG_OFFSET_DATA_BASE;
-		cyapa->control_base_offset = GEN2_REG_OFFSET_CONTROL_BASE;
-		cyapa->command_base_offset = GEN2_REG_OFFSET_COMMAND_BASE;
-		cyapa->query_base_offset = GEN2_REG_OFFSET_QUERY_BASE;
-	} else {
-		cyapa->data_base_offset = GEN3_REG_OFFSET_DATA_BASE;
-		cyapa->control_base_offset = GEN3_REG_OFFSET_CONTROL_BASE;
-		cyapa->command_base_offset = GEN3_REG_OFFSET_COMMAND_BASE;
-		cyapa->query_base_offset = GEN3_REG_OFFSET_QUERY_BASE;
-	}
-}
-
 /*
  * this function read product id from trackpad device
  * and use it to verify trackpad firmware protocol
@@ -1192,6 +1170,7 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 {
 	unsigned long flags;
 	u8 query_data[40];
+	u8 query_base_offset;
 	int query_bytes;
 	int ret_read_size;
 	int i;
@@ -1205,14 +1184,15 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/* query data is supported only in GEN2 or later firmware protocol. */
-	if (cyapa->pdata->gen == CYAPA_GEN2)
+	if (cyapa->pdata->gen == CYAPA_GEN2) {
+		query_base_offset = GEN2_REG_OFFSET_QUERY_BASE;
 		query_bytes = GEN2_QUERY_DATA_SIZE;
-	else
+	} else {
+		query_base_offset = GEN3_REG_OFFSET_QUERY_BASE;
 		query_bytes = GEN3_QUERY_DATA_SIZE;
-	ret_read_size = cyapa_reg_read_block(cyapa,
-				cyapa->query_base_offset,
-				query_bytes,
-				query_data);
+	}
+	ret_read_size = cyapa_reg_read_block(cyapa, query_base_offset,
+					     query_bytes, query_data);
 	if (ret_read_size < 0)
 		return ret_read_size;
 
@@ -1291,7 +1271,6 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 		return -EINVAL;
 	}
 
-	cyapa_get_reg_offset(cyapa);
 	ret = cyapa_get_query_data(cyapa);
 	if (ret < 0) {
 		dev_err(dev, "Failed to get trackpad query data, %d.\n", ret);
