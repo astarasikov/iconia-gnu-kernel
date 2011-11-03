@@ -1842,6 +1842,7 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 		goto out_probe_err;
 	}
 
+	cyapa->irq = client->irq;
 	irq_set_irq_type(cyapa->irq, IRQF_TRIGGER_FALLING);
 	ret = request_irq(cyapa->irq,
 			cyapa_irq,
