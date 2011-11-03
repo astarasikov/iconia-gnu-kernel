@@ -100,11 +100,6 @@ static __initdata struct tegra_clk_init_table seaboard_clk_init_table[] = {
 	{ NULL,		NULL,		0,		0},
 };
 
-static struct cyapa_platform_data cyapa_i2c_platform_data = {
-	.gen				= CYAPA_GEN3,
-	.irq_gpio			= TEGRA_GPIO_CYTP_INT,
-};
-
 static struct tegra_i2c_platform_data seaboard_i2c1_platform_data = {
 	.adapter_nr	= 0,
 	.bus_count	= 1,
@@ -569,7 +564,6 @@ static __initdata struct tegra_pingroup_config mxt_pinmux_config[] = {
 static struct i2c_board_info __initdata cyapa_device = {
 	I2C_BOARD_INFO(CYAPA_I2C_NAME, 0x67),
 	.irq		= TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CYTP_INT),
-	.platform_data	= &cyapa_i2c_platform_data,
 };
 
 static struct tegra_utmip_config usb1_phy_config = {
