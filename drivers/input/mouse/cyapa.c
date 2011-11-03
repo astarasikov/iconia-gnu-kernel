@@ -767,9 +767,6 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		if (!ioctl_data.buf || ioctl_data.len < 16)
 			return -EINVAL;
 
-		ret = cyapa_get_query_data(cyapa);
-		if (ret < 0)
-			return ret;
 		ioctl_data.len = 16;
 		if (copy_to_user(ioctl_data.buf, cyapa->product_id, 16))
 				return -EIO;
@@ -781,9 +778,6 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		if (!ioctl_data.buf || ioctl_data.len < 2)
 			return -EINVAL;
 
-		ret = cyapa_get_query_data(cyapa);
-		if (ret < 0)
-			return ret;
 		ioctl_data.len = 2;
 		memset(buf, 0, sizeof(buf));
 		buf[0] = cyapa->fw_maj_ver;
@@ -798,9 +792,6 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		if (!ioctl_data.buf || ioctl_data.len < 2)
 			return -EINVAL;
 
-		ret = cyapa_get_query_data(cyapa);
-		if (ret < 0)
-			return ret;
 		ioctl_data.len = 2;
 		memset(buf, 0, sizeof(buf));
 		buf[0] = cyapa->hw_maj_ver;
@@ -815,8 +806,6 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		if (!ioctl_data.buf || ioctl_data.len < 1)
 			return -EINVAL;
 
-		if (cyapa_determine_firmware_gen3(cyapa) < 0)
-			return -EINVAL;
 		ioctl_data.len = 1;
 		memset(buf, 0, sizeof(buf));
 		buf[0] = cyapa->gen;
@@ -909,42 +898,24 @@ static void cyapa_update_firmware_dispatch(struct cyapa *cyapa)
 ssize_t cyapa_show_fm_ver(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
 	struct cyapa *cyapa = i2c_get_clientdata(client);
-
-	ret = cyapa_get_query_data(cyapa);
-	if (ret < 0)
-		return ret;
-
 	return sprintf(buf, "%d.%d\n", cyapa->fw_maj_ver, cyapa->fw_min_ver);
 }
 
 ssize_t cyapa_show_hw_ver(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
 	struct cyapa *cyapa = i2c_get_clientdata(client);
-
-	ret = cyapa_get_query_data(cyapa);
-	if (ret < 0)
-		return ret;
-
 	return sprintf(buf, "%d.%d\n", cyapa->hw_maj_ver, cyapa->hw_min_ver);
 }
 
 ssize_t cyapa_show_product_id(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
 	struct cyapa *cyapa = i2c_get_clientdata(client);
-
-	ret = cyapa_get_query_data(cyapa);
-	if (ret < 0)
-		return ret;
-
 	return sprintf(buf, "%s\n", cyapa->product_id);
 }
 
@@ -953,8 +924,6 @@ ssize_t cyapa_show_protocol_version(struct device *dev,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct cyapa *cyapa = i2c_get_clientdata(client);
-	if (cyapa_determine_firmware_gen3(cyapa) < 0)
-		return -EINVAL;
 	return sprintf(buf, "%d\n", cyapa->gen);
 }
 
