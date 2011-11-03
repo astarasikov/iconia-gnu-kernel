@@ -34,14 +34,6 @@ enum cyapa_gen {
 	CYAPA_GEN3 = 0x03,  /* support MT-protocol with tracking ID. */
 };
 
-struct cyapa_platform_data {
-	enum cyapa_gen gen;  /* trackpad firmware generation. */
-
-	/* the gpio id used for interrupt to notify host data is ready. */
-	__s16 irq_gpio;
-};
-
-
 /*
  * Data structures for /dev/cyapa device ioctl read/write.
  */
