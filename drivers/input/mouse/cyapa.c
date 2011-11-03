@@ -302,6 +302,7 @@ struct cyapa {
 	u8 fw_min_ver;  /* firmware minor version. */
 	u8 hw_maj_ver;  /* hardware major version. */
 	u8 hw_min_ver;  /* hardware minor version. */
+	enum cyapa_gen gen;
 	int max_abs_x;
 	int max_abs_y;
 	int physical_size_x;
@@ -720,9 +721,9 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 	unsigned long flags;
 	unsigned short reset_offset;
 
-	if (cyapa->pdata->gen == CYAPA_GEN3)
+	if (cyapa->gen == CYAPA_GEN3)
 		reset_offset = CYAPA_GEN3_OFFSET_SOFT_RESET;
-	else if (cyapa->pdata->gen == CYAPA_GEN2)
+	else if (cyapa->gen == CYAPA_GEN2)
 		reset_offset = CYAPA_GEN2_OFFSET_SOFT_RESET;
 	else
 		return -EINVAL;
@@ -900,7 +901,7 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 		ioctl_data.len = 1;
 		memset(buf, 0, sizeof(buf));
-		buf[0] = cyapa->pdata->gen;
+		buf[0] = cyapa->gen;
 		if (copy_to_user(ioctl_data.buf, buf, ioctl_data.len))
 			return -EIO;
 		if (copy_to_user((void *)arg, &ioctl_data, ioctl_len))
@@ -1034,11 +1035,9 @@ ssize_t cyapa_show_protocol_version(struct device *dev,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct cyapa *cyapa = i2c_get_clientdata(client);
-
 	if (cyapa_determine_firmware_gen(cyapa) < 0)
 		return -EINVAL;
-
-	return sprintf(buf, "%d\n", cyapa->pdata->gen);
+	return sprintf(buf, "%d\n", cyapa->gen);
 }
 
 static DEVICE_ATTR(firmware_version, S_IRUGO, cyapa_show_fm_ver, NULL);
@@ -1117,7 +1116,7 @@ static int cyapa_determine_firmware_gen(struct cyapa *cyapa)
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/* determine firmware protocol consistent with driver setting. */
-	if (cyapa->pdata->gen == CYAPA_GEN2)
+	if (cyapa->gen == CYAPA_GEN2)
 		offset = GEN2_REG_OFFSET_QUERY_BASE;
 	else
 		offset = GEN3_REG_OFFSET_QUERY_BASE;
@@ -1131,7 +1130,7 @@ static int cyapa_determine_firmware_gen(struct cyapa *cyapa)
 		return 0;
 	}
 
-	if (cyapa->pdata->gen == CYAPA_GEN2) {
+	if (cyapa->gen == CYAPA_GEN2) {
 		/* guess its gen3 firmware protocol. */
 		offset = GEN3_REG_OFFSET_QUERY_BASE;
 		memset(query_data, 0, sizeof(query_data));
@@ -1139,7 +1138,7 @@ static int cyapa_determine_firmware_gen(struct cyapa *cyapa)
 					query_data, offset, GEN3_QUERY_DATA_SIZE);
 		if (ret == 1) {
 			/* gen3 firmware protocol is verified successfully. */
-			cyapa->pdata->gen = query_data[REG_PROTOCOL_GEN_QUERY_OFFSET] & 0x0F;
+			cyapa->gen = query_data[REG_PROTOCOL_GEN_QUERY_OFFSET] & 0x0F;
 		}
 	} else {
 		/* guess its gen2 firmware protocol. */
@@ -1149,7 +1148,7 @@ static int cyapa_determine_firmware_gen(struct cyapa *cyapa)
 					query_data, offset, PRODUCT_ID_SIZE);
 		if (ret == 1) {
 			/* gen2 firmware protocol is verified successfully. */
-			cyapa->pdata->gen = CYAPA_GEN2;
+			cyapa->gen = CYAPA_GEN2;
 		}
 	}
 
@@ -1184,7 +1183,7 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/* query data is supported only in GEN2 or later firmware protocol. */
-	if (cyapa->pdata->gen == CYAPA_GEN2) {
+	if (cyapa->gen == CYAPA_GEN2) {
 		query_base_offset = GEN2_REG_OFFSET_QUERY_BASE;
 		query_bytes = GEN2_QUERY_DATA_SIZE;
 	} else {
@@ -1218,7 +1217,9 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 	cyapa->hw_maj_ver = query_data[17];
 	cyapa->hw_min_ver = query_data[18];
 
-	if (cyapa->pdata->gen == CYAPA_GEN2) {
+	cyapa->gen = query_data[20] & 0x0F;
+
+	if (cyapa->gen == CYAPA_GEN2) {
 		for (i = 0; i < 13; i++)
 			cyapa->capability[i] = query_data[19+i];
 
@@ -1265,9 +1266,9 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 	 */
 	if (cyapa_determine_firmware_gen(cyapa) < 0)
 		return -EINVAL;
-	if (cyapa->pdata->gen < CYAPA_GEN2) {
+	if (cyapa->gen < CYAPA_GEN2) {
 		dev_err(dev, "unsupported firmware protocol version (%d).\n",
-			cyapa->pdata->gen);
+			cyapa->gen);
 		return -EINVAL;
 	}
 
@@ -1287,7 +1288,7 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 			"    Max ABS X,Y:   %d,%d\n" \
 			"    Physical Size X,Y:   %d,%d\n",
 			cyapa->product_id,
-			cyapa->pdata->gen,
+			cyapa->gen,
 			cyapa->fw_maj_ver, cyapa->fw_min_ver,
 			cyapa->hw_maj_ver, cyapa->hw_min_ver,
 			cyapa->max_abs_x, cyapa->max_abs_y,
@@ -1516,7 +1517,7 @@ static void cyapa_send_mta_event(struct cyapa *cyapa,
 static int cyapa_handle_input_report_data(struct cyapa *cyapa,
 		struct cyapa_report_data *report_data)
 {
-	if (cyapa->pdata->gen > CYAPA_GEN2)
+	if (cyapa->gen > CYAPA_GEN2)
 		cyapa_send_mtb_event(cyapa, report_data);
 	else
 		cyapa_send_mta_event(cyapa, report_data);
@@ -1536,7 +1537,7 @@ static bool cyapa_get_input(struct cyapa *cyapa)
 	/* read register data from trackpad. */
 	gen2_data = &reg_data.gen2_data;
 	gen3_data = &reg_data.gen3_data;
-	if (cyapa->pdata->gen == CYAPA_GEN2)
+	if (cyapa->gen == CYAPA_GEN2)
 		read_length = (int)sizeof(struct cyapa_reg_data_gen2);
 	else
 		read_length = (int)sizeof(struct cyapa_reg_data_gen3);
@@ -1552,7 +1553,7 @@ static bool cyapa_get_input(struct cyapa *cyapa)
 		return false;
 
 	/* process and parse raw data read from Trackpad. */
-	if (cyapa->pdata->gen == CYAPA_GEN2)
+	if (cyapa->gen == CYAPA_GEN2)
 		cyapa_parse_gen2_data(cyapa, gen2_data, &report_data);
 	else
 		cyapa_parse_gen3_data(cyapa, gen3_data, &report_data);
@@ -1642,6 +1643,7 @@ static struct cyapa *cyapa_create(struct i2c_client *client)
 		return NULL;
 
 	cyapa->pdata = client->dev.platform_data;
+	cyapa->gen = CYAPA_GEN3;
 
 	cyapa->client = client;
 	global_cyapa = cyapa;
@@ -1695,7 +1697,7 @@ static int cyapa_create_input_dev(struct cyapa *cyapa)
 	input_set_abs_params(input, ABS_MT_POSITION_X, 0, cyapa->max_abs_x, 0, 0);
 	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, cyapa->max_abs_y, 0, 0);
 	input_set_abs_params(input, ABS_MT_PRESSURE, 0, 255, 0, 0);
-	if (cyapa->pdata->gen > CYAPA_GEN2) {
+	if (cyapa->gen > CYAPA_GEN2) {
 		ret = input_mt_init_slots(input, CYAPA_MAX_MT_SLOTS);
 		if (ret < 0)
 			return ret;
