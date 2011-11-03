@@ -33,13 +33,7 @@
 #include <linux/workqueue.h>
 
 
-#define CYAPA_MT_MAX_TOUCH  255
-#define CYAPA_MT_MAX_WIDTH  255
-
 #define CYAPA_MAX_TOUCHES  5
-#define CYAPA_TOOL_WIDTH   50
-#define CYAPA_DEFAULT_TOUCH_PRESSURE  50
-#define CYAPA_MT_TOUCH_MAJOR  50
 /*
  * In the special case, where a finger is removed and makes contact
  * between two packets, there will be two touches for that finger,
@@ -120,23 +114,17 @@
 #define CYAPA_REG_MAP_SIZE  256
 
 #define PRODUCT_ID_SIZE  16
-#define GEN2_QUERY_DATA_SIZE  38
-#define GEN3_QUERY_DATA_SIZE  27
+#define QUERY_DATA_SIZE  27
 #define REG_PROTOCOL_GEN_QUERY_OFFSET  20
 
-#define GEN2_REG_OFFSET_DATA_BASE     0x0000
-#define GEN2_REG_OFFSET_CONTROL_BASE  0x0029
-#define GEN2_REG_OFFSET_COMMAND_BASE  0x0049
-#define GEN2_REG_OFFSET_QUERY_BASE    0x004B
-#define GEN3_REG_OFFSET_DATA_BASE     0x0000
-#define GEN3_REG_OFFSET_CONTROL_BASE  0x0000
-#define GEN3_REG_OFFSET_COMMAND_BASE  0x0028
-#define GEN3_REG_OFFSET_QUERY_BASE    0x002A
+#define REG_OFFSET_DATA_BASE     0x0000
+#define REG_OFFSET_CONTROL_BASE  0x0000
+#define REG_OFFSET_COMMAND_BASE  0x0028
+#define REG_OFFSET_QUERY_BASE    0x002A
 
-#define CYAPA_GEN2_OFFSET_SOFT_RESET  GEN2_REG_OFFSET_COMMAND_BASE
-#define CYAPA_GEN3_OFFSET_SOFT_RESET  GEN3_REG_OFFSET_COMMAND_BASE
+#define CYAPA_OFFSET_SOFT_RESET  REG_OFFSET_COMMAND_BASE
 
-#define REG_OFFSET_POWER_MODE (GEN3_REG_OFFSET_COMMAND_BASE + 1)
+#define REG_OFFSET_POWER_MODE (REG_OFFSET_COMMAND_BASE + 1)
 #define OP_POWER_MODE_MASK     0xC0
 #define OP_POWER_MODE_SHIFT    6
 #define PWR_MODE_FULL_ACTIVE   3
@@ -169,14 +157,6 @@ enum cyapa_devicestate {
 	 */
 };
 
-#define CYAPA_ONE_TIME_GESTURES  (1)
-struct cyapa_touch_gen2 {
-	u8 xy;
-	u8 x;
-	u8 y;
-	u8 pressure;
-};
-
 struct cyapa_touch {
 	int x;
 	int y;
@@ -184,27 +164,7 @@ struct cyapa_touch {
 	int tracking_id;
 };
 
-struct cyapa_gesture {
-	u8 id;
-	u8 param1;
-	u8 param2;
-};
-
-struct cyapa_reg_data_gen2 {
-	u8 device_status;
-	u8 relative_flags;
-	s8 deltax;
-	s8 deltay;
-	u8 avg_pressure;
-	u8 touch_fingers;
-	u8 reserved1;
-	u8 reserved2;
-	struct cyapa_touch_gen2 touches[CYAPA_MAX_TOUCHES];
-	u8 gesture_count;
-	struct cyapa_gesture gesture[CYAPA_ONE_TIME_GESTURES];
-};
-
-struct cyapa_touch_gen3 {
+struct cyapa_touch_data {
 	/*
 	 * high bits or x/y position value
 	 * bit 7 - 4: high 4 bits of x position value
@@ -222,7 +182,7 @@ struct cyapa_touch_gen3 {
 	u8 tracking_id;
 };
 
-struct cyapa_reg_data_gen3 {
+struct cyapa_reg_data {
 	/*
 	 * bit 0 - 1: device status
 	 * bit 3 - 2: power mode
@@ -238,27 +198,13 @@ struct cyapa_reg_data_gen3 {
 	 * bit 0: left mechanism button state if exists
 	 */
 	u8 finger_btn;
-	struct cyapa_touch_gen3 touches[CYAPA_MAX_TOUCHES];
-};
-
-union cyapa_reg_data {
-	struct cyapa_reg_data_gen2 gen2_data;
-	struct cyapa_reg_data_gen3 gen3_data;
+	struct cyapa_touch_data touches[CYAPA_MAX_TOUCHES];
 };
 
 struct cyapa_report_data {
 	u8 button;
-	u8 reserved1;
-	u8 reserved2;
-	u8 avg_pressure;
-	int rel_deltaX;
-	int rel_deltaY;
-
 	int touch_fingers;
 	struct cyapa_touch touches[CYAPA_MAX_TOUCHES];
-
-	int gesture_count;
-	struct cyapa_gesture gestures[CYAPA_ONE_TIME_GESTURES];
 };
 
 
@@ -351,8 +297,6 @@ void cyapa_dump_report(struct cyapa *cyapa,
 	dev_dbg(dev, "------------------------------------\n");
 	dev_dbg(dev, "button = 0x%02x\n",
 		report_data->button);
-	dev_dbg(dev, "avg_pressure = %d\n",
-		report_data->avg_pressure);
 	dev_dbg(dev, "touch_fingers = %d\n",
 		report_data->touch_fingers);
 	for (i = 0; i < report_data->touch_fingers; i++) {
@@ -365,16 +309,6 @@ void cyapa_dump_report(struct cyapa *cyapa,
 		if (report_data->touches[i].tracking_id != -1)
 			dev_dbg(dev, "touch[%d].tracking_id = %d\n",
 				i, report_data->touches[i].tracking_id);
-	}
-	dev_dbg(dev, "gesture_count = %d\n",
-			report_data->gesture_count);
-	for (i = 0; i < report_data->gesture_count; i++) {
-		dev_dbg(dev, "gesture[%d].id = 0x%02x\n",
-			i, report_data->gestures[i].id);
-		dev_dbg(dev, "gesture[%d].param1 = 0x%02x\n",
-			i, report_data->gestures[i].param1);
-		dev_dbg(dev, "gesture[%d].param2 = 0x%02x\n",
-			i, report_data->gestures[i].param2);
 	}
 	dev_dbg(dev, "-------------------------------------\n");
 }
@@ -717,13 +651,8 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 	struct device *dev = &cyapa->client->dev;
 	int ret;
 	unsigned long flags;
-	unsigned short reset_offset;
 
-	if (cyapa->gen == CYAPA_GEN3)
-		reset_offset = CYAPA_GEN3_OFFSET_SOFT_RESET;
-	else if (cyapa->gen == CYAPA_GEN2)
-		reset_offset = CYAPA_GEN2_OFFSET_SOFT_RESET;
-	else
+	if (cyapa->gen != CYAPA_GEN3)
 		return -EINVAL;
 
 	switch (run_mode->rev_cmd) {
@@ -731,7 +660,8 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		/* do reset operation to switch to bootloader idle mode. */
 		cyapa_bl_disable_irq(cyapa);
 
-		ret = cyapa_reg_write_byte(cyapa, reset_offset, 0x01);
+		ret = cyapa_reg_write_byte(cyapa, CYAPA_OFFSET_SOFT_RESET,
+					   0x01);
 		if (ret < 0) {
 			dev_err(dev, "send firmware reset cmd failed, %d\n",
 				ret);
@@ -1098,11 +1028,15 @@ static int cyapa_get_and_verify_firmware(struct cyapa *cyapa, u8 *query_data,
 		return 0;  /* unknown firmware query data. */
 }
 
+/*
+ * Returns:
+ *  0  product_id could be read and starts with "CYTRA", return 0.
+ * -1 i2c bus I/O failed or product_id did not match "CYTRA"
+ */
 static int cyapa_determine_firmware_gen(struct cyapa *cyapa)
 {
 	int ret;
 	unsigned long flags;
-	unsigned short offset;
 	u8 query_data[40];
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
@@ -1113,53 +1047,10 @@ static int cyapa_determine_firmware_gen(struct cyapa *cyapa)
 	}
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
-	/* determine firmware protocol consistent with driver setting. */
-	if (cyapa->gen == CYAPA_GEN2)
-		offset = GEN2_REG_OFFSET_QUERY_BASE;
-	else
-		offset = GEN3_REG_OFFSET_QUERY_BASE;
-	memset(query_data, 0, sizeof(query_data));
-	ret = cyapa_get_and_verify_firmware(cyapa, query_data, offset, PRODUCT_ID_SIZE);
-	if (ret == 1) {
-		/*
-		 * current firmware protocol is consistent with the generation
-		 * set in platform data.
-		 */
-		return 0;
-	}
-
-	if (cyapa->gen == CYAPA_GEN2) {
-		/* guess its gen3 firmware protocol. */
-		offset = GEN3_REG_OFFSET_QUERY_BASE;
-		memset(query_data, 0, sizeof(query_data));
-		ret = cyapa_get_and_verify_firmware(cyapa,
-					query_data, offset, GEN3_QUERY_DATA_SIZE);
-		if (ret == 1) {
-			/* gen3 firmware protocol is verified successfully. */
-			cyapa->gen = query_data[REG_PROTOCOL_GEN_QUERY_OFFSET] & 0x0F;
-		}
-	} else {
-		/* guess its gen2 firmware protocol. */
-		offset = GEN2_REG_OFFSET_QUERY_BASE;
-		memset(query_data, 0, sizeof(query_data));
-		ret = cyapa_get_and_verify_firmware(cyapa,
-					query_data, offset, PRODUCT_ID_SIZE);
-		if (ret == 1) {
-			/* gen2 firmware protocol is verified successfully. */
-			cyapa->gen = CYAPA_GEN2;
-		}
-	}
-
-	/*
-	 * when i2c bus I/O failed, ret < 0,
-	 * it's unable to guess firmware protocol,
-	 * so keep the default gen setting in platform data.
-	 *
-	 * when not gen2, gen3 or later protocol firmware, ret == 0,
-	 * this trackpad driver may unable to support this device,
-	 * so, here also keep the default value set in platform data.
-	 */
-
+	/* verify gen3 protocol by confirming product_id starts with CYTRA */
+	ret = cyapa_get_and_verify_firmware(cyapa, query_data,
+					    REG_OFFSET_QUERY_BASE,
+					    PRODUCT_ID_SIZE);
 	return ret == 1 ? 0 : -1;
 }
 
@@ -1167,10 +1058,7 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 {
 	unsigned long flags;
 	u8 query_data[40];
-	u8 query_base_offset;
-	int query_bytes;
 	int ret_read_size;
-	int i;
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
 	if (cyapa->fw_work_mode != CYAPA_STREAM_MODE) {
@@ -1180,16 +1068,8 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 	}
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
-	/* query data is supported only in GEN2 or later firmware protocol. */
-	if (cyapa->gen == CYAPA_GEN2) {
-		query_base_offset = GEN2_REG_OFFSET_QUERY_BASE;
-		query_bytes = GEN2_QUERY_DATA_SIZE;
-	} else {
-		query_base_offset = GEN3_REG_OFFSET_QUERY_BASE;
-		query_bytes = GEN3_QUERY_DATA_SIZE;
-	}
-	ret_read_size = cyapa_reg_read_block(cyapa, query_base_offset,
-					     query_bytes, query_data);
+	ret_read_size = cyapa_reg_read_block(cyapa, REG_OFFSET_QUERY_BASE,
+					     QUERY_DATA_SIZE, query_data);
 	if (ret_read_size < 0)
 		return ret_read_size;
 
@@ -1217,30 +1097,13 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 
 	cyapa->gen = query_data[20] & 0x0F;
 
-	if (cyapa->gen == CYAPA_GEN2) {
-		for (i = 0; i < 13; i++)
-			cyapa->capability[i] = query_data[19+i];
+	cyapa->max_abs_x = ((query_data[21] & 0xF0) << 4) | query_data[22];
+	cyapa->max_abs_y = ((query_data[21] & 0x0F) << 8) | query_data[23];
 
-		cyapa->max_abs_x =
-			((query_data[32] & 0xF0) << 4) | query_data[33];
-		cyapa->max_abs_y =
-			((query_data[32] & 0x0F) << 8) | query_data[34];
-
-		cyapa->physical_size_x =
-			((query_data[35] & 0xF0) << 4) | query_data[36];
-		cyapa->physical_size_y =
-			((query_data[35] & 0x0F) << 8) | query_data[37];
-	} else {
-		cyapa->max_abs_x =
-			((query_data[21] & 0xF0) << 4) | query_data[22];
-		cyapa->max_abs_y =
-			((query_data[21] & 0x0F) << 8) | query_data[23];
-
-		cyapa->physical_size_x =
-			((query_data[24] & 0xF0) << 4) | query_data[25];
-		cyapa->physical_size_y =
-			((query_data[24] & 0x0F) << 8) | query_data[26];
-	}
+	cyapa->physical_size_x =
+		((query_data[24] & 0xF0) << 4) | query_data[25];
+	cyapa->physical_size_y =
+		((query_data[24] & 0x0F) << 8) | query_data[26];
 
 	return 0;
 }
@@ -1259,12 +1122,10 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 	}
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
-	/*
-	 * only support trackpad firmware gen2 or later protocol.
-	 */
+	/* only support trackpad firmware gen3 or later protocol. */
 	if (cyapa_determine_firmware_gen(cyapa) < 0)
 		return -EINVAL;
-	if (cyapa->gen < CYAPA_GEN2) {
+	if (cyapa->gen < CYAPA_GEN3) {
 		dev_err(dev, "unsupported firmware protocol version (%d).\n",
 			cyapa->gen);
 		return -EINVAL;
@@ -1298,84 +1159,29 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 }
 
 static int cyapa_verify_data_device(struct cyapa *cyapa,
-				union cyapa_reg_data *reg_data)
+				    struct cyapa_reg_data *reg_data)
 {
-	u8 device_status;
-	u8 flag;
-	u8 *reg = (u8 *)reg_data;
-
-	device_status = reg[REG_OP_STATUS];
-	flag = reg[REG_OP_DATA1];
-	if ((device_status & OP_STATUS_SRC) != OP_STATUS_SRC)
+	if ((reg_data->device_status & OP_STATUS_SRC) != OP_STATUS_SRC)
 		return -EINVAL;
 
-	if ((flag & OP_DATA_VALID) != OP_DATA_VALID)
+	if ((reg_data->finger_btn & OP_DATA_VALID) != OP_DATA_VALID)
 		return -EINVAL;
 
-	if ((device_status & OP_STATUS_DEV) != CYAPA_DEV_NORMAL)
+	if ((reg_data->device_status & OP_STATUS_DEV) != CYAPA_DEV_NORMAL)
 		return -EBUSY;
 
 	return 0;
 }
 
-static inline void cyapa_report_fingers(struct input_dev *input, int fingers)
-{
-	input_report_key(input, BTN_TOOL_FINGER, (fingers == 1));
-	input_report_key(input, BTN_TOOL_DOUBLETAP, (fingers == 2));
-	input_report_key(input, BTN_TOOL_TRIPLETAP, (fingers == 3));
-	input_report_key(input, BTN_TOOL_QUADTAP, (fingers > 3));
-}
-
-static void cyapa_parse_gen2_data(struct cyapa *cyapa,
-		struct cyapa_reg_data_gen2 *reg_data,
-		struct cyapa_report_data *report_data)
-{
-	int i;
-
-	/* bit2-middle button; bit1-right button; bit0-left button. */
-	report_data->button = reg_data->relative_flags & OP_DATA_BTN_MASK;
-
-	/* get relative delta X and delta Y. */
-	report_data->rel_deltaX = reg_data->deltax;
-	/* The Y direction of trackpad is opposite of screen. */
-	report_data->rel_deltaY = -reg_data->deltay;
-
-	/* copy fingers touch data */
-	report_data->avg_pressure = reg_data->avg_pressure;
-	report_data->touch_fingers =
-		min(CYAPA_MAX_TOUCHES, (int)reg_data->touch_fingers);
-	for (i = 0; i < report_data->touch_fingers; i++) {
-		report_data->touches[i].x =
-			((reg_data->touches[i].xy & 0xF0) << 4)
-				| reg_data->touches[i].x;
-		report_data->touches[i].y =
-			((reg_data->touches[i].xy & 0x0F) << 8)
-				| reg_data->touches[i].y;
-		report_data->touches[i].pressure = reg_data->touches[i].pressure;
-		report_data->touches[i].tracking_id = -1;
-	}
-
-	/* parse gestures */
-	report_data->gesture_count =
-		(((reg_data->gesture_count) > CYAPA_ONE_TIME_GESTURES) ?
-			CYAPA_ONE_TIME_GESTURES : reg_data->gesture_count);
-	for (i = 0; i < report_data->gesture_count; i++) {
-		report_data->gestures[i].id = reg_data->gesture[i].id;
-		report_data->gestures[i].param1 = reg_data->gesture[i].param1;
-		report_data->gestures[i].param2 = reg_data->gesture[i].param2;
-	}
-}
-
-static void cyapa_parse_gen3_data(struct cyapa *cyapa,
-		struct cyapa_reg_data_gen3 *reg_data,
-		struct cyapa_report_data *report_data)
+static void cyapa_parse_data(struct cyapa *cyapa,
+			     struct cyapa_reg_data *reg_data,
+			     struct cyapa_report_data *report_data)
 {
 	int i;
 	int fingers;
 
 	/* only report left button. */
 	report_data->button = reg_data->finger_btn & OP_DATA_BTN_MASK;
-	report_data->avg_pressure = 0;
 	/* parse number of touching fingers. */
 	fingers = (reg_data->finger_btn >> 4) & 0x0F;
 	report_data->touch_fingers = min(CYAPA_MAX_TOUCHES, fingers);
@@ -1393,7 +1199,6 @@ static void cyapa_parse_gen3_data(struct cyapa *cyapa,
 		report_data->touches[i].tracking_id =
 			reg_data->touches[i].tracking_id;
 	}
-	report_data->gesture_count = 0;
 }
 
 
@@ -1466,83 +1271,16 @@ static void cyapa_send_mtb_event(struct cyapa *cyapa,
 	input_sync(input);
 }
 
-/*
- * for compatible with gen2 and previous firmware
- * that do not support MT-B protocol
- */
-static void cyapa_send_mta_event(struct cyapa *cyapa,
-		struct cyapa_report_data *report_data)
-{
-	int i;
-	struct input_dev *input = cyapa->input;
-
-	/* report raw trackpad data. */
-	for (i = 0; i < report_data->touch_fingers; i++) {
-		input_report_abs(input, ABS_MT_POSITION_X,
-			report_data->touches[i].x);
-		input_report_abs(input, ABS_MT_POSITION_Y,
-			report_data->touches[i].y);
-		input_report_abs(input, ABS_MT_TOUCH_MAJOR,
-			report_data->touches[i].pressure > 0 ?
-				CYAPA_MT_TOUCH_MAJOR : 0);
-		input_report_abs(input, ABS_MT_PRESSURE,
-			report_data->touches[i].pressure);
-		input_mt_sync(input);
-	}
-
-	/*
-	 * report mouse device data.
-	 * always track the first finger,
-	 * when detached multi-finger touched.
-	 */
-	input_report_key(input, BTN_TOUCH, (report_data->touch_fingers > 0));
-	cyapa_report_fingers(input, report_data->touch_fingers);
-
-	input_report_abs(input, ABS_TOOL_WIDTH, 15);
-	input_report_abs(input, ABS_X, report_data->touches[0].x);
-	input_report_abs(input, ABS_Y, report_data->touches[0].y);
-	input_report_abs(input, ABS_PRESSURE, report_data->touches[0].pressure);
-
-	/*
-	 * Workaround for firmware button reporting issue.
-	 * Report any reported button as BTN_LEFT.
-	 */
-	input_report_key(input, BTN_LEFT, report_data->button);
-
-	input_sync(input);
-}
-
-static int cyapa_handle_input_report_data(struct cyapa *cyapa,
-		struct cyapa_report_data *report_data)
-{
-	if (cyapa->gen > CYAPA_GEN2)
-		cyapa_send_mtb_event(cyapa, report_data);
-	else
-		cyapa_send_mta_event(cyapa, report_data);
-
-	return report_data->touch_fingers | report_data->button;
-}
-
 static bool cyapa_get_input(struct cyapa *cyapa)
 {
 	int ret_read_size;
-	int read_length;
-	union cyapa_reg_data reg_data;
-	struct cyapa_reg_data_gen2 *gen2_data;
-	struct cyapa_reg_data_gen3 *gen3_data;
+	struct cyapa_reg_data reg_data;
 	struct cyapa_report_data report_data;
 
 	/* read register data from trackpad. */
-	gen2_data = &reg_data.gen2_data;
-	gen3_data = &reg_data.gen3_data;
-	if (cyapa->gen == CYAPA_GEN2)
-		read_length = (int)sizeof(struct cyapa_reg_data_gen2);
-	else
-		read_length = (int)sizeof(struct cyapa_reg_data_gen3);
-
 	ret_read_size = cyapa_reg_read_block(cyapa,
 					DATA_REG_START_OFFSET,
-					read_length,
+					sizeof(struct cyapa_reg_data),
 					(u8 *)&reg_data);
 	if (ret_read_size < 0)
 		return false;
@@ -1551,15 +1289,13 @@ static bool cyapa_get_input(struct cyapa *cyapa)
 		return false;
 
 	/* process and parse raw data read from Trackpad. */
-	if (cyapa->gen == CYAPA_GEN2)
-		cyapa_parse_gen2_data(cyapa, gen2_data, &report_data);
-	else
-		cyapa_parse_gen3_data(cyapa, gen3_data, &report_data);
+	cyapa_parse_data(cyapa, &reg_data, &report_data);
 
 	cyapa_dump_report(cyapa, &report_data);
 
 	/* report data to input subsystem. */
-	return cyapa_handle_input_report_data(cyapa, &report_data);
+	cyapa_send_mtb_event(cyapa, &report_data);
+	return report_data.touch_fingers | report_data.button;
 }
 
 /* Work Handler */
@@ -1688,19 +1424,14 @@ static int cyapa_create_input_dev(struct cyapa *cyapa)
 	input_set_abs_params(input, ABS_X, 0, cyapa->max_abs_x, 0, 0);
 	input_set_abs_params(input, ABS_Y, 0, cyapa->max_abs_y, 0, 0);
 	input_set_abs_params(input, ABS_PRESSURE, 0, 255, 0, 0);
-	input_set_abs_params(input, ABS_TOOL_WIDTH, 0, 255, 0, 0);
 
 	/* finger position */
 	input_set_abs_params(input, ABS_MT_POSITION_X, 0, cyapa->max_abs_x, 0, 0);
 	input_set_abs_params(input, ABS_MT_POSITION_Y, 0, cyapa->max_abs_y, 0, 0);
 	input_set_abs_params(input, ABS_MT_PRESSURE, 0, 255, 0, 0);
-	if (cyapa->gen > CYAPA_GEN2) {
-		ret = input_mt_init_slots(input, CYAPA_MAX_MT_SLOTS);
-		if (ret < 0)
-			return ret;
-
-	} else
-		input_set_events_per_packet(input, 60);
+	ret = input_mt_init_slots(input, CYAPA_MAX_MT_SLOTS);
+	if (ret < 0)
+		return ret;
 
 	if (cyapa->physical_size_x && cyapa->physical_size_y) {
 		input_abs_set_res(input, ABS_X,
