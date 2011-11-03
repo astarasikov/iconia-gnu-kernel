@@ -291,8 +291,6 @@ struct cyapa {
 	spinlock_t lock;
 	int irq;
 
-	struct cyapa_platform_data *pdata;
-
 	struct cyapa_mt_slot mt_slots[CYAPA_MAX_MT_SLOTS];
 
 	/* read from query data region. */
@@ -1642,7 +1640,6 @@ static struct cyapa *cyapa_create(struct i2c_client *client)
 	if (!cyapa)
 		return NULL;
 
-	cyapa->pdata = client->dev.platform_data;
 	cyapa->gen = CYAPA_GEN3;
 
 	cyapa->client = client;
