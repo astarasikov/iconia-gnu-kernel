@@ -265,7 +265,7 @@ static struct cyapa *global_cyapa;
 
 static int cyapa_get_query_data(struct cyapa *cyapa);
 static int cyapa_reconfig(struct cyapa *cyapa, int boot);
-static int cyapa_determine_firmware_gen(struct cyapa *cyapa);
+static int cyapa_determine_firmware_gen3(struct cyapa *cyapa);
 static int cyapa_create_input_dev(struct cyapa *cyapa);
 static void cyapa_reschedule_work(struct cyapa *cyapa, unsigned long delay);
 
@@ -825,7 +825,7 @@ static long cyapa_misc_ioctl(struct file *file, unsigned int cmd,
 		if (!ioctl_data.buf || ioctl_data.len < 1)
 			return -EINVAL;
 
-		if (cyapa_determine_firmware_gen(cyapa) < 0)
+		if (cyapa_determine_firmware_gen3(cyapa) < 0)
 			return -EINVAL;
 		ioctl_data.len = 1;
 		memset(buf, 0, sizeof(buf));
@@ -963,7 +963,7 @@ ssize_t cyapa_show_protocol_version(struct device *dev,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct cyapa *cyapa = i2c_get_clientdata(client);
-	if (cyapa_determine_firmware_gen(cyapa) < 0)
+	if (cyapa_determine_firmware_gen3(cyapa) < 0)
 		return -EINVAL;
 	return sprintf(buf, "%d\n", cyapa->gen);
 }
@@ -990,75 +990,11 @@ static const struct attribute_group cyapa_sysfs_group = {
  * Cypress i2c trackpad input device driver.
  **************************************************************
 */
-/*
- * this function read product id from trackpad device
- * and use it to verify trackpad firmware protocol
- * is consistent with platform data setting or not.
- */
-static int cyapa_get_and_verify_firmware(struct cyapa *cyapa, u8 *query_data,
-					 unsigned short offset, int length)
-{
-	int loop = 20;
-	int ret_read_size;
-	char unique_str[] = "CYTRA";
-
-	while (loop--) {
-		ret_read_size = cyapa_reg_read_block(cyapa,
-				offset,
-				length,
-				query_data);
-		if (ret_read_size == length)
-			break;
-
-		/*
-		 * When trackpad boots for first time after firmware update,
-		 * it needs to calibrate all sensors, which takes nearly
-		 * 2 seconds. During this calibration period,
-		 * the trackpad will not reply to the block read command.
-		 * This delay ONLY occurs immediately after firmware update.
-		 */
-		msleep(250);
-	}
-	if (loop < 0)
-		return -EIO;  /* i2c bus operation error. */
-
-	if (strncmp(query_data, unique_str, strlen(unique_str)) == 0)
-		return 1;  /* read and verify firmware successfully. */
-	else
-		return 0;  /* unknown firmware query data. */
-}
-
-/*
- * Returns:
- *  0  product_id could be read and starts with "CYTRA", return 0.
- * -1 i2c bus I/O failed or product_id did not match "CYTRA"
- */
-static int cyapa_determine_firmware_gen(struct cyapa *cyapa)
-{
-	int ret;
-	unsigned long flags;
-	u8 query_data[40];
-
-	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-	if (cyapa->fw_work_mode != CYAPA_STREAM_MODE) {
-		/* firmware works in bootloader mode. */
-		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
-		return -EBUSY;
-	}
-	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
-
-	/* verify gen3 protocol by confirming product_id starts with CYTRA */
-	ret = cyapa_get_and_verify_firmware(cyapa, query_data,
-					    REG_OFFSET_QUERY_BASE,
-					    PRODUCT_ID_SIZE);
-	return ret == 1 ? 0 : -1;
-}
-
 static int cyapa_get_query_data(struct cyapa *cyapa)
 {
 	unsigned long flags;
-	u8 query_data[40];
-	int ret_read_size;
+	u8 query_data[QUERY_DATA_SIZE];
+	int ret;
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
 	if (cyapa->fw_work_mode != CYAPA_STREAM_MODE) {
@@ -1068,10 +1004,10 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 	}
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
-	ret_read_size = cyapa_reg_read_block(cyapa, REG_OFFSET_QUERY_BASE,
-					     QUERY_DATA_SIZE, query_data);
-	if (ret_read_size < 0)
-		return ret_read_size;
+	ret = cyapa_reg_read_block(cyapa, REG_OFFSET_QUERY_BASE,
+				   QUERY_DATA_SIZE, query_data);
+	if (ret < 0)
+		return ret;
 
 	cyapa->product_id[0] = query_data[0];
 	cyapa->product_id[1] = query_data[1];
@@ -1108,10 +1044,45 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 	return 0;
 }
 
+/*
+ * determine if device firmware supports protocol generation 3
+ *
+ * Returns:
+ *   -EIO    firmware protocol could be read => no device or in bootloader
+ *   -EINVAL protocol is not GEN3, or product_id doesn't start with "CYTRA"
+ *   0       protocol is GEN3
+ */
+static int cyapa_determine_firmware_gen3(struct cyapa *cyapa)
+{
+	int loop = 8;
+	const char unique_str[] = "CYTRA";
+
+	while (loop--) {
+		if (!cyapa_get_query_data(cyapa))
+			break;
+
+		/*
+		 * When trackpad boots for first time after firmware update,
+		 * it needs to calibrate all sensors, which takes nearly
+		 * 2 seconds. During this calibration period,
+		 * the trackpad will not reply to the block read command.
+		 * This delay ONLY occurs immediately after firmware update.
+		 */
+		msleep(250);
+	}
+	if (loop < 0)
+		return -EIO;  /* i2c bus operation error. */
+
+	if (cyapa->gen != CYAPA_GEN3 || memcmp(cyapa->product_id, unique_str,
+					       sizeof(unique_str)-1))
+		return -EINVAL;
+
+	return 0;
+}
+
 static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 {
 	struct device *dev = &cyapa->client->dev;
-	int ret;
 	unsigned long flags;
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
@@ -1123,18 +1094,10 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/* only support trackpad firmware gen3 or later protocol. */
-	if (cyapa_determine_firmware_gen(cyapa) < 0)
+	if (cyapa_determine_firmware_gen3(cyapa)) {
+		dev_err(dev, "unsupported firmware protocol version (%d) or "
+			"product ID (%s).\n", cyapa->gen, cyapa->product_id);
 		return -EINVAL;
-	if (cyapa->gen < CYAPA_GEN3) {
-		dev_err(dev, "unsupported firmware protocol version (%d).\n",
-			cyapa->gen);
-		return -EINVAL;
-	}
-
-	ret = cyapa_get_query_data(cyapa);
-	if (ret < 0) {
-		dev_err(dev, "Failed to get trackpad query data, %d.\n", ret);
-		return ret;
 	}
 
 	if (boot) {
