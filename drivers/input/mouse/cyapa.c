@@ -33,16 +33,6 @@
 #include <linux/workqueue.h>
 
 
-#define CYAPA_MAX_TOUCHES  5
-/*
- * In the special case, where a finger is removed and makes contact
- * between two packets, there will be two touches for that finger,
- * with different tracking_ids.
- * Thus, the maximum number of slots must be twice the maximum number
- * of fingers.
- */
-#define CYAPA_MAX_MT_SLOTS  (2 * CYAPA_MAX_TOUCHES)
-
 /* commands for read/write registers of Cypress trackpad */
 #define CYAPA_CMD_SOFT_RESET       0x00
 #define CYAPA_CMD_POWER_MODE       0x01
@@ -171,13 +161,6 @@ enum cyapa_detect_status {
 #define CYAPA_DEV_NORMAL  0x03
 
 struct cyapa_touch {
-	int x;
-	int y;
-	int pressure;
-	int tracking_id;
-};
-
-struct cyapa_touch_data {
 	/*
 	 * high bits or x/y position value
 	 * bit 7 - 4: high 4 bits of x position value
@@ -187,13 +170,15 @@ struct cyapa_touch_data {
 	u8 x;  /* low 8 bits of x position value. */
 	u8 y;  /* low 8 bits of y position value. */
 	u8 pressure;
-	/*
-	 * The range of tracking_id is 0 - 15,
-	 * it is incremented every time a finger makes contact
-	 * with the trackpad.
-	 */
-	u8 tracking_id;
-};
+	/* id range is 0 - 15.  It is incremented with every new touch. */
+	u8 id;
+} __packed;
+
+/* The touch.id is used as the MT slot id, thus max MT slot is 16 */
+#define CYAPA_MAX_MT_SLOTS  16
+
+/* CYAPA reports up to 5 touches per packet. */
+#define CYAPA_MAX_TOUCHES  5
 
 struct cyapa_reg_data {
 	/*
@@ -211,21 +196,8 @@ struct cyapa_reg_data {
 	 * bit 0: left mechanism button state if exists
 	 */
 	u8 finger_btn;
-	struct cyapa_touch_data touches[CYAPA_MAX_TOUCHES];
-};
-
-struct cyapa_report_data {
-	u8 button;
-	int touch_fingers;
 	struct cyapa_touch touches[CYAPA_MAX_TOUCHES];
-};
-
-
-struct cyapa_mt_slot {
-	struct cyapa_touch contact;
-	bool touch_state;  /* true: is touched, false: not touched. */
-	bool slot_updated;
-};
+} __packed;
 
 /* The main device structure */
 struct cyapa {
@@ -252,8 +224,6 @@ struct cyapa {
 	u8 adapter_func;
 	bool smbus;
 	bool touchpad_protocol;
-
-	struct cyapa_mt_slot mt_slots[CYAPA_MAX_MT_SLOTS];
 
 	/* read from query data region. */
 	char product_id[16];
@@ -398,31 +368,6 @@ void cyapa_dump_data(struct cyapa *cyapa, size_t length, const u8 *data)
 	}
 }
 #undef BYTE_PER_LINE
-
-void cyapa_dump_report(struct cyapa *cyapa,
-		       const struct cyapa_report_data *report_data)
-{
-	struct device *dev = &cyapa->client->dev;
-	int i;
-
-	dev_dbg(dev, "------------------------------------\n");
-	dev_dbg(dev, "button = 0x%02x\n",
-		report_data->button);
-	dev_dbg(dev, "touch_fingers = %d\n",
-		report_data->touch_fingers);
-	for (i = 0; i < report_data->touch_fingers; i++) {
-		dev_dbg(dev, "touch[%d].x = %d\n",
-			i, report_data->touches[i].x);
-		dev_dbg(dev, "touch[%d].y = %d\n",
-			i, report_data->touches[i].y);
-		dev_dbg(dev, "touch[%d].pressure = %d\n",
-			i, report_data->touches[i].pressure);
-		if (report_data->touches[i].tracking_id != -1)
-			dev_dbg(dev, "touch[%d].tracking_id = %d\n",
-				i, report_data->touches[i].tracking_id);
-	}
-	dev_dbg(dev, "-------------------------------------\n");
-}
 
 static void cyapa_bl_enable_irq(struct cyapa *cyapa)
 {
@@ -1361,142 +1306,51 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 	return 0;
 }
 
-static int cyapa_verify_data_device(struct cyapa *cyapa,
-				    struct cyapa_reg_data *reg_data)
+static void cyapa_get_input(struct cyapa *cyapa)
 {
-	if ((reg_data->device_status & OP_STATUS_SRC) != OP_STATUS_SRC)
-		return -EINVAL;
-
-	if ((reg_data->finger_btn & OP_DATA_VALID) != OP_DATA_VALID)
-		return -EINVAL;
-
-	if ((reg_data->device_status & OP_STATUS_DEV) != CYAPA_DEV_NORMAL)
-		return -EBUSY;
-
-	return 0;
-}
-
-static void cyapa_parse_data(struct cyapa *cyapa,
-			     struct cyapa_reg_data *reg_data,
-			     struct cyapa_report_data *report_data)
-{
-	int i;
-	int fingers;
-
-	/* only report left button. */
-	report_data->button = reg_data->finger_btn & OP_DATA_BTN_MASK;
-	/* parse number of touching fingers. */
-	fingers = (reg_data->finger_btn >> 4) & 0x0F;
-	report_data->touch_fingers = min(CYAPA_MAX_TOUCHES, fingers);
-
-	/* parse data for each touched finger. */
-	for (i = 0; i < report_data->touch_fingers; i++) {
-		report_data->touches[i].x =
-			((reg_data->touches[i].xy & 0xF0) << 4) |
-				reg_data->touches[i].x;
-		report_data->touches[i].y =
-			((reg_data->touches[i].xy & 0x0F) << 8) |
-				reg_data->touches[i].y;
-		report_data->touches[i].pressure =
-			reg_data->touches[i].pressure;
-		report_data->touches[i].tracking_id =
-			reg_data->touches[i].tracking_id;
-	}
-}
-
-
-static int cyapa_find_mt_slot(struct cyapa *cyapa, struct cyapa_touch *contact)
-{
-	int i;
-	int empty_slot = -1;
-
-	for (i = 0; i < CYAPA_MAX_MT_SLOTS; i++) {
-		if ((cyapa->mt_slots[i].contact.tracking_id == contact->tracking_id) &&
-			cyapa->mt_slots[i].touch_state)
-			return i;
-
-		if (!cyapa->mt_slots[i].touch_state && empty_slot == -1)
-			empty_slot = i;
-	}
-
-	return empty_slot;
-}
-
-static void cyapa_update_mt_slots(struct cyapa *cyapa,
-		struct cyapa_report_data *report_data)
-{
-	int i;
-	int slotnum;
-
-	for (i = 0; i < report_data->touch_fingers; i++) {
-		slotnum = cyapa_find_mt_slot(cyapa, &report_data->touches[i]);
-		if (slotnum < 0)
-			continue;
-
-		memcpy(&cyapa->mt_slots[slotnum].contact,
-				&report_data->touches[i],
-				sizeof(struct cyapa_touch));
-		cyapa->mt_slots[slotnum].slot_updated = true;
-		cyapa->mt_slots[slotnum].touch_state = true;
-	}
-}
-
-static void cyapa_send_mtb_event(struct cyapa *cyapa,
-		struct cyapa_report_data *report_data)
-{
-	int i;
-	struct cyapa_mt_slot *slot;
 	struct input_dev *input = cyapa->input;
+	struct cyapa_reg_data data;
+	int i;
+	int num_fingers;
+	unsigned int mask;
 
-	cyapa_update_mt_slots(cyapa, report_data);
+	/* read register data from trackpad. */
+	if (cyapa_read_block(cyapa, CYAPA_CMD_GROUP_DATA, (u8 *)&data) < 0)
+		return;
 
+	if ((data.device_status & OP_STATUS_SRC) != OP_STATUS_SRC ||
+	    (data.device_status & OP_STATUS_DEV) != CYAPA_DEV_NORMAL ||
+	    (data.finger_btn & OP_DATA_VALID) != OP_DATA_VALID) {
+		return;
+	}
+
+	mask = 0;
+	num_fingers = (data.finger_btn >> 4) & 0x0F;
+	for (i = 0; i < num_fingers; i++) {
+		const struct cyapa_touch *touch = &data.touches[i];
+		int slot = touch->id;
+
+		mask |= (1 << slot);
+		input_mt_slot(input, slot);
+		input_mt_report_slot_state(input, MT_TOOL_FINGER, true);
+		input_report_abs(input, ABS_MT_POSITION_X,
+				 ((touch->xy & 0xF0) << 4) | touch->x);
+		input_report_abs(input, ABS_MT_POSITION_Y,
+				 ((touch->xy & 0x0F) << 8) | touch->y);
+		input_report_abs(input, ABS_MT_PRESSURE, touch->pressure);
+	}
+
+	/* Invalidate all unreported slots */
 	for (i = 0; i < CYAPA_MAX_MT_SLOTS; i++) {
-		slot = &cyapa->mt_slots[i];
-		if (!slot->slot_updated)
-			slot->touch_state = false;
-
+		if (mask & (1 << i))
+			continue;
 		input_mt_slot(input, i);
-		input_mt_report_slot_state(input, MT_TOOL_FINGER,
-					   slot->touch_state);
-		if (slot->touch_state) {
-			input_report_abs(input, ABS_MT_POSITION_X,
-					 slot->contact.x);
-			input_report_abs(input, ABS_MT_POSITION_Y,
-					 slot->contact.y);
-			input_report_abs(input, ABS_MT_PRESSURE,
-					 slot->contact.pressure);
-		}
-		slot->slot_updated = false;
+		input_mt_report_slot_state(input, MT_TOOL_FINGER, false);
 	}
 
 	input_mt_report_pointer_emulation(input, true);
-	input_report_key(input, BTN_LEFT, report_data->button);
+	input_report_key(input, BTN_LEFT, data.finger_btn & OP_DATA_BTN_MASK);
 	input_sync(input);
-}
-
-static bool cyapa_get_input(struct cyapa *cyapa)
-{
-	int ret_read_size;
-	struct cyapa_reg_data reg_data;
-	struct cyapa_report_data report_data;
-
-	ret_read_size = cyapa_read_block(cyapa,
-					 CYAPA_CMD_GROUP_DATA,
-					 (u8 *)&reg_data);
-	if (ret_read_size < 0)
-		return false;
-
-	if (cyapa_verify_data_device(cyapa, &reg_data) < 0)
-		return false;
-
-	/* process and parse raw data read from Trackpad. */
-	cyapa_parse_data(cyapa, &reg_data, &report_data);
-
-	cyapa_dump_report(cyapa, &report_data);
-
-	/* report data to input subsystem. */
-	cyapa_send_mtb_event(cyapa, &report_data);
-	return report_data.touch_fingers | report_data.button;
 }
 
 /* Work Handler */
