@@ -1289,29 +1289,6 @@ static void cyapa_close(struct input_dev *input)
 	cancel_delayed_work_sync(&cyapa->dwork);
 }
 
-static struct cyapa *cyapa_create(struct i2c_client *client)
-{
-	struct cyapa *cyapa;
-
-	cyapa = kzalloc(sizeof(struct cyapa), GFP_KERNEL);
-	if (!cyapa)
-		return NULL;
-
-	cyapa->gen = CYAPA_GEN3;
-
-	cyapa->client = client;
-	global_cyapa = cyapa;
-	cyapa->in_bootloader = true;
-	cyapa->misc_open_count = 0;
-	spin_lock_init(&cyapa->miscdev_spinlock);
-	mutex_init(&cyapa->misc_mutex);
-
-	INIT_DELAYED_WORK(&cyapa->dwork, cyapa_work_handler);
-	spin_lock_init(&cyapa->lock);
-
-	return cyapa;
-}
-
 static int cyapa_create_input_dev(struct cyapa *cyapa)
 {
 	struct device *dev = &cyapa->client->dev;
@@ -1541,19 +1518,6 @@ out_probe_err:
 	global_cyapa = NULL;
 }
 
-static int cyapa_probe_detect(struct cyapa *cyapa)
-{
-	/*
-	 * Maybe trackpad device is not connected,
-	 * or firmware is doing sensor calibration,
-	 * it will take max 2 seconds to be completed.
-	 * So use work queue to wait for it ready
-	 * to avoid block system booting or resuming.
-	 */
-	INIT_WORK(&cyapa->detect_work, cyapa_probe_detect_work_handler);
-	return queue_work(cyapa->detect_wq, &cyapa->detect_work);
-}
-
 static void cyapa_resume_detect_work_handler(struct work_struct *work)
 {
 	int ret;
@@ -1614,7 +1578,7 @@ static int cyapa_resume_detect(struct cyapa *cyapa)
 }
 
 static int __devinit cyapa_probe(struct i2c_client *client,
-			       const struct i2c_device_id *dev_id)
+				 const struct i2c_device_id *dev_id)
 {
 	int ret;
 	struct cyapa *cyapa;
@@ -1623,12 +1587,27 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
 		return -EIO;
 
-	cyapa = cyapa_create(client);
+	cyapa = kzalloc(sizeof(struct cyapa), GFP_KERNEL);
 	if (!cyapa) {
 		dev_err(dev, "allocate memory for cyapa failed\n");
 		return -ENOMEM;
 	}
 
+	cyapa->gen = CYAPA_GEN3;
+	cyapa->client = client;
+	global_cyapa = cyapa;
+	cyapa->in_bootloader = true;
+	cyapa->misc_open_count = 0;
+	spin_lock_init(&cyapa->miscdev_spinlock);
+	mutex_init(&cyapa->misc_mutex);
+
+	INIT_DELAYED_WORK(&cyapa->dwork, cyapa_work_handler);
+	spin_lock_init(&cyapa->lock);
+
+	/*
+	 * At boot it can take up to 2 seconds for firmware to complete sensor
+	 * calibration. Probe in a workqueue so as not to block system boot.
+	 */
 	cyapa->detect_wq = create_singlethread_workqueue("cyapa_detect_wq");
 	if (!cyapa->detect_wq) {
 		ret = -ENOMEM;
@@ -1636,7 +1615,8 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 		goto err_mem_free;
 	}
 
-	ret = cyapa_probe_detect(cyapa);
+	INIT_WORK(&cyapa->detect_work, cyapa_probe_detect_work_handler);
+	ret = queue_work(cyapa->detect_wq, &cyapa->detect_work);
 	if (ret < 0) {
 		dev_err(dev, "device detect failed, %d\n", ret);
 		goto err_wq_free;
