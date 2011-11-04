@@ -214,12 +214,10 @@ struct cyapa {
 
 	struct i2c_client	*client;
 	struct input_dev	*input;
-	struct delayed_work dwork;
 	struct work_struct detect_work;
 	struct workqueue_struct *detect_wq;
 	enum cyapa_detect_status detect_status;
-	/* synchronize access to dwork. */
-	spinlock_t lock;
+	struct work_struct work;
 	int irq;
 	u8 adapter_func;
 	bool smbus;
@@ -253,7 +251,6 @@ static int cyapa_get_query_data(struct cyapa *cyapa);
 static int cyapa_reconfig(struct cyapa *cyapa, int boot);
 static int cyapa_determine_firmware_gen3(struct cyapa *cyapa);
 static int cyapa_create_input_dev(struct cyapa *cyapa);
-static void cyapa_reschedule_work(struct cyapa *cyapa, unsigned long delay);
 
 struct cyapa_cmd_len {
 	unsigned char cmd;
@@ -1106,11 +1103,6 @@ static void __exit cyapa_misc_exit(void)
 	misc_deregister(&cyapa_misc_dev);
 }
 
-static void cyapa_update_firmware_dispatch(struct cyapa *cyapa)
-{
-	/* do something here to update trackpad firmware. */
-}
-
 /*
  *******************************************************************
  * below routines export interfaces to sysfs file system.
@@ -1306,17 +1298,29 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 	return 0;
 }
 
-static void cyapa_get_input(struct cyapa *cyapa)
+/* Work Handler */
+static void cyapa_work_handler(struct work_struct *work)
 {
+	struct cyapa *cyapa = container_of(work, struct cyapa, work);
 	struct input_dev *input = cyapa->input;
+	unsigned long flags;
 	struct cyapa_reg_data data;
 	int i;
 	int num_fingers;
 	unsigned int mask;
 
-	/* read register data from trackpad. */
-	if (cyapa_read_block(cyapa, CYAPA_CMD_GROUP_DATA, (u8 *)&data) < 0)
+	/*
+	 * Don't read input while already in or switching to bootloader.
+	 * The spinlock avoids a race when switching into bootloader.
+	 * Note: This ignores the spurious interrupt while switching.
+	 */
+	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
+	if (cyapa->in_bootloader ||
+	    cyapa_read_block(cyapa, CYAPA_CMD_GROUP_DATA, (u8 *)&data) < 0) {
+		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return;
+	}
+	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	if ((data.device_status & OP_STATUS_SRC) != OP_STATUS_SRC ||
 	    (data.device_status & OP_STATUS_DEV) != CYAPA_DEV_NORMAL ||
@@ -1353,60 +1357,10 @@ static void cyapa_get_input(struct cyapa *cyapa)
 	input_sync(input);
 }
 
-/* Work Handler */
-static void cyapa_work_handler(struct work_struct *work)
-{
-	struct cyapa *cyapa = container_of(work, struct cyapa, dwork.work);
-	unsigned long flags;
-
-	/*
-	 * use spinlock to avoid conflict accessing
-	 * when firmware switching into bootloader mode.
-	 */
-	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-	if (cyapa->detect_status != CYAPA_DETECT_DONE_SUCCESS) {
-		/* still detecting trackpad device in work queue. */
-		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
-		return;
-	}
-	if (cyapa->in_bootloader) {
-		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
-		cyapa_update_firmware_dispatch(cyapa);
-	} else {
-		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
-
-		cyapa_get_input(cyapa);
-	}
-}
-
-static void cyapa_reschedule_work(struct cyapa *cyapa, unsigned long delay)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&cyapa->lock, flags);
-
-	/*
-	 * If work is already scheduled then subsequent schedules will not
-	 * change the scheduled time that's why we have to cancel it first.
-	 */
-	__cancel_delayed_work(&cyapa->dwork);
-	/*
-	 * check bl_irq_enable value to avoid mistriggered interrupt
-	 * when switching from operational mode
-	 * to bootloader mode.
-	 */
-	if (cyapa->bl_irq_enable)
-		schedule_delayed_work(&cyapa->dwork, delay);
-
-	spin_unlock_irqrestore(&cyapa->lock, flags);
-}
-
 static irqreturn_t cyapa_irq(int irq, void *dev_id)
 {
 	struct cyapa *cyapa = dev_id;
-
-	cyapa_reschedule_work(cyapa, 0);
-
+	schedule_work(&cyapa->work);
 	return IRQ_HANDLED;
 }
 
@@ -1417,9 +1371,6 @@ static int cyapa_open(struct input_dev *input)
 
 static void cyapa_close(struct input_dev *input)
 {
-	struct cyapa *cyapa = input_get_drvdata(input);
-
-	cancel_delayed_work_sync(&cyapa->dwork);
 }
 
 static u8 cyapa_check_adapter_functionality(struct i2c_client *client)
@@ -1756,8 +1707,7 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 	spin_lock_init(&cyapa->miscdev_spinlock);
 	mutex_init(&cyapa->misc_mutex);
 
-	INIT_DELAYED_WORK(&cyapa->dwork, cyapa_work_handler);
-	spin_lock_init(&cyapa->lock);
+	INIT_WORK(&cyapa->work, cyapa_work_handler);
 
 	/*
 	 * At boot it can take up to 2 seconds for firmware to complete sensor
@@ -1794,10 +1744,10 @@ static int __devexit cyapa_remove(struct i2c_client *client)
 
 	sysfs_remove_group(&client->dev.kobj, &cyapa_sysfs_group);
 
-	cancel_delayed_work_sync(&cyapa->dwork);
-
 	disable_irq_wake(cyapa->irq);
 	free_irq(cyapa->irq, cyapa);
+
+	cancel_work_sync(&cyapa->work);
 
 	if (cyapa->input)
 		input_unregister_device(cyapa->input);
@@ -1829,7 +1779,7 @@ static int cyapa_suspend(struct device *dev)
 	if (cyapa->detect_wq)
 		flush_workqueue(cyapa->detect_wq);
 
-	cancel_delayed_work_sync(&cyapa->dwork);
+	cancel_work_sync(&cyapa->work);
 
 	/* set trackpad device to light sleep mode. */
 	ret = cyapa_set_power_mode(cyapa, PWR_MODE_LIGHT_SLEEP);
