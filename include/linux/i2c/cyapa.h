@@ -21,17 +21,11 @@
 #define CYAPA_I2C_NAME  "cyapa"
 #define CYAPA_MISC_NAME  "cyapa"
 
-/* trackpad device */
-enum cyapa_work_mode {
-	CYAPA_STREAM_MODE = 0x00,
-	CYAPA_BOOTLOAD_MODE = 0x01,
-};
-
 /* APA trackpad firmware generation */
 enum cyapa_gen {
-	CYAPA_GEN1 = 0x01,   /* only one finger supported. */
+	CYAPA_GEN1 = 0x01,  /* only one finger supported. */
 	CYAPA_GEN2 = 0x02,  /* max five fingers supported. */
-	CYAPA_GEN3 = 0x03,  /* support MT-protocol with tracking ID. */
+	CYAPA_GEN3 = 0x03,  /* support MT-protocol B with tracking ID. */
 };
 
 /*

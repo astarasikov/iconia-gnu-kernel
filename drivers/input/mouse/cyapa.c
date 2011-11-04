@@ -144,18 +144,12 @@ enum cyapa_detect_status {
 };
 
 /*
- * APA trackpad device states.
+ * CYAPA trackpad device states.
  * Used in register 0x00, bit1-0, DeviceStatus field.
+ * After trackpad boots, and can report data, it sets this value.
+ * Other values indicate device is in an abnormal state and must be reset.
  */
-enum cyapa_devicestate {
-	CYAPA_DEV_NORMAL = 0x03,
-	/*
-	 * After trackpad booted, and can report data, it should set this value.
-	 * Other values stand for trackpad device is in abnormal state.
-	 * It may need to be reset.
-	 * Other values are defined later if needed.
-	 */
-};
+#define CYAPA_DEV_NORMAL  0x03
 
 struct cyapa_touch {
 	int x;
@@ -225,7 +219,7 @@ struct cyapa {
 	bool irq_enabled;
 	/* indicate interrupt enabled by trackpad device. */
 	bool bl_irq_enable;
-	enum cyapa_work_mode fw_work_mode;
+	bool in_bootloader;
 
 	struct i2c_client	*client;
 	struct input_dev	*input;
@@ -584,7 +578,7 @@ static ssize_t cyapa_misc_write(struct file *file, const char __user *usr_buf,
 }
 
 int cyapa_get_trackpad_run_mode(struct cyapa *cyapa,
-		struct cyapa_trackpad_run_mode *run_mode)
+				struct cyapa_trackpad_run_mode *run_mode)
 {
 	struct device *dev = &cyapa->client->dev;
 	int ret;
@@ -600,7 +594,7 @@ int cyapa_get_trackpad_run_mode(struct cyapa *cyapa,
 		ret = cyapa_reg_read_block(cyapa, 0, BL_HEAD_BYTES, status);
 		if ((ret != BL_HEAD_BYTES) && (tries > 0)) {
 			/*
-			 * maybe, firmware is switching its states,
+			 * maybe firmware is switching its states,
 			 * wait for a moment.
 			 */
 			msleep(300);
@@ -646,7 +640,7 @@ int cyapa_get_trackpad_run_mode(struct cyapa *cyapa,
 }
 
 static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
-		struct cyapa_trackpad_run_mode *run_mode)
+				      struct cyapa_trackpad_run_mode *run_mode)
 {
 	struct device *dev = &cyapa->client->dev;
 	int ret;
@@ -663,8 +657,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		ret = cyapa_reg_write_byte(cyapa, CYAPA_OFFSET_SOFT_RESET,
 					   0x01);
 		if (ret < 0) {
-			dev_err(dev, "send firmware reset cmd failed, %d\n",
-				ret);
+			dev_err(dev, "firmware reset cmd failed, %d\n", ret);
 			cyapa_bl_enable_irq(cyapa);
 			return -EIO;
 		}
@@ -676,8 +669,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_switch_active), bl_switch_active);
 		if (ret != sizeof(bl_switch_active)) {
-			dev_err(dev, "send active switch cmd failed, %d\n",
-				ret);
+			dev_err(dev, "idle to active cmd failed, %d\n", ret);
 			return -EIO;
 		}
 		break;
@@ -688,8 +680,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_switch_idle), bl_switch_idle);
 		if (ret != sizeof(bl_switch_idle)) {
-			dev_err(dev, "send idle switch cmd failed, %d\n",
-				ret);
+			dev_err(dev, "active to idle cmd failed, %d\n", ret);
 			return -EIO;
 		}
 		break;
@@ -699,8 +690,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 		ret = cyapa_reg_write_block(cyapa, 0,
 				sizeof(bl_app_launch), bl_app_launch);
 		if (ret != sizeof(bl_app_launch)) {
-			dev_err(dev, "send applaunch cmd failed, %d\n",
-				ret);
+			dev_err(dev, "idle to app cmd failed, %d\n", ret);
 			return -EIO;
 		}
 
@@ -726,7 +716,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 
 		/* update firmware working mode state in driver. */
 		spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-		cyapa->fw_work_mode = CYAPA_STREAM_MODE;
+		cyapa->in_bootloader = false;
 		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 		/* reconfig and update firmware information. */
@@ -744,7 +734,7 @@ static int cyapa_send_mode_switch_cmd(struct cyapa *cyapa,
 	/* update firmware working mode state in driver. */
 	if (run_mode->rev_cmd != CYAPA_CMD_IDLE_TO_APP) {
 		spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-		cyapa->fw_work_mode = CYAPA_BOOTLOAD_MODE;
+		cyapa->in_bootloader = true;
 		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 	}
 
@@ -997,7 +987,7 @@ static int cyapa_get_query_data(struct cyapa *cyapa)
 	int ret;
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-	if (cyapa->fw_work_mode != CYAPA_STREAM_MODE) {
+	if (cyapa->in_bootloader) {
 		/* firmware is in bootloader mode. */
 		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return -EBUSY;
@@ -1086,7 +1076,7 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 	unsigned long flags;
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-	if (cyapa->fw_work_mode != CYAPA_STREAM_MODE) {
+	if (cyapa->in_bootloader) {
 		/* firmware is in bootloader mode. */
 		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return -EINVAL;
@@ -1264,8 +1254,7 @@ static bool cyapa_get_input(struct cyapa *cyapa)
 /* Work Handler */
 static void cyapa_work_handler(struct work_struct *work)
 {
-	struct cyapa *cyapa =
-		container_of(work, struct cyapa, dwork.work);
+	struct cyapa *cyapa = container_of(work, struct cyapa, dwork.work);
 	unsigned long flags;
 
 	/*
@@ -1278,7 +1267,7 @@ static void cyapa_work_handler(struct work_struct *work)
 		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		return;
 	}
-	if (cyapa->fw_work_mode == CYAPA_BOOTLOAD_MODE) {
+	if (cyapa->in_bootloader) {
 		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 		cyapa_update_firmware_dispatch(cyapa);
 	} else {
@@ -1343,7 +1332,7 @@ static struct cyapa *cyapa_create(struct i2c_client *client)
 
 	cyapa->client = client;
 	global_cyapa = cyapa;
-	cyapa->fw_work_mode = CYAPA_BOOTLOAD_MODE;
+	cyapa->in_bootloader = true;
 	cyapa->misc_open_count = 0;
 	spin_lock_init(&cyapa->miscdev_spinlock);
 	mutex_init(&cyapa->misc_mutex);
@@ -1442,7 +1431,7 @@ static int cyapa_check_exit_bootloader(struct cyapa *cyapa)
 
 		if (run_mode.run_mode == CYAPA_OPERATIONAL_MODE) {
 			spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
-			cyapa->fw_work_mode = CYAPA_STREAM_MODE;
+			cyapa->in_bootloader = false;
 			spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 			break;
 		}
@@ -1507,8 +1496,7 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 {
 	int ret;
 	unsigned long flags;
-	struct cyapa *cyapa =
-		container_of(work, struct cyapa, detect_work);
+	struct cyapa *cyapa = container_of(work, struct cyapa, detect_work);
 	struct i2c_client *client = cyapa->client;
 	struct device *dev = &cyapa->client->dev;
 
@@ -1601,8 +1589,7 @@ static void cyapa_resume_detect_work_handler(struct work_struct *work)
 {
 	int ret;
 	unsigned long flags;
-	struct cyapa *cyapa =
-		container_of(work, struct cyapa, detect_work);
+	struct cyapa *cyapa = container_of(work, struct cyapa, detect_work);
 	struct device *dev = &cyapa->client->dev;
 
 	/*
@@ -1643,7 +1630,7 @@ static int cyapa_resume_detect(struct cyapa *cyapa)
 
 	spin_lock_irqsave(&cyapa->miscdev_spinlock, flags);
 	cyapa->bl_irq_enable = false;
-	cyapa->fw_work_mode = CYAPA_BOOTLOAD_MODE;
+	cyapa->in_bootloader = true;
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	/*
@@ -1669,20 +1656,20 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 
 	cyapa = cyapa_create(client);
 	if (!cyapa) {
-		dev_err(dev, "allocate memory for touch failed.\n");
+		dev_err(dev, "allocate memory for cyapa failed\n");
 		return -ENOMEM;
 	}
 
 	cyapa->detect_wq = create_singlethread_workqueue("cyapa_detect_wq");
 	if (!cyapa->detect_wq) {
 		ret = -ENOMEM;
-		dev_err(dev, "failed to create trackpad detect workqueue.\n");
+		dev_err(dev, "create detect workqueue failed\n");
 		goto err_mem_free;
 	}
 
 	ret = cyapa_probe_detect(cyapa);
 	if (ret < 0) {
-		dev_err(dev, "trackpad device detect failed, %d\n", ret);
+		dev_err(dev, "device detect failed, %d\n", ret);
 		goto err_wq_free;
 	}
 
