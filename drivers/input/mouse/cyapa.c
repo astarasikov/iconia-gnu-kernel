@@ -217,7 +217,6 @@ struct cyapa {
 	struct work_struct detect_work;
 	struct workqueue_struct *detect_wq;
 	enum cyapa_detect_status detect_status;
-	struct work_struct work;
 	int irq;
 	u8 adapter_func;
 	bool smbus;
@@ -1298,10 +1297,9 @@ static int cyapa_reconfig(struct cyapa *cyapa, int boot)
 	return 0;
 }
 
-/* Work Handler */
-static void cyapa_work_handler(struct work_struct *work)
+static irqreturn_t cyapa_irq(int irq, void *dev_id)
 {
-	struct cyapa *cyapa = container_of(work, struct cyapa, work);
+	struct cyapa *cyapa = dev_id;
 	struct input_dev *input = cyapa->input;
 	unsigned long flags;
 	struct cyapa_reg_data data;
@@ -1318,14 +1316,14 @@ static void cyapa_work_handler(struct work_struct *work)
 	if (cyapa->in_bootloader ||
 	    cyapa_read_block(cyapa, CYAPA_CMD_GROUP_DATA, (u8 *)&data) < 0) {
 		spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
-		return;
+		return IRQ_HANDLED;
 	}
 	spin_unlock_irqrestore(&cyapa->miscdev_spinlock, flags);
 
 	if ((data.device_status & OP_STATUS_SRC) != OP_STATUS_SRC ||
 	    (data.device_status & OP_STATUS_DEV) != CYAPA_DEV_NORMAL ||
 	    (data.finger_btn & OP_DATA_VALID) != OP_DATA_VALID) {
-		return;
+		return IRQ_HANDLED;
 	}
 
 	mask = 0;
@@ -1355,12 +1353,7 @@ static void cyapa_work_handler(struct work_struct *work)
 	input_mt_report_pointer_emulation(input, true);
 	input_report_key(input, BTN_LEFT, data.finger_btn & OP_DATA_BTN_MASK);
 	input_sync(input);
-}
 
-static irqreturn_t cyapa_irq(int irq, void *dev_id)
-{
-	struct cyapa *cyapa = dev_id;
-	schedule_work(&cyapa->work);
 	return IRQ_HANDLED;
 }
 
@@ -1552,11 +1545,12 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 
 	cyapa->irq = client->irq;
 	set_irq_type(cyapa->irq, IRQF_TRIGGER_FALLING);
-	ret = request_irq(cyapa->irq,
-			cyapa_irq,
-			0,
-			CYAPA_I2C_NAME,
-			cyapa);
+	ret = request_threaded_irq(cyapa->irq,
+				   NULL,
+				   cyapa_irq,
+				   0,
+				   CYAPA_I2C_NAME,
+				   cyapa);
 	if (ret) {
 		dev_err(dev, "IRQ request failed: %d\n, ", ret);
 		goto out_probe_err;
@@ -1707,8 +1701,6 @@ static int __devinit cyapa_probe(struct i2c_client *client,
 	spin_lock_init(&cyapa->miscdev_spinlock);
 	mutex_init(&cyapa->misc_mutex);
 
-	INIT_WORK(&cyapa->work, cyapa_work_handler);
-
 	/*
 	 * At boot it can take up to 2 seconds for firmware to complete sensor
 	 * calibration. Probe in a workqueue so as not to block system boot.
@@ -1747,8 +1739,6 @@ static int __devexit cyapa_remove(struct i2c_client *client)
 	disable_irq_wake(cyapa->irq);
 	free_irq(cyapa->irq, cyapa);
 
-	cancel_work_sync(&cyapa->work);
-
 	if (cyapa->input)
 		input_unregister_device(cyapa->input);
 
@@ -1778,8 +1768,6 @@ static int cyapa_suspend(struct device *dev)
 
 	if (cyapa->detect_wq)
 		flush_workqueue(cyapa->detect_wq);
-
-	cancel_work_sync(&cyapa->work);
 
 	/* set trackpad device to light sleep mode. */
 	ret = cyapa_set_power_mode(cyapa, PWR_MODE_LIGHT_SLEEP);
