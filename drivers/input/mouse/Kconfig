@@ -329,6 +329,6 @@ config MOUSE_CYAPA
 	  Say y here if you have a Cypress APA I2C Touchpad.
 
 	  To compile this driver as a module, choose M here: the module will be
-	  called cypress_i2c.
+	  called cyapa.
 
 endif
