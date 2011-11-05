@@ -1825,23 +1825,6 @@ static void cyapa_probe_detect_work_handler(struct work_struct *work)
 		goto out_probe_err;
 	}
 
-	/*
-	 * set irq number for interrupt mode.
-	 * normally, polling mode only will be used
-	 * when special platform that do not support slave interrupt.
-	 * or allocate irq number to it failed.
-	 */
-	if (cyapa->pdata->irq_gpio <= 0)
-		cyapa->irq = client->irq ? client->irq : -1;
-	else
-		cyapa->irq = gpio_to_irq(cyapa->pdata->irq_gpio);
-
-	if (cyapa->irq <= 0) {
-		dev_err(dev, "failed to allocate irq\n");
-		ret = -EBUSY;
-		goto out_probe_err;
-	}
-
 	cyapa->irq = client->irq;
 	irq_set_irq_type(cyapa->irq, IRQF_TRIGGER_FALLING);
 	ret = request_irq(cyapa->irq,
