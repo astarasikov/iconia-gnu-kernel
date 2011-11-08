@@ -118,6 +118,7 @@
 #define BL_KEY3 0xC2
 
 #define BL_HEAD_BYTES  16  /* bytes of bootloader head registers. */
+#define BLK_HEAD_BYTES 32
 
 /* Macro for register map group offset. */
 #define CYAPA_REG_MAP_SIZE  256
@@ -790,7 +791,7 @@ int cyapa_get_trackpad_run_mode(struct cyapa *cyapa,
 {
 	struct device *dev = &cyapa->client->dev;
 	int ret;
-	u8 status[BL_HEAD_BYTES];
+	u8 status[BLK_HEAD_BYTES];
 	int tries = 5;
 
 	/* reset to unknown status. */
