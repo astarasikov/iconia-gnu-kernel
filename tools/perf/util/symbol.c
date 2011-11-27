@@ -74,11 +74,13 @@ static void dso__set_sorted_by_name(struct dso *self, enum map_type type)
 
 bool symbol_type__is_a(char symbol_type, enum map_type map_type)
 {
+	symbol_type = toupper(symbol_type);
+
 	switch (map_type) {
 	case MAP__FUNCTION:
 		return symbol_type == 'T' || symbol_type == 'W';
 	case MAP__VARIABLE:
-		return symbol_type == 'D' || symbol_type == 'd';
+		return symbol_type == 'D';
 	default:
 		return false;
 	}
@@ -436,17 +438,10 @@ int kallsyms__parse(const char *filename, void *arg,
 	char *line = NULL;
 	size_t n;
 	int err = -1;
-	u64 prev_start = 0;
-	char prev_symbol_type = 0;
-	char *prev_symbol_name;
 	FILE *file = fopen(filename, "r");
 
 	if (file == NULL)
 		goto out_failure;
-
-	prev_symbol_name = malloc(KSYM_NAME_LEN);
-	if (prev_symbol_name == NULL)
-		goto out_close;
 
 	err = 0;
 
@@ -468,7 +463,7 @@ int kallsyms__parse(const char *filename, void *arg,
 		if (len + 2 >= line_len)
 			continue;
 
-		symbol_type = toupper(line[len]);
+		symbol_type = line[len];
 		len += 2;
 		symbol_name = line + len;
 		len = line_len - len;
@@ -478,24 +473,18 @@ int kallsyms__parse(const char *filename, void *arg,
 			break;
 		}
 
-		if (prev_symbol_type) {
-			u64 end = start;
-			if (end != prev_start)
-				--end;
-			err = process_symbol(arg, prev_symbol_name,
-					     prev_symbol_type, prev_start, end);
-			if (err)
-				break;
-		}
-
-		memcpy(prev_symbol_name, symbol_name, len + 1);
-		prev_symbol_type = symbol_type;
-		prev_start = start;
+		/*
+		 * module symbols are not sorted so we add all
+		 * symbols with zero length and rely on
+		 * symbols__fixup_end() to fix it up.
+		 */
+		err = process_symbol(arg, symbol_name,
+				     symbol_type, start, start);
+		if (err)
+			break;
 	}
 
-	free(prev_symbol_name);
 	free(line);
-out_close:
 	fclose(file);
 	return err;
 
@@ -674,18 +663,20 @@ discard_symbol:		rb_erase(&pos->rb_node, root);
 	return count + moved;
 }
 
-int dso__load_kallsyms(struct dso *self, const char *filename,
+int dso__load_kallsyms(struct dso *dso, const char *filename,
 		       struct map *map, symbol_filter_t filter)
 {
-	if (dso__load_all_kallsyms(self, filename, map) < 0)
+	if (dso__load_all_kallsyms(dso, filename, map) < 0)
 		return -1;
 
-	if (self->kernel == DSO_TYPE_GUEST_KERNEL)
-		self->origin = DSO__ORIG_GUEST_KERNEL;
-	else
-		self->origin = DSO__ORIG_KERNEL;
+	symbols__fixup_end(&dso->symbols[map->type]);
 
-	return dso__split_kallsyms(self, map, filter);
+	if (dso->kernel == DSO_TYPE_GUEST_KERNEL)
+		dso->origin = DSO__ORIG_GUEST_KERNEL;
+	else
+		dso->origin = DSO__ORIG_KERNEL;
+
+	return dso__split_kallsyms(dso, map, filter);
 }
 
 static int dso__load_perf_map(struct dso *self, struct map *map,

@@ -368,8 +368,8 @@ static const struct tegra_emc_table kaen_emc_tables_Nanya_380Mhz[] = {
 			0x00000000,   /* ODT_READ */
 			0x00000083,   /* FBIO_CFG5 */
 			0xe044048b,   /* CFG_DIG_DLL */
-			0x007da010,   /* DLL_XFORM_DQS */
-			0x00000000,   /* DLL_XFORM_QUSE */
+			0x007df010,   /* DLL_XFORM_DQS */
+			0x00064000,   /* DLL_XFORM_QUSE */
 			0x00000000,   /* ZCAL_REF_CNT */
 			0x00000000,   /* ZCAL_WAIT_CNT */
 			0x00000000,   /* AUTO_CAL_INTERVAL */

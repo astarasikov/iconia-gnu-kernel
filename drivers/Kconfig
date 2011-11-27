@@ -118,6 +118,4 @@ source "drivers/platform/Kconfig"
 
 source "drivers/clk/Kconfig"
 
-source "chromeos/drivers/Kconfig"
-
 endmenu

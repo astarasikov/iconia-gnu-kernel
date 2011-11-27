@@ -563,6 +563,7 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 	struct tegra_dc *dc;
 	unsigned long update_mask = GENERAL_ACT_REQ;
 	unsigned long val;
+	unsigned long int_flags = 0;
 	bool update_blend = false;
 	int i;
 
@@ -685,6 +686,12 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 		tegra_dc_writel(dc, val, DC_WIN_WIN_OPTIONS);
 
 		win->dirty = 1;
+
+		if (win->flags & TEGRA_WIN_FLAG_SWAP_ASAP)
+			int_flags |= H_BLANK_INT;
+		else
+			int_flags |= FRAME_END_INT;
+
 	}
 
 	if (update_blend) {
@@ -698,11 +705,11 @@ int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n)
 	tegra_dc_writel(dc, update_mask << 8, DC_CMD_STATE_CONTROL);
 
 	val = tegra_dc_readl(dc, DC_CMD_INT_ENABLE);
-	val |= FRAME_END_INT;
+	val |= int_flags;
 	tegra_dc_writel(dc, val, DC_CMD_INT_ENABLE);
 
 	val = tegra_dc_readl(dc, DC_CMD_INT_MASK);
-	val |= FRAME_END_INT;
+	val |= int_flags;
 	tegra_dc_writel(dc, val, DC_CMD_INT_MASK);
 
 	tegra_dc_writel(dc, update_mask, DC_CMD_STATE_CONTROL);
@@ -1126,19 +1133,32 @@ static irqreturn_t tegra_dc_irq(int irq, void *ptr)
 	unsigned long status;
 	unsigned long val;
 	unsigned long underflow_mask;
+	int completed = 0;
 	int i;
 
 	status = tegra_dc_readl(dc, DC_CMD_INT_STATUS);
 	tegra_dc_writel(dc, status, DC_CMD_INT_STATUS);
 
 	if (status & FRAME_END_INT) {
-		int completed = 0;
 		int dirty = 0;
 
 		val = tegra_dc_readl(dc, DC_CMD_STATE_CONTROL);
 		for (i = 0; i < DC_N_WINDOWS; i++) {
-			if (!(val & (WIN_A_UPDATE << i))) {
-				dc->windows[i].dirty = 0;
+			struct tegra_dc_win *win = &dc->windows[i];
+
+			/*
+			 * Windows with TEGRA_WIN_FLAG_SWAP_ASAP don't use
+			 * FRAME_END.
+			 */
+			if (win->flags & TEGRA_WIN_FLAG_SWAP_ASAP)
+				continue;
+
+			if (win->swap_countdown > 0)
+				win->swap_countdown--;
+
+			if (!win->swap_countdown &&
+			    !(val & (WIN_A_UPDATE << i))) {
+				win->dirty = 0;
 				completed = 1;
 			} else {
 				dirty = 1;
@@ -1149,11 +1169,48 @@ static irqreturn_t tegra_dc_irq(int irq, void *ptr)
 			val = tegra_dc_readl(dc, DC_CMD_INT_ENABLE);
 			val &= ~FRAME_END_INT;
 			tegra_dc_writel(dc, val, DC_CMD_INT_ENABLE);
+
+			val = tegra_dc_readl(dc, DC_CMD_INT_MASK);
+			val &= ~FRAME_END_INT;
+			tegra_dc_writel(dc, val, DC_CMD_INT_MASK);
+		}
+	}
+
+	if (status & H_BLANK_INT) {
+		int dirty = 0;
+
+		val = tegra_dc_readl(dc, DC_CMD_STATE_CONTROL);
+		for (i = 0; i < DC_N_WINDOWS; i++) {
+			struct tegra_dc_win *win = &dc->windows[i];
+
+			/*
+			 * Only windows with TEGRA_WIN_FLAG_SWAP_ASAP use
+			 * H_BLANK_INT.
+			 */
+			if (!(win->flags & TEGRA_WIN_FLAG_SWAP_ASAP))
+				continue;
+
+			if (!(val & (WIN_A_UPDATE << i))) {
+				win->dirty = 0;
+				completed = 1;
+			} else {
+				dirty = 1;
+			}
 		}
 
-		if (completed)
-			wake_up(&dc->wq);
+		if (!dirty) {
+			val = tegra_dc_readl(dc, DC_CMD_INT_ENABLE);
+			val &= ~H_BLANK_INT;
+			tegra_dc_writel(dc, val, DC_CMD_INT_ENABLE);
+
+			val = tegra_dc_readl(dc, DC_CMD_INT_MASK);
+			val &= ~H_BLANK_INT;
+			tegra_dc_writel(dc, val, DC_CMD_INT_MASK);
+		}
 	}
+
+	if (completed)
+		wake_up(&dc->wq);
 
 
 	/*
@@ -1357,8 +1414,7 @@ static int tegra_dc_init(struct tegra_dc *dc)
 	tegra_dc_writel(dc, 0x00202020, DC_DISP_MEM_HIGH_PRIORITY);
 	tegra_dc_writel(dc, 0x00010101, DC_DISP_MEM_HIGH_PRIORITY_TIMER);
 
-	tegra_dc_writel(dc, (FRAME_END_INT |
-			     V_BLANK_INT |
+	tegra_dc_writel(dc, (V_BLANK_INT |
 			     WIN_A_UF_INT |
 			     WIN_B_UF_INT |
 			     WIN_C_UF_INT), DC_CMD_INT_MASK);
@@ -1403,9 +1459,6 @@ static bool _tegra_dc_enable(struct tegra_dc *dc)
 
 	tegra_dc_io_start(dc);
 
-	if (dc->out && dc->out->enable)
-		dc->out->enable();
-
 	tegra_dc_setup_clk(dc, dc->clk);
 
 	clk_enable(dc->clk);
@@ -1419,6 +1472,9 @@ static bool _tegra_dc_enable(struct tegra_dc *dc)
 
 	if (dc->out_ops && dc->out_ops->enable)
 		dc->out_ops->enable(dc);
+
+	if (dc->out && dc->out->enable)
+		dc->out->enable();
 
 	/* force a full blending update */
 	dc->blend.z[0] = -1;
@@ -1449,15 +1505,15 @@ static void _tegra_dc_disable(struct tegra_dc *dc)
 
 	disable_irq(dc->irq);
 
+	if (dc->out && dc->out->disable)
+		dc->out->disable();
+
 	if (dc->out_ops && dc->out_ops->disable)
 		dc->out_ops->disable(dc);
 
 	clk_disable(dc->emc_clk);
 	clk_disable(dc->clk);
 	tegra_dvfs_set_rate(dc->clk, 0);
-
-	if (dc->out && dc->out->disable)
-		dc->out->disable();
 
 	/* flush any pending syncpt waits */
 	for (i = 0; i < dc->n_windows; i++) {

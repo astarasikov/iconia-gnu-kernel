@@ -21,6 +21,7 @@
 #include <linux/i2c.h>
 #include <linux/i2c-tegra.h>
 #include <linux/i2c/atmel_mxt_ts.h>
+#include <linux/i2c/cyapa.h>
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/io.h>
@@ -30,7 +31,6 @@
 #include <linux/platform_data/tegra_usb.h>
 #include <linux/nct1008.h>
 #include <linux/power/bq20z75.h>
-#include <linux/cyapa.h>
 #include <linux/rfkill-gpio.h>
 #include <linux/leds.h>
 #include <linux/leds_pwm.h>
@@ -67,7 +67,8 @@ static void (*legacy_arm_pm_restart)(char mode, const char *cmd);
 static struct plat_serial8250_port debug_uart_platform_data[] = {
 	{
 		/* Memory and IRQ filled in before registration */
-		.flags		= UPF_BOOT_AUTOCONF,
+		.flags		= UPF_BOOT_AUTOCONF | UPF_FIXED_TYPE,
+		.type		= PORT_TEGRA,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
 		.uartclk	= 216000000,
@@ -95,6 +96,7 @@ static __initdata struct tegra_clk_init_table seaboard_clk_init_table[] = {
 	{ "audio_2x",   "audio",        22579200,       false},
 	{ "spdif_out",  "pll_a_out0",   11289600,       false},
 	{ "uartb",      "pll_p",        216000000,      false},
+	{ "uartc",      "pll_c",        600000000,      false},
 	{ "uartd",      "pll_p",        216000000,      false},
 	{ "pwm",        "clk_m",        12000000,       false},
 	{ "blink",      "clk_32k",      32768,          true},
@@ -149,18 +151,6 @@ static struct tegra_ehci_platform_data tegra_ehci_pdata[] = {
 		.power_down_on_bus_suspend = 1,
 		.keep_clock_in_bus_suspend = 1,
 	},
-};
-
-static struct cyapa_platform_data cyapa_i2c_platform_data = {
-	.flag				= 0,
-	.gen				= CYAPA_GEN2,
-	.power_state			= CYAPA_PWR_ACTIVE,
-	.polling_interval_time_active	= CYAPA_POLLING_INTERVAL_TIME_ACTIVE,
-	.polling_interval_time_lowpower	= CYAPA_POLLING_INTERVAL_TIME_LOWPOWER,
-	.active_touch_timeout		= CYAPA_ACTIVE_TOUCH_TIMEOUT,
-	.name				= CYAPA_I2C_NAME,
-	.irq_gpio			= TEGRA_GPIO_CYTP_INT,
-	.report_rate			= CYAPA_REPORT_RATE,
 };
 
 static struct tegra_i2c_platform_data seaboard_i2c1_platform_data = {
@@ -639,9 +629,8 @@ static struct i2c_board_info __initdata ak8975_device = {
 };
 
 static struct i2c_board_info __initdata cyapa_device = {
-	I2C_BOARD_INFO("cypress_i2c_apa", 0x67),
+	I2C_BOARD_INFO(CYAPA_I2C_NAME, 0x67),
 	.irq		= TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CYTP_INT),
-	.platform_data	= &cyapa_i2c_platform_data,
 };
 
 static struct i2c_board_info __initdata mpu3050_device = {
@@ -1171,6 +1160,14 @@ static void __init tegra_kaen_init(void)
 	/* setting skew makes WIFI stable when sdmmc1 runs 48MHz. */
 	tegra_set_clock_readskew("sdmmc1", 8);
 
+	/* change xcvr_setup to 13 to adjust USB driving to pass eye
+	 * diagram test.
+	 * xcvr_effect is only for USB1 to set FUSE_SETUP_SEL to zero
+	 */
+	utmi_phy_config[0].xcvr_effect = 1;
+	utmi_phy_config[0].xcvr_setup = 13;
+	utmi_phy_config[1].xcvr_setup = 13;
+
 	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
 	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];
@@ -1392,11 +1389,11 @@ void __init tegra_common_reserve(void)
 		pr_warn("Cannot reserve first 4K of memory for safety\n");
 
 	/*
-	 * reserve 128MB for carveout, 1368*910*4*2 (=9959040) for fb_size,
+	 * reserve 256MB for carveout, 1368*910*4*2 (=9959040) for fb_size,
 	 * and 0 for fb2_size.
 	 */
 	fb_size = round_up((1368 * 910 * 4 * 2), PAGE_SIZE);
-	tegra_reserve(SZ_128M, fb_size, 0);
+	tegra_reserve(SZ_256M, fb_size, 0);
 }
 
 static const char *seaboard_dt_board_compat[] = {

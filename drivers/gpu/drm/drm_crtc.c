@@ -886,9 +886,6 @@ int drm_mode_group_init(struct drm_device *dev, struct drm_mode_group *group)
 	total_objects += dev->mode_config.num_connector;
 	total_objects += dev->mode_config.num_encoder;
 
-	if (total_objects == 0)
-		return -EINVAL;
-
 	group->id_list = kzalloc(total_objects * sizeof(uint32_t), GFP_KERNEL);
 	if (!group->id_list)
 		return -ENOMEM;
@@ -1113,7 +1110,7 @@ int drm_mode_getresources(struct drm_device *dev, void *data,
 	if (card_res->count_fbs >= fb_count) {
 		copied = 0;
 		fb_id = (uint32_t __user *)(unsigned long)card_res->fb_id_ptr;
-		list_for_each_entry(fb, &file_priv->fbs, head) {
+		list_for_each_entry(fb, &file_priv->fbs, filp_head) {
 			if (put_user(fb->base.id, fb_id + copied)) {
 				ret = -EFAULT;
 				goto out;
@@ -1699,7 +1696,7 @@ int drm_mode_addfb(struct drm_device *dev,
 
 	mutex_lock(&dev->mode_config.mutex);
 
-	/* TODO check buffer is sufficently large */
+	/* TODO check buffer is sufficiently large */
 	/* TODO setup destructor callback */
 
 	fb = dev->mode_config.funcs->fb_create(dev, file_priv, r);
@@ -1750,7 +1747,7 @@ int drm_mode_rmfb(struct drm_device *dev,
 
 	mutex_lock(&dev->mode_config.mutex);
 	obj = drm_mode_object_find(dev, *id, DRM_MODE_OBJECT_FB);
-	/* TODO check that we realy get a framebuffer back. */
+	/* TODO check that we really get a framebuffer back. */
 	if (!obj) {
 		DRM_ERROR("mode invalid framebuffer id\n");
 		ret = -EINVAL;
@@ -2745,3 +2742,36 @@ void drm_mode_config_reset(struct drm_device *dev)
 			connector->funcs->reset(connector);
 }
 EXPORT_SYMBOL(drm_mode_config_reset);
+
+int drm_mode_create_dumb_ioctl(struct drm_device *dev,
+			       void *data, struct drm_file *file_priv)
+{
+	struct drm_mode_create_dumb *args = data;
+
+	if (!dev->driver->dumb_create)
+		return -ENOSYS;
+	return dev->driver->dumb_create(file_priv, dev, args);
+}
+
+int drm_mode_mmap_dumb_ioctl(struct drm_device *dev,
+			     void *data, struct drm_file *file_priv)
+{
+	struct drm_mode_map_dumb *args = data;
+
+	/* call driver ioctl to get mmap offset */
+	if (!dev->driver->dumb_map_offset)
+		return -ENOSYS;
+
+	return dev->driver->dumb_map_offset(file_priv, dev, args->handle, &args->offset);
+}
+
+int drm_mode_destroy_dumb_ioctl(struct drm_device *dev,
+				void *data, struct drm_file *file_priv)
+{
+	struct drm_mode_destroy_dumb *args = data;
+
+	if (!dev->driver->dumb_destroy)
+		return -ENOSYS;
+
+	return dev->driver->dumb_destroy(file_priv, dev, args->handle);
+}
