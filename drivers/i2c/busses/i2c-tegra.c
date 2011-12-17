@@ -722,12 +722,14 @@ static int tegra_i2c_probe(struct platform_device *pdev)
 		i2c_bus->dev = i2c_dev;
 		i2c_bus->mux = plat->bus_mux[i];
 		i2c_bus->mux_len = plat->bus_mux_len[i];
+#ifdef CONFIG_OF
 		if (i2c_dev->dev->of_node) {    /* if there is a device tree node ... */
 			prop = of_get_property(i2c_dev->dev->of_node,
 					"clock-frequency", NULL);
 			if (prop)
 				i2c_bus->bus_clk_rate = be32_to_cpup(prop);
 		} else 
+#endif
 			i2c_bus->bus_clk_rate = plat->bus_clk_rate[i] ?: 100000;
 
 		i2c_set_adapdata(&i2c_bus->adapter, i2c_bus);

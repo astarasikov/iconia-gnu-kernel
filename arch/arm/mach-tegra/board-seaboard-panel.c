@@ -582,7 +582,6 @@ int __init wario_panel_init(void)
 #ifdef CONFIG_MACH_PICASSO
 int __init picasso_panel_init(void)
 {
-	seaboard_panel_gpio_init();
 	seaboard_disp1_out.modes = picasso_panel_modes;
 	seaboard_disp1_pdata.fb = &wario_fb_data;
 	seaboard_backlight_data.pwm_period_ns = 4166667;
@@ -599,7 +598,6 @@ int __init picasso_panel_init(void)
 #ifdef CONFIG_MACH_TF101
 int __init tf101_panel_init(void)
 {
-	seaboard_panel_gpio_init();
 	seaboard_disp1_out.modes = tf101_panel_modes;
 	seaboard_disp1_pdata.fb = &tf101_fb_data;
 	seaboard_backlight_data.pwm_period_ns = 4000000;

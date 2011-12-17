@@ -387,7 +387,7 @@ static struct tegra_gpio_table picasso_gpio_table[] = {
 	{ .gpio = PICASSO_GPIO_HP_DETECT,	.enable = true },
 	{ .gpio = PICASSO_GPIO_MIC_EN_INT,	.enable = true },
 	{ .gpio = TEGRA_GPIO_VENTANA_EN_MIC_EXT,	.enable = true },
-	{ .gpio = TEGRA_GPIO_WM8903_IRQ,	.enable = true },
+	{ .gpio = TEGRA_GPIO_CDC_IRQ,	.enable = true },
 	{ .gpio = TEGRA_GPIO_NCT1008_THERM2_IRQ,	.enable = true },
 	{ .gpio = PICASSO_GPIO_KEY_nVOLUMEUP,	.enable = true },
 	{ .gpio = PICASSO_GPIO_KEY_nVOLUMEDOWN,	.enable = true },

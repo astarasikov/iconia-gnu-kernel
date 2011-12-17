@@ -47,7 +47,6 @@
 #include <mach/iomap.h>
 #include <mach/io.h>
 #include <mach/sdhci.h>
-#include <mach/suspend.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -62,6 +61,7 @@
 #include "fuse.h"
 #include "gpio-names.h"
 #include "wakeups-t2.h"
+#include "pm.h"
 
 /******************************************************************************
  * Debug Serial
@@ -141,12 +141,9 @@ static void __init picasso_usb_init(void) {
 	tegra_ehci1_device.dev.platform_data = &tegra_ehci_pdata[0];
 	tegra_ehci2_device.dev.platform_data = &tegra_ehci_pdata[1];
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci_pdata[2];	
-	tegra_otg_device.dev.platform_data = &tegra_ehci1_device;
 
-	platform_device_register(&tegra_udc_device);
 	platform_device_register(&tegra_ehci2_device);
 	
-	//platform_device_register(&tegra_otg_device);
 	platform_device_register(&tegra_ehci3_device);
 }
 /******************************************************************************
@@ -362,7 +359,7 @@ static struct wm8903_platform_data picasso_wm8903_pdata = {
 
 static struct i2c_board_info __initdata wm8903_device = {
 	I2C_BOARD_INFO("wm8903", 0x1a),
-	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_WM8903_IRQ),
+	.irq = TEGRA_GPIO_TO_IRQ(TEGRA_GPIO_CDC_IRQ),
 	.platform_data = &picasso_wm8903_pdata,
 };
 
@@ -450,7 +447,6 @@ static struct nct1008_platform_data ventana_nct1008_pdata = {
 	.shutdown_ext_limit = 85,
 	.shutdown_local_limit = 90,
 	.throttling_ext_limit = 65,
-	.alarm_fn = tegra_throttling_enable,
 };
 
 static struct i2c_board_info __initdata picasso_i2c4_board_info[] = {
@@ -484,9 +480,6 @@ static void __init picasso_sensors_init(void) {
 	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "nct1008");
 	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
 	
-	//The i2c driver will request the gpio.. uhh..
-	tegra_gpio_enable(PICASSO_GPIO_AKM8975_IRQ);
-
 	if(machine_is_picasso())
 		i2c_register_board_info(2, &picasso_ec, 1);
 
@@ -615,16 +608,8 @@ static struct tegra_suspend_platform_data picasso_suspend_data = {
 	.suspend_mode = TEGRA_SUSPEND_LP0,
 	.core_timer = 0x7e7e,
 	.core_off_timer = 0xf,
-	.separate_req = true,
 	.corereq_high = false,
 	.sysclkreq_high = true,
-	.wake_enb =
-		TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_GPIO_PC7 | TEGRA_WAKE_USB1_VBUS |
-		TEGRA_WAKE_GPIO_PV2 | TEGRA_WAKE_GPIO_PS0,
-	.wake_high = TEGRA_WAKE_GPIO_PC7,
-	.wake_low = TEGRA_WAKE_GPIO_PV2,
-	.wake_any =
-		TEGRA_WAKE_GPIO_PV3 | TEGRA_WAKE_USB1_VBUS | TEGRA_WAKE_GPIO_PS0,
 };
 
 static void __init picasso_suspend_init(void) {
@@ -643,7 +628,6 @@ static struct platform_device *picasso_devices[] __initdata = {
 	&tegra_uartc_device,
 	&tegra_pmu_device,
 	&tegra_gart_device,
-	&tegra_aes_device,
 	&tegra_avp_device,
 	&picasso_keys_device,
 	&tegra_i2s_device1,
