@@ -55,7 +55,8 @@ struct se_tmr_req *core_tmr_alloc_req(
 {
 	struct se_tmr_req *tmr;
 
-	tmr = kmem_cache_zalloc(se_tmr_req_cache, GFP_KERNEL);
+	tmr = kmem_cache_zalloc(se_tmr_req_cache, (in_interrupt()) ?
+					GFP_ATOMIC : GFP_KERNEL);
 	if (!(tmr)) {
 		printk(KERN_ERR "Unable to allocate struct se_tmr_req\n");
 		return ERR_PTR(-ENOMEM);
@@ -74,10 +75,16 @@ void core_tmr_release_req(
 {
 	struct se_device *dev = tmr->tmr_dev;
 
+	if (!dev) {
+		kmem_cache_free(se_tmr_req_cache, tmr);
+		return;
+	}
+
 	spin_lock(&dev->se_tmr_lock);
 	list_del(&tmr->tmr_list);
-	kmem_cache_free(se_tmr_req_cache, tmr);
 	spin_unlock(&dev->se_tmr_lock);
+
+	kmem_cache_free(se_tmr_req_cache, tmr);
 }
 
 static void core_tmr_handle_tas_abort(
@@ -282,6 +289,9 @@ int core_tmr_lun_reset(
 
 			atomic_set(&task->task_active, 0);
 			atomic_set(&task->task_stop, 0);
+		} else {
+			if (atomic_read(&task->task_execute_queue) != 0)
+				transport_remove_task_from_execute_queue(task, dev);
 		}
 		__transport_stop_task_timer(task, &flags);
 
@@ -301,6 +311,7 @@ int core_tmr_lun_reset(
 			DEBUG_LR("LUN_RESET: got t_transport_active = 1 for"
 				" task: %p, t_fe_count: %d dev: %p\n", task,
 				fe_count, dev);
+			atomic_set(&T_TASK(cmd)->t_transport_aborted, 1);
 			spin_unlock_irqrestore(&T_TASK(cmd)->t_state_lock,
 						flags);
 			core_tmr_handle_tas_abort(tmr_nacl, cmd, tas, fe_count);
@@ -310,6 +321,7 @@ int core_tmr_lun_reset(
 		}
 		DEBUG_LR("LUN_RESET: Got t_transport_active = 0 for task: %p,"
 			" t_fe_count: %d dev: %p\n", task, fe_count, dev);
+		atomic_set(&T_TASK(cmd)->t_transport_aborted, 1);
 		spin_unlock_irqrestore(&T_TASK(cmd)->t_state_lock, flags);
 		core_tmr_handle_tas_abort(tmr_nacl, cmd, tas, fe_count);
 
@@ -393,9 +405,9 @@ int core_tmr_lun_reset(
 		printk(KERN_INFO "LUN_RESET: SCSI-2 Released reservation\n");
 	}
 
-	spin_lock(&dev->stats_lock);
+	spin_lock_irq(&dev->stats_lock);
 	dev->num_resets++;
-	spin_unlock(&dev->stats_lock);
+	spin_unlock_irq(&dev->stats_lock);
 
 	DEBUG_LR("LUN_RESET: %s for [%s] Complete\n",
 			(preempt_and_abort_list) ? "Preempt" : "TMR",

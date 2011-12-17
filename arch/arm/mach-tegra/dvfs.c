@@ -18,6 +18,7 @@
 
 #include <linux/kernel.h>
 #include <linux/clk.h>
+#include <linux/clkdev.h>
 #include <linux/debugfs.h>
 #include <linux/init.h>
 #include <linux/list.h>
@@ -28,8 +29,6 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/delay.h>
-
-#include <asm/clkdev.h>
 
 #include <mach/clk.h>
 
@@ -198,12 +197,11 @@ static int dvfs_rail_connect_to_regulator(struct dvfs_rail *rail)
 	struct regulator *reg;
 	int ret;
 
-	if (rail->reg)
-		return 0;
-
-	reg = regulator_get(NULL, rail->reg_id);
-	if (IS_ERR(reg))
-		return -EINVAL;
+	if (!rail->reg) {
+		reg = regulator_get(NULL, rail->reg_id);
+		if (IS_ERR(reg))
+			return -EINVAL;
+	}
 
 	rail->reg = reg;
 

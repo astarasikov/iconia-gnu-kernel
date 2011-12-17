@@ -1,0 +1,16 @@
+/dts-v1/;
+
+/include/ "tegra20.dtsi"
+
+/ {
+        model = "Google Asymptote";
+        compatible = "google,asymptote", "nvidia,tegra20";
+
+	sdhci@c8000600 {
+		status = "ok";
+		wlan {
+			compatible = "atheros,ath6kl";
+			atheros,board-id = "SD32";
+		};
+	};
+};

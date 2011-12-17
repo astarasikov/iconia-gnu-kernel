@@ -47,9 +47,11 @@
 #define   USB_PORTSC1_CCS	(1 << 0)
 
 #define USB_SUSP_CTRL		0x400
+#define   USB_WAKE_ON_RESUME_EN		(1 << 2)
 #define   USB_WAKE_ON_CNNT_EN_DEV	(1 << 3)
 #define   USB_WAKE_ON_DISCON_EN_DEV	(1 << 4)
 #define   USB_SUSP_CLR		(1 << 5)
+#define   USB_CLKEN             (1 << 6)
 #define   USB_PHY_CLK_VALID	(1 << 7)
 #define   UTMIP_RESET			(1 << 11)
 #define   UHSIC_RESET			(1 << 11)
@@ -90,6 +92,7 @@
 #define   UTMIP_FORCE_PD_POWERDOWN		(1 << 14)
 #define   UTMIP_FORCE_PD2_POWERDOWN		(1 << 16)
 #define   UTMIP_FORCE_PDZI_POWERDOWN		(1 << 18)
+#define   UTMIP_XCVR_LSBIAS_SEL			(1 << 21)
 #define   UTMIP_XCVR_HSSLEW_MSB(x)		(((x) & 0x7f) << 25)
 
 #define UTMIP_BIAS_CFG0		0x80c
@@ -148,6 +151,7 @@ struct tegra_xtal_freq {
 	u8 active_delay;
 	u8 xtal_freq_count;
 	u16 debounce;
+	u8 pdtrk_count;
 };
 
 static const struct tegra_xtal_freq tegra_freq_table[] = {
@@ -158,6 +162,7 @@ static const struct tegra_xtal_freq tegra_freq_table[] = {
 		.active_delay = 0x04,
 		.xtal_freq_count = 0x76,
 		.debounce = 0x7530,
+		.pdtrk_count = 5,
 	},
 	{
 		.freq = 13000000,
@@ -166,6 +171,7 @@ static const struct tegra_xtal_freq tegra_freq_table[] = {
 		.active_delay = 0x05,
 		.xtal_freq_count = 0x7F,
 		.debounce = 0x7EF4,
+		.pdtrk_count = 5,
 	},
 	{
 		.freq = 19200000,
@@ -174,6 +180,7 @@ static const struct tegra_xtal_freq tegra_freq_table[] = {
 		.active_delay = 0x06,
 		.xtal_freq_count = 0xBB,
 		.debounce = 0xBB80,
+		.pdtrk_count = 7,
 	},
 	{
 		.freq = 26000000,
@@ -182,6 +189,7 @@ static const struct tegra_xtal_freq tegra_freq_table[] = {
 		.active_delay = 0x09,
 		.xtal_freq_count = 0xFE,
 		.debounce = 0xFDE8,
+		.pdtrk_count = 9,
 	},
 };
 
@@ -192,8 +200,8 @@ static struct tegra_utmip_config utmip_default[] = {
 		.elastic_limit = 16,
 		.term_range_adj = 6,
 		.xcvr_setup = 9,
-		.xcvr_lsfslew = 1,
-		.xcvr_lsrslew = 1,
+		.xcvr_lsfslew = 2,
+		.xcvr_lsrslew = 2,
 	},
 	[2] = {
 		.hssync_start_delay = 9,
@@ -209,6 +217,11 @@ static struct tegra_utmip_config utmip_default[] = {
 static inline bool phy_is_ulpi(struct tegra_usb_phy *phy)
 {
 	return (phy->instance == 1);
+}
+
+static inline bool phy_is_utmi(struct tegra_usb_phy *phy)
+{
+	return (phy->instance != 1);
 }
 
 static int utmip_pad_open(struct tegra_usb_phy *phy)
@@ -286,9 +299,47 @@ static int utmip_pad_power_off(struct tegra_usb_phy *phy)
 	return 0;
 }
 
+void utmi_phy_vbus_on(struct tegra_usb_phy *phy)
+{
+	struct tegra_utmip_config *config = phy->config;
+
+	if (config->vbus_gpio) {
+		/*
+		 * For those platforms vbus_en and oc are shared, we
+		 * need to change that gpio back to input signal
+		 * for handling the over current event.
+		 */
+		if (config->shared_pin_vbus_en_oc)
+			gpio_direction_input(config->vbus_gpio);
+		else
+			gpio_set_value(config->vbus_gpio, 1);
+	}
+}
+
+void utmi_phy_vbus_off(struct tegra_usb_phy *phy)
+{
+	struct tegra_utmip_config *config = phy->config;
+
+	if (config->vbus_gpio) {
+		/*
+		 * For those platforms vbus_en and oc are shared, the default
+		 * state of the signal should be logic '1' meaning it works
+		 * as host port and the over current event should be active
+		 * low. In order to turn off vbus in suspend and also support
+		 * over current event in USB working state, that gpio direction
+		 * should be programmed as input signal except when turning off
+		 * vbus in suspend.
+		 */
+		if (config->shared_pin_vbus_en_oc)
+			gpio_direction_output(config->vbus_gpio, 0);
+		else
+			gpio_set_value(config->vbus_gpio, 0);
+	}
+}
+
 static int utmi_wait_register(void __iomem *reg, u32 mask, u32 result)
 {
-	unsigned long timeout = 2000;
+	unsigned long timeout = 2500;
 	do {
 		if ((readl(reg) & mask) == result)
 			return 0;
@@ -302,6 +353,10 @@ static void utmi_phy_clk_disable(struct tegra_usb_phy *phy)
 {
 	unsigned long val;
 	void __iomem *base = phy->regs;
+
+	val = readl(base + USB_SUSP_CTRL);
+	val |= USB_WAKE_ON_RESUME_EN;
+	writel(val, base + USB_SUSP_CTRL);
 
 	if (phy->instance == 0) {
 		val = readl(base + USB_SUSP_CTRL);
@@ -349,7 +404,7 @@ static void utmi_phy_clk_enable(struct tegra_usb_phy *phy)
 	}
 
 	if (utmi_wait_register(base + USB_SUSP_CTRL, USB_PHY_CLK_VALID,
-						     USB_PHY_CLK_VALID))
+						     USB_PHY_CLK_VALID) < 0)
 		pr_err("%s: timeout waiting for phy to stabilize\n", __func__);
 }
 
@@ -370,7 +425,7 @@ static int utmi_phy_power_on(struct tegra_usb_phy *phy)
 	}
 
 	val = readl(base + UTMIP_TX_CFG0);
-	val &= ~UTMIP_FS_PREABMLE_J;
+	val |= UTMIP_FS_PREABMLE_J;
 	writel(val, base + UTMIP_TX_CFG0);
 
 	val = readl(base + UTMIP_HSRX_CFG0);
@@ -414,10 +469,10 @@ static int utmi_phy_power_on(struct tegra_usb_phy *phy)
 	utmip_pad_power_on(phy);
 
 	val = readl(base + UTMIP_XCVR_CFG0);
-	val &= ~(UTMIP_FORCE_PD_POWERDOWN | UTMIP_FORCE_PD2_POWERDOWN |
-		 UTMIP_FORCE_PDZI_POWERDOWN | UTMIP_XCVR_SETUP(~0) |
-		 UTMIP_XCVR_LSFSLEW(~0) | UTMIP_XCVR_LSRSLEW(~0) |
-		 UTMIP_XCVR_HSSLEW_MSB(~0));
+	val &= ~(UTMIP_XCVR_LSBIAS_SEL | UTMIP_FORCE_PD_POWERDOWN |
+		 UTMIP_FORCE_PD2_POWERDOWN | UTMIP_FORCE_PDZI_POWERDOWN |
+		 UTMIP_XCVR_SETUP(~0) | UTMIP_XCVR_LSFSLEW(~0) |
+		 UTMIP_XCVR_LSRSLEW(~0) | UTMIP_XCVR_HSSLEW_MSB(~0));
 	val |= UTMIP_XCVR_SETUP(config->xcvr_setup);
 	val |= UTMIP_XCVR_LSFSLEW(config->xcvr_lsfslew);
 	val |= UTMIP_XCVR_LSRSLEW(config->xcvr_lsrslew);
@@ -430,17 +485,21 @@ static int utmi_phy_power_on(struct tegra_usb_phy *phy)
 	writel(val, base + UTMIP_XCVR_CFG1);
 
 	val = readl(base + UTMIP_BAT_CHRG_CFG0);
-	val &= ~UTMIP_PD_CHRG;
+	if (phy->mode == TEGRA_USB_PHY_MODE_HOST)
+		val |= UTMIP_PD_CHRG;
+	else
+		val &= ~UTMIP_PD_CHRG;
 	writel(val, base + UTMIP_BAT_CHRG_CFG0);
 
 	val = readl(base + UTMIP_BIAS_CFG1);
 	val &= ~UTMIP_BIAS_PDTRK_COUNT(~0);
-	val |= UTMIP_BIAS_PDTRK_COUNT(0x5);
+	val |= UTMIP_BIAS_PDTRK_COUNT(phy->freq->pdtrk_count);
 	writel(val, base + UTMIP_BIAS_CFG1);
 
 	if (phy->instance == 0) {
 		val = readl(base + UTMIP_SPARE_CFG0);
-		if (phy->mode == TEGRA_USB_PHY_MODE_DEVICE)
+		if (phy->mode == TEGRA_USB_PHY_MODE_DEVICE ||
+		    config->xcvr_effect)
 			val &= ~FUSE_SETUP_SEL;
 		else
 			val |= FUSE_SETUP_SEL;
@@ -448,6 +507,10 @@ static int utmi_phy_power_on(struct tegra_usb_phy *phy)
 	}
 
 	if (phy->instance == 2) {
+		val = readl(base + UTMIP_SPARE_CFG0);
+		val |= FUSE_SETUP_SEL;
+		writel(val, base + UTMIP_SPARE_CFG0);
+
 		val = readl(base + USB_SUSP_CTRL);
 		val |= UTMIP_PHY_ENABLE;
 		writel(val, base + USB_SUSP_CTRL);
@@ -501,9 +564,11 @@ static void utmi_phy_power_off(struct tegra_usb_phy *phy)
 		writel(val, base + UTMIP_XCVR_CFG0);
 	}
 
-	val = readl(base + UTMIP_BAT_CHRG_CFG0);
-	val |= UTMIP_PD_CHRG;
-	writel(val, base + UTMIP_BAT_CHRG_CFG0);
+	if (phy->mode == TEGRA_USB_PHY_MODE_DEVICE) {
+		val = readl(base + UTMIP_BAT_CHRG_CFG0);
+		val |= UTMIP_PD_CHRG;
+		writel(val, base + UTMIP_BAT_CHRG_CFG0);
+	}
 
 	val = readl(base + UTMIP_XCVR_CFG1);
 	val |= UTMIP_FORCE_PDDISC_POWERDOWN | UTMIP_FORCE_PDCHRP_POWERDOWN |
@@ -579,13 +644,13 @@ static int ulpi_phy_power_on(struct tegra_usb_phy *phy)
 	 * "disconnected" and cause trouble on later resume.
 	 */
 	if (!phy->ulpi_initialized) {
+		clk_enable(phy->clk);
 		gpio_direction_output(config->reset_gpio, 0);
 		udelay(1);
 		gpio_direction_output(config->reset_gpio, 1);
+		/* Wait Tstart max. 2.37 ms after RESET# is deasserted */
+		usleep_range(2370, 3000);
 	}
-
-	clk_enable(phy->clk);
-	msleep(1);
 
 	val = readl(base + USB_SUSP_CTRL);
 	val |= UHSIC_RESET;
@@ -597,6 +662,21 @@ static int ulpi_phy_power_on(struct tegra_usb_phy *phy)
 
 	val = readl(base + USB_SUSP_CTRL);
 	val |= ULPI_PHY_ENABLE;
+	writel(val, base + USB_SUSP_CTRL);
+
+	val = readl(base + USB_SUSP_CTRL);
+	val |= USB_SUSP_CLR;
+	writel(val, base + USB_SUSP_CTRL);
+
+	if (utmi_wait_register(base + USB_SUSP_CTRL, USB_PHY_CLK_VALID,
+						     USB_PHY_CLK_VALID) < 0)
+		pr_err("%s: timeout waiting for phy to stabilize\n", __func__);
+
+	if (utmi_wait_register(base + USB_SUSP_CTRL, USB_CLKEN, USB_CLKEN) < 0)
+		pr_err("%s: timeout waiting for AHB clock\n", __func__);
+
+	val = readl(base + USB_SUSP_CTRL);
+	val &= ~USB_SUSP_CLR;
 	writel(val, base + USB_SUSP_CTRL);
 
 	val = 0;
@@ -640,7 +720,11 @@ static int ulpi_phy_power_on(struct tegra_usb_phy *phy)
 	val = readl(base + USB_SUSP_CTRL);
 	val &= ~USB_SUSP_CLR;
 	writel(val, base + USB_SUSP_CTRL);
-	udelay(1);
+
+	/* Wait for ULPI PHY clock to be valid */
+	if (utmi_wait_register(base + USB_SUSP_CTRL, USB_PHY_CLK_VALID,
+	     USB_PHY_CLK_VALID))
+		pr_err("%s: timeout waiting for phy to stabilize\n", __func__);
 
 	val = readl(base + USB_PORTSC1);
 	val |= USB_PORTSC1_WKOC | USB_PORTSC1_WKDS | USB_PORTSC1_WKCN;
@@ -653,18 +737,23 @@ static void ulpi_phy_power_off(struct tegra_usb_phy *phy)
 	unsigned long val;
 	void __iomem *base = phy->regs;
 
-	/* Clear WKCN/WKDS/WKOC wake-on events that can cause the USB
+	/* Clear WKDS/WKOC wake-on events that can cause the USB
 	 * Controller to immediately bring the ULPI PHY out of low power.
+	 * Don't clear USB_PORTSC1_WKCN, it may be set by upper layer driver.
+	 * We need it to wake up PHY from suspend state if device is connected.
+	 * So .bus_resume function in ehci-tegra.c can be called to resume bus.
 	 * Set PHCD bit for PHY to enter low power mode
 	 * to keep current line status as "connected" on D+, D-
 	 * instead of pulling the reset pin of PHY chip to save power.
 	 */
 	val = readl(base + USB_PORTSC1);
-	val &= ~(USB_PORTSC1_WKOC | USB_PORTSC1_WKDS | USB_PORTSC1_WKCN);
+	val &= ~(USB_PORTSC1_WKOC | USB_PORTSC1_WKDS);
 	val |= USB_PORTSC1_PHCD;
 	writel(val, base + USB_PORTSC1);
 
-	clk_disable(phy->clk);
+	/* Wait for ULPI PHY to be suspended */
+	if (utmi_wait_register(base + USB_SUSP_CTRL, USB_PHY_CLK_VALID, 0) < 0)
+		pr_err("%s: timeout waiting for phy to stabilize\n", __func__);
 }
 
 struct tegra_usb_phy *tegra_usb_phy_open(int instance, void __iomem *regs,
@@ -762,6 +851,50 @@ void tegra_usb_phy_power_off(struct tegra_usb_phy *phy)
 		utmi_phy_power_off(phy);
 }
 
+void tegra_usb_phy_utmi_vbus_init(struct tegra_utmip_config *utmi_config,
+					const char *label)
+{
+	int gpio_status;
+
+	gpio_status = gpio_request(utmi_config->vbus_gpio, label);
+	if (gpio_status < 0) {
+		pr_err("%s request GPIO FAILED\n", label);
+		goto vbus_gpio_init_exit;
+	}
+
+	if (utmi_config->shared_pin_vbus_en_oc)
+		gpio_status = gpio_direction_input(utmi_config->vbus_gpio);
+	else
+		gpio_status = gpio_direction_output(utmi_config->vbus_gpio, 1);
+
+	if (gpio_status < 0) {
+		pr_err("%s request GPIO DIRECTION FAILED\n", label);
+		gpio_free(utmi_config->vbus_gpio);
+		goto vbus_gpio_init_exit;
+	}
+
+	if (!utmi_config->shared_pin_vbus_en_oc)
+		gpio_set_value(utmi_config->vbus_gpio, 1);
+
+vbus_gpio_init_exit:
+	if (gpio_status < 0) {
+		WARN_ON(1);
+		utmi_config->vbus_gpio = 0;
+	}
+}
+
+void tegra_usb_phy_vbus_on(struct tegra_usb_phy *phy)
+{
+	if (phy_is_utmi(phy))
+		utmi_phy_vbus_on(phy);
+}
+
+void tegra_usb_phy_vbus_off(struct tegra_usb_phy *phy)
+{
+	if (phy_is_utmi(phy))
+		utmi_phy_vbus_off(phy);
+}
+
 void tegra_usb_phy_preresume(struct tegra_usb_phy *phy)
 {
 	if (!phy_is_ulpi(phy))
@@ -801,8 +934,10 @@ void tegra_usb_phy_clk_enable(struct tegra_usb_phy *phy)
 
 void tegra_usb_phy_close(struct tegra_usb_phy *phy)
 {
-	if (phy_is_ulpi(phy))
+	if (phy_is_ulpi(phy)) {
+		clk_disable(phy->clk);
 		clk_put(phy->clk);
+	}
 	else
 		utmip_pad_close(phy);
 	clk_disable(phy->pll_u);

@@ -1,7 +1,7 @@
 /* bnx2x_init.h: Broadcom Everest network driver.
  *               Structures and macroes needed during the initialization.
  *
- * Copyright (c) 2007-2009 Broadcom Corporation
+ * Copyright (c) 2007-2011 Broadcom Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -241,7 +241,7 @@ static const struct {
 	/* Block IGU, MISC, PXP and PXP2 parity errors as long as we don't
 	 * want to handle "system kill" flow at the moment.
 	 */
-	BLOCK_PRTY_INFO(PXP, 0x3ffffff, 0x3ffffff, 0x3ffffff, 0x3ffffff),
+	BLOCK_PRTY_INFO(PXP, 0x7ffffff, 0x3ffffff, 0x3ffffff, 0x7ffffff),
 	BLOCK_PRTY_INFO_0(PXP2,	0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff),
 	BLOCK_PRTY_INFO_1(PXP2,	0x7ff, 0x7f, 0x7f, 0x7ff),
 	BLOCK_PRTY_INFO(HC, 0x7, 0x7, 0x7, 0),

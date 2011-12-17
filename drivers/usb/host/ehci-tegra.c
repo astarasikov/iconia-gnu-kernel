@@ -25,6 +25,9 @@
 
 #define TEGRA_USB_DMA_ALIGN 32
 
+#define PORT_SPEED_MASK		(3 << 26)
+#define PORT_SPEED_RESERVED	(3 << 26)
+
 struct tegra_ehci_hcd {
 	struct ehci_hcd *ehci;
 	struct tegra_usb_phy *phy;
@@ -35,6 +38,7 @@ struct tegra_ehci_hcd {
 	int bus_suspended;
 	int port_resuming;
 	int power_down_on_bus_suspend;
+	int keep_clock_in_bus_suspend;
 	enum tegra_usb_phy_port_speed port_speed;
 };
 
@@ -43,7 +47,8 @@ static void tegra_ehci_power_up(struct usb_hcd *hcd)
 	struct tegra_ehci_hcd *tegra = dev_get_drvdata(hcd->self.controller);
 
 	clk_enable(tegra->emc_clk);
-	clk_enable(tegra->clk);
+	if (!tegra->keep_clock_in_bus_suspend)
+		clk_enable(tegra->clk);
 	tegra_usb_phy_power_on(tegra->phy);
 	tegra->host_resumed = 1;
 }
@@ -54,7 +59,8 @@ static void tegra_ehci_power_down(struct usb_hcd *hcd)
 
 	tegra->host_resumed = 0;
 	tegra_usb_phy_power_off(tegra->phy);
-	clk_disable(tegra->clk);
+	if (!tegra->keep_clock_in_bus_suspend)
+		clk_disable(tegra->clk);
 	clk_disable(tegra->emc_clk);
 }
 
@@ -75,7 +81,8 @@ static int tegra_ehci_internal_port_reset(
 	ehci_writel(ehci, 0, &ehci->regs->intr_enable);
 	spin_unlock_irqrestore(&ehci->lock, flags);
 
-	/* Here we have to do Port Reset at most twice for
+	/*
+	 * Here we have to do Port Reset at most twice for
 	 * Port Enable bit to be set.
 	 */
 	for (i = 0; i < 2; i++) {
@@ -89,10 +96,11 @@ static int tegra_ehci_internal_port_reset(
 		tries = 100;
 		do {
 			mdelay(1);
-			/* Up to this point, Port Enable bit is
+			/*
+			 * Up to this point, Port Enable bit is
 			 * expected to be set after 2 ms waiting.
-			 * USB1 usually takes extra 45 ms, for safety
-			 * , we take 100 ms as timeout.
+			 * USB1 usually takes extra 45 ms, for safety,
+			 * we take 100 ms as timeout.
 			 */
 			temp = ehci_readl(ehci, portsc_reg);
 		} while (!(temp & PORT_PE) && tries--);
@@ -102,14 +110,17 @@ static int tegra_ehci_internal_port_reset(
 	if (i == 2)
 		retval = -ETIMEDOUT;
 
-	/* Clear Connect Status Change bit if it's set.
+	/*
+	 * Clear Connect Status Change bit if it's set.
 	 * We can't clear PORT_PEC. It will also cause PORT_PE to be cleared.
 	 */
 	if (temp & PORT_CSC)
 		ehci_writel(ehci, PORT_CSC, portsc_reg);
 
-	/* Write to clear any interrupt status bits that might be set
-	 * during port reset. */
+	/*
+	 * Write to clear any interrupt status bits that might be set
+	 * during port reset.
+	 */
 	temp = ehci_readl(ehci, &ehci->regs->status);
 	ehci_writel(ehci, temp, &ehci->regs->status);
 
@@ -132,7 +143,7 @@ static int tegra_ehci_hub_control(
 	u32 __iomem	*status_reg;
 	u32		temp;
 	unsigned long	flags;
-	int		retval = 0;
+	int		i, retval = 0;
 
 	status_reg = &ehci->regs->port_status[(wIndex & 0xff) - 1];
 
@@ -155,6 +166,43 @@ static int tegra_ehci_hub_control(
 			/* Resume completed, re-enable disconnect detection */
 			tegra->port_resuming = 0;
 			tegra_usb_phy_postresume(tegra->phy);
+			/*
+			 * After tegra_usb_phy_postresume is called, device
+			 * may temporarily "disconnect", setting PORTSC bit 1.
+			 * Driver hub.c would then think the device is removed
+			 * from USB bus and "logically disconnect" the device.
+			 * On subsequent reconnect, a Bootable USB disk will be
+			 * enumerated with new device address, making the
+			 * original device address unaccessible. To avoid this,
+			 * in case the device is still connected, wait 120 ms
+			 * for bit 0 of PORTSC to be set. Bit 0 signals the
+			 * PORTSC connection state is stable.
+			 *
+			 * Page 150, Figure 7-29 of USB2.0 spec:
+			 *   t1 = 20 ms = bPwr2PwrGood of root hub descriptor
+			 *     If VBUS is turned off in system suspend state.
+			 *   t2 is defined in Section 7.1.7.3 of USB 2.0 spec:
+			 *     "t2 must be less than 100 ms for all hub and
+			 *      device implementation".
+			 * t1+t2 (20+100 ms) is timeout used in loop below.
+			 *
+			 * If your USB disk doesn't comply with USB 2.0 spec,
+			 * please try increasing timeout from 120 to 1000 (or
+			 * more) and report results to linux-usb mailing list.
+			 */
+			if ((temp & PORT_SPEED_MASK) !=
+				 PORT_SPEED_RESERVED ||
+				(temp & PORT_CSC)) {
+				for (i = 0; i < 120; i++) {
+					spin_unlock_irqrestore(&ehci->lock,
+						flags);
+					usleep_range(1000, 1001);
+					spin_lock_irqsave(&ehci->lock, flags);
+					temp = ehci_readl(ehci, status_reg);
+					if (temp & PORT_CONNECT)
+						break;
+				}
+			}
 		}
 	}
 
@@ -168,6 +216,9 @@ static int tegra_ehci_hub_control(
 		temp &= ~PORT_WKCONN_E;
 		temp |= PORT_WKDISC_E | PORT_WKOC_E;
 		ehci_writel(ehci, temp | PORT_SUSPEND, status_reg);
+
+		/* Need a 4ms delay before the controller goes to suspend */
+		mdelay(4);
 
 		/*
 		 * If a transaction is in progress, there may be a delay in
@@ -382,6 +433,9 @@ static int tegra_usb_resume(struct usb_hcd *hcd)
 		val |= PORT_SUSPEND;
 		writel(val, &hw->port_status[0]);
 
+		/* Need a 4ms delay before the controller goes to suspend */
+		mdelay(4);
+
 		/* Wait until port suspend completes */
 		if (handshake(ehci, &hw->port_status[0], PORT_SUSPEND,
 							 PORT_SUSPEND, 1000)) {
@@ -422,7 +476,7 @@ static int tegra_ehci_setup(struct usb_hcd *hcd)
 	/* EHCI registers start at offset 0x100 */
 	ehci->caps = hcd->regs + 0x100;
 	ehci->regs = hcd->regs + 0x100 +
-		HC_LENGTH(readl(&ehci->caps->hc_capbase));
+		HC_LENGTH(ehci, readl(&ehci->caps->hc_capbase));
 
 	dbg_hcs_params(ehci, "reset");
 	dbg_hcc_params(ehci, "reset");
@@ -678,6 +732,7 @@ static int tegra_ehci_probe(struct platform_device *pdev)
 
 	tegra->host_resumed = 1;
 	tegra->power_down_on_bus_suspend = pdata->power_down_on_bus_suspend;
+	tegra->keep_clock_in_bus_suspend = pdata->keep_clock_in_bus_suspend;
 	tegra->ehci = hcd_to_ehci(hcd);
 
 	irq = platform_get_irq(pdev, 0);
@@ -734,8 +789,10 @@ static int tegra_ehci_resume(struct platform_device *pdev)
 	struct tegra_ehci_hcd *tegra = platform_get_drvdata(pdev);
 	struct usb_hcd *hcd = ehci_to_hcd(tegra->ehci);
 
-	if (tegra->bus_suspended)
+	if (tegra->bus_suspended) {
+		tegra_usb_phy_vbus_on(tegra->phy);
 		return 0;
+	}
 
 	return tegra_usb_resume(hcd);
 }
@@ -745,8 +802,15 @@ static int tegra_ehci_suspend(struct platform_device *pdev, pm_message_t state)
 	struct tegra_ehci_hcd *tegra = platform_get_drvdata(pdev);
 	struct usb_hcd *hcd = ehci_to_hcd(tegra->ehci);
 
-	if (tegra->bus_suspended)
+	if (tegra->bus_suspended) {
+		/*
+		 * We turn off vbus for those platforms which are really care
+		 * about USB power consumption, i.e. for those have the flag
+		 * power_down_on_bus_suspend set.
+		 */
+		tegra_usb_phy_vbus_off(tegra->phy);
 		return 0;
+	}
 
 	if (time_before(jiffies, tegra->ehci->next_statechange))
 		msleep(10);

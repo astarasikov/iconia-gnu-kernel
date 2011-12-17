@@ -46,26 +46,17 @@ extern struct platform_device tegra_i2s_device1;
 extern struct platform_device tegra_i2s_device2;
 extern struct platform_device tegra_das_device;
 extern struct platform_device tegra_pcm_device;
-extern struct platform_device tegra_w1_device;
-extern struct platform_device tegra_udc_device;
-extern struct platform_device tegra_otg_device;
-extern struct platform_device tegra_ehci1_device;
-extern struct platform_device tegra_ehci2_device;
-extern struct platform_device tegra_ehci3_device;
-extern struct platform_device tegra_gart_device;
-extern struct platform_device tegra_wdt_device;
+extern struct platform_device tegra_kbc_device;
+extern struct platform_device tegra_rtc_device;
+extern struct platform_device tegra_grhost_device;
 extern struct platform_device tegra_pwfm0_device;
 extern struct platform_device tegra_pwfm1_device;
 extern struct platform_device tegra_pwfm2_device;
 extern struct platform_device tegra_pwfm3_device;
-extern struct platform_device tegra_spdif_device;
-extern struct platform_device tegra_grhost_device;
-extern struct platform_device tegra_spdif_device;
-extern struct platform_device tegra_avp_device;
-extern struct platform_device tegra_aes_device;
-extern struct platform_device tegra_kbc_device;
-extern struct platform_device tegra_rtc_device;
+extern struct platform_device tegra_gart_device;
 
 extern struct nvhost_device tegra_camera_device;
+extern struct platform_device tegra_spdif_device;
+extern struct platform_device tegra_avp_device;
 
 #endif

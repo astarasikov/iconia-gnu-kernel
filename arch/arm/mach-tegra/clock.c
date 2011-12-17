@@ -18,6 +18,7 @@
 
 #include <linux/kernel.h>
 #include <linux/clk.h>
+#include <linux/clkdev.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/init.h>
@@ -26,8 +27,6 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-
-#include <asm/clkdev.h>
 
 #include <mach/clk.h>
 
@@ -62,8 +61,9 @@
  *     clk_get_rate_all_locked.
  *
  * Within a single clock, no clock operation can call another clock operation
- * on itself, except for clk_get_rate_locked.  Any clock operation can call
- * any other clock operation on any of it's possible parents.
+ * on itself, except for clk_get_rate_locked and clk_set_rate_locked.  Any
+ * clock operation can call any other clock operation on any of it's possible
+ * parents.
  *
  * clk_set_cansleep is used to mark a clock as sleeping.  It is called during
  * dvfs (Dynamic Voltage and Frequency Scaling) init on any clock that has a
@@ -72,7 +72,7 @@
  * onto a different, possibly non-sleeping, clock.  This is inherently true
  * of all leaf clocks in the clock tree
  *
- * An additional lock, clock_list_lock, is used to protect the list of all
+ * An additional mutex, clock_list_lock, is used to protect the list of all
  * clocks.
  *
  * The clock operations must lock internally to protect against
@@ -80,44 +80,6 @@
  */
 static DEFINE_MUTEX(clock_list_lock);
 static LIST_HEAD(clocks);
-
-static inline bool clk_is_auto_dvfs(struct clk *c)
-{
-	return c->auto_dvfs;
-}
-
-static inline bool clk_is_dvfs(struct clk *c)
-{
-	return (c->dvfs != NULL);
-}
-
-static inline bool clk_cansleep(struct clk *c)
-{
-	return c->cansleep;
-}
-
-void __clk_lock_save(struct clk *c, unsigned long *flags)
-{
-	if (clk_cansleep(c)) {
-		*flags = 0;
-		mutex_lock(&c->mutex);
-	} else
-		spin_lock_irqsave(&c->spinlock, *flags);
-}
-
-void __clk_unlock_restore(struct clk *c, unsigned long *flags)
-{
-	if (clk_cansleep(c))
-		mutex_unlock(&c->mutex);
-	else
-		spin_unlock_irqrestore(&c->spinlock, *flags);
-}
-
-static inline void clk_lock_init(struct clk *c)
-{
-	mutex_init(&c->mutex);
-	spin_lock_init(&c->spinlock);
-}
 
 struct clk *tegra_get_clock_by_name(const char *name)
 {
@@ -143,7 +105,7 @@ static unsigned long clk_predict_rate_from_parent(struct clk *c, struct clk *p)
 
 	if (c->mul != 0 && c->div != 0) {
 		rate *= c->mul;
-		rate += c->div / 2; /* round up */
+		rate += c->div - 1; /* round up */
 		do_div(rate, c->div);
 	}
 
@@ -168,11 +130,11 @@ unsigned long clk_get_rate(struct clk *c)
 	unsigned long flags;
 	unsigned long rate;
 
-	clk_lock_save(c, flags);
+	clk_lock_save(c, &flags);
 
 	rate = clk_get_rate_locked(c);
 
-	clk_unlock_restore(c, flags);
+	clk_unlock_restore(c, &flags);
 
 	return rate;
 }
@@ -241,12 +203,14 @@ int clk_enable(struct clk *c)
 	int ret = 0;
 	unsigned long flags;
 
-	clk_lock_save(c, flags);
+	clk_lock_save(c, &flags);
 
 	if (clk_is_auto_dvfs(c)) {
 		ret = tegra_dvfs_set_rate(c, clk_get_rate_locked(c));
+#if 0
 		if (ret)
 			goto out;
+#endif
 	}
 
 	if (c->refcnt == 0) {
@@ -269,7 +233,7 @@ int clk_enable(struct clk *c)
 	}
 	c->refcnt++;
 out:
-	clk_unlock_restore(c, flags);
+	clk_unlock_restore(c, &flags);
 	return ret;
 }
 EXPORT_SYMBOL(clk_enable);
@@ -278,11 +242,11 @@ void clk_disable(struct clk *c)
 {
 	unsigned long flags;
 
-	clk_lock_save(c, flags);
+	clk_lock_save(c, &flags);
 
 	if (c->refcnt == 0) {
 		WARN(1, "Attempting to disable clock %s with refcnt 0", c->name);
-		clk_unlock_restore(c, flags);
+		clk_unlock_restore(c, &flags);
 		return;
 	}
 	if (c->refcnt == 1) {
@@ -299,7 +263,7 @@ void clk_disable(struct clk *c)
 	if (clk_is_auto_dvfs(c) && c->refcnt == 0)
 		tegra_dvfs_set_rate(c, 0);
 
-	clk_unlock_restore(c, flags);
+	clk_unlock_restore(c, &flags);
 }
 EXPORT_SYMBOL(clk_disable);
 
@@ -310,7 +274,7 @@ int clk_set_parent(struct clk *c, struct clk *parent)
 	unsigned long new_rate;
 	unsigned long old_rate;
 
-	clk_lock_save(c, flags);
+	clk_lock_save(c, &flags);
 
 	if (!c->ops || !c->ops->set_parent) {
 		ret = -ENOSYS;
@@ -336,7 +300,7 @@ int clk_set_parent(struct clk *c, struct clk *parent)
 		ret = tegra_dvfs_set_rate(c, new_rate);
 
 out:
-	clk_unlock_restore(c, flags);
+	clk_unlock_restore(c, &flags);
 	return ret;
 }
 EXPORT_SYMBOL(clk_set_parent);
@@ -353,11 +317,6 @@ int clk_set_rate_locked(struct clk *c, unsigned long rate)
 	unsigned long old_rate;
 	long new_rate;
 
-	if (!c->ops || !c->ops->set_rate) {
-		ret = -ENOSYS;
-		goto out;
-	}
-
 	old_rate = clk_get_rate_locked(c);
 
 	if (rate > c->max_rate)
@@ -368,7 +327,7 @@ int clk_set_rate_locked(struct clk *c, unsigned long rate)
 
 		if (new_rate < 0) {
 			ret = new_rate;
-			goto out;
+			return ret;
 		}
 
 		rate = new_rate;
@@ -377,29 +336,32 @@ int clk_set_rate_locked(struct clk *c, unsigned long rate)
 	if (clk_is_auto_dvfs(c) && rate > old_rate && c->refcnt > 0) {
 		ret = tegra_dvfs_set_rate(c, rate);
 		if (ret)
-			goto out;
+			return ret;
 	}
 
 	ret = c->ops->set_rate(c, rate);
-
 	if (ret)
-		goto out;
+		return ret;
 
 	if (clk_is_auto_dvfs(c) && rate < old_rate && c->refcnt > 0)
 		ret = tegra_dvfs_set_rate(c, rate);
 
-out:
 	return ret;
 }
 
 int clk_set_rate(struct clk *c, unsigned long rate)
 {
-	int ret = 0;
 	unsigned long flags;
+	int ret;
 
-	clk_lock_save(c, flags);
+	if (!c->ops || !c->ops->set_rate)
+		return -ENOSYS;
+
+	clk_lock_save(c, &flags);
+
 	ret = clk_set_rate_locked(c, rate);
-	clk_unlock_restore(c, flags);
+
+	clk_unlock_restore(c, &flags);
 
 	return ret;
 }
@@ -434,7 +396,7 @@ long clk_round_rate(struct clk *c, unsigned long rate)
 	unsigned long flags;
 	long ret;
 
-	clk_lock_save(c, flags);
+	clk_lock_save(c, &flags);
 
 	if (!c->ops || !c->ops->round_rate) {
 		ret = -ENOSYS;
@@ -447,7 +409,7 @@ long clk_round_rate(struct clk *c, unsigned long rate)
 	ret = c->ops->round_rate(c, rate);
 
 out:
-	clk_unlock_restore(c, flags);
+	clk_unlock_restore(c, &flags);
 	return ret;
 }
 EXPORT_SYMBOL(clk_round_rate);
@@ -540,56 +502,59 @@ void tegra_sdmmc_tap_delay(struct clk *c, int delay)
 {
 	unsigned long flags;
 
-	clk_lock_save(c, flags);
+	clk_lock_save(c, &flags);
 	tegra2_sdmmc_tap_delay(c, delay);
-	clk_unlock_restore(c, flags);
+	clk_unlock_restore(c, &flags);
 }
 
-static bool tegra_keep_boot_clocks = false;
-static int __init tegra_keep_boot_clocks_setup(char *__unused)
+
+static void __init __tegra_init_check_max_rates(struct clk *c)
 {
-	tegra_keep_boot_clocks = true;
-	return 1;
+	unsigned long flags, rate;
+	struct clk *child;
+
+	clk_lock_save(c, &flags);
+
+	rate = clk_get_rate_locked(c);
+
+	if (rate > c->max_rate) {
+		pr_warn_once("Capping clocks set too high:\n");
+
+		pr_warn("   %12s (%lu > %lu)", c->name, rate, c->max_rate);
+		if (c->state == ON)
+			pr_cont(" (clock enabled!)");
+		if (!c->ops)
+			pr_cont(" (no ops!)");
+		else
+			clk_set_rate_locked(c, c->max_rate);
+		pr_cont("\n");
+	}
+
+	clk_unlock_restore(c, &flags);
+
+	list_for_each_entry(child, &clocks, node)
+		if (child->parent == c)
+			__tegra_init_check_max_rates(child);
 }
-__setup("tegra_keep_boot_clocks", tegra_keep_boot_clocks_setup);
 
 /*
- * Iterate through all clocks, disabling any for which the refcount is 0
- * but the clock init detected the bootloader left the clock on.
+ * Iterate through all clocks, capping any clock that is higher than max_rate.
  */
-static int __init tegra_init_disable_boot_clocks(void)
+static int __init tegra_init_check_max_rates(void)
 {
 	struct clk *c;
-	unsigned long flags;
 
 	mutex_lock(&clock_list_lock);
 
-	list_for_each_entry(c, &clocks, node) {
-		clk_lock_save(c, flags);
-
-		if (c->refcnt == 0 && c->state == ON &&
-				c->ops && c->ops->disable) {
-			pr_warn_once("%s clocks left on by bootloader:\n",
-				tegra_keep_boot_clocks ?
-					"Prevented disabling" :
-					"Disabling");
-
-			pr_warn("   %s\n", c->name);
-
-			if (!tegra_keep_boot_clocks) {
-				c->ops->disable(c);
-				c->state = OFF;
-			}
-		}
-
-		clk_unlock_restore(c, flags);
-	}
+	list_for_each_entry(c, &clocks, node)
+		if (!c->parent)
+			__tegra_init_check_max_rates(c);
 
 	mutex_unlock(&clock_list_lock);
 
 	return 0;
 }
-late_initcall(tegra_init_disable_boot_clocks);
+late_initcall(tegra_init_check_max_rates);
 
 #ifdef CONFIG_DEBUG_FS
 

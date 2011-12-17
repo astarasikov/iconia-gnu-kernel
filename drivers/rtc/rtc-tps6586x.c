@@ -276,14 +276,6 @@ static int __devinit tps6586x_rtc_probe(struct platform_device *pdev)
 	rtc->epoch_start = mktime(TPS_EPOCH, 1, 1, 0, 0, 0);
 	device_init_wakeup(&pdev->dev, 1);
 
-	rtc->rtc = rtc_device_register("tps6586x-rtc", &pdev->dev,
-				       &tps6586x_rtc_ops, THIS_MODULE);
-
-	if (IS_ERR(rtc->rtc)) {
-		err = PTR_ERR(rtc->rtc);
-		goto fail;
-	}
-
 	/* disable high-res mode, enable tick counting */
 	err = tps6586x_update(tps_dev, RTC_CTRL,
 			      (RTC_ENABLE | OSC_SRC_SEL),
@@ -308,6 +300,14 @@ static int __devinit tps6586x_rtc_probe(struct platform_device *pdev)
 			enable_irq_wake(rtc->irq);
 			rtc->irq_en = false;
 		}
+	}
+
+	rtc->rtc = rtc_device_register("tps6586x-rtc", &pdev->dev,
+				       &tps6586x_rtc_ops, THIS_MODULE);
+
+	if (IS_ERR(rtc->rtc)) {
+		err = PTR_ERR(rtc->rtc);
+		goto fail;
 	}
 
 	return 0;

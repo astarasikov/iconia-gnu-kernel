@@ -21,6 +21,8 @@
 #define __MACH_TEGRA_DC_H
 
 #include <drm/drm_fixed.h>
+#include <linux/fb.h>
+#include <linux/kref.h>
 
 #define TEGRA_MAX_DC		2
 #define DC_N_WINDOWS		3
@@ -69,6 +71,7 @@ struct tegra_dc_out {
 	unsigned		align;
 	unsigned		depth;
 	unsigned		dither;
+	unsigned long		max_pclk_khz;
 
 	unsigned		height; /* mm */
 	unsigned		width; /* mm */
@@ -139,12 +142,15 @@ struct tegra_dc_win {
 	struct tegra_dc		*dc;
 
 	struct nvmap_handle_ref	*cur_handle;
+
+	u32			swap_countdown;
 };
 
 
 #define TEGRA_WIN_FLAG_ENABLED		(1 << 0)
 #define TEGRA_WIN_FLAG_BLEND_PREMULT	(1 << 1)
 #define TEGRA_WIN_FLAG_BLEND_COVERAGE	(1 << 2)
+#define TEGRA_WIN_FLAG_SWAP_ASAP	(1 << 3)
 
 #define TEGRA_WIN_BLEND_FLAGS_MASK \
 	(TEGRA_WIN_FLAG_BLEND_PREMULT | TEGRA_WIN_FLAG_BLEND_COVERAGE)
@@ -213,10 +219,12 @@ void tegra_dc_incr_syncpt_min(struct tegra_dc *dc, int i, u32 val);
 int tegra_dc_update_windows(struct tegra_dc_win *windows[], int n);
 int tegra_dc_sync_windows(struct tegra_dc_win *windows[], int n);
 
+bool tegra_dc_mode_filter(const struct tegra_dc *dc, struct fb_videomode *mode);
 int tegra_dc_set_mode(struct tegra_dc *dc, const struct tegra_dc_mode *mode);
 
 unsigned tegra_dc_get_out_height(struct tegra_dc *dc);
 unsigned tegra_dc_get_out_width(struct tegra_dc *dc);
+const struct tegra_dc_mode *tegra_dc_get_current_mode(const struct tegra_dc *);
 /*
  * This sets the sample rate for all display controllers at once,
  * since there is a single audio source routed to themn all.
@@ -224,5 +232,20 @@ unsigned tegra_dc_get_out_width(struct tegra_dc *dc);
 int tegra_dc_hdmi_set_audio_sample_rate(unsigned audio_freq);
 
 int tegra_dc_update_csc(struct tegra_dc *dc, int win_index);
+
+/*
+ * In order to get a dc's current EDID, first call tegra_dc_get_edid() from an
+ * interruptible context.  The returned value (if non-NULL) points to a
+ * snapshot of the current state; after copying data from it, call
+ * tegra_dc_put_edid() on that pointer.  Do not dereference anything through
+ * that pointer after calling tegra_dc_put_edid().
+ */
+struct tegra_dc_edid {
+	size_t		len;
+	struct kref	refcnt;
+	u8		buf[0];
+};
+struct tegra_dc_edid *tegra_dc_get_edid(struct tegra_dc *dc);
+void tegra_dc_put_edid(struct tegra_dc_edid *edid);
 
 #endif

@@ -245,6 +245,9 @@ static struct tegra_dc_out harmony_disp2_out = {
 
 	.enable		= harmony_hdmi_enable,
 	.disable	= harmony_hdmi_disable,
+
+	/* DVFS tables only updated up to 148.5MHz for HDMI currently */
+	.max_pclk_khz	= 148500,
 };
 
 static struct tegra_dc_platform_data harmony_disp1_pdata = {

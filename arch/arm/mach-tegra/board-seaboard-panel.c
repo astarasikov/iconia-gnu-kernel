@@ -36,6 +36,39 @@
 #include "gpio-names.h"
 #include "board.h"
 #include "board-seaboard.h"
+#include "pm.h"
+
+static int panel_is_enabled;
+static u64 rtc_ms_at_panel_off;
+/**
+ * struct panel_power_sequence_timing - Required timings for panel
+ * power sequence.
+ *
+ * en_lcdvdd_en_data_ms: delay between panel_vdd-rising and data-rising
+ * en_lvds_en_blvdd_ms: delay between data-rising and backlight_vdd-rising
+ * en_blvdd_en_pwm_ms: delay between backlight_vdd-rising and pwm-rising
+ * en_pwm_en_bl_ms: delay between pwm-rising and backlight_en-rising
+ * dis_lvds_dis_lcdvdd_ms: delay between data-falling and panel_vdd-falling
+ * dis_bl_dis_lvds_ms: delay between backlight_en-falling and data-falling
+ * dis_pwm_dis_blvdd_ms: delay between pwm-falling and backlight_vdd-falling
+ * lcdvdd_off_on_ms: delay between turning panel_vdd off and on
+ */
+struct panel_power_sequence_timing {
+	int en_lcdvdd_en_data_ms;
+	int en_lvds_en_blvdd_ms;
+	int en_blvdd_en_pwm_ms;
+	int en_pwm_en_bl_ms;
+	int dis_lvds_dis_lcdvdd_ms;
+	int dis_bl_dis_lvds_ms;
+	int dis_pwm_dis_blvdd_ms;
+	unsigned int lcdvdd_off_on_ms;
+};
+
+static const struct panel_power_sequence_timing panel_timings_kaen_aebl = {
+	4, 203, 20, 20, 4, 203, 20, 500,
+};
+
+static struct panel_power_sequence_timing panel_timings;
 
 static int seaboard_backlight_init(struct device *dev) {
 	int ret;
@@ -48,6 +81,8 @@ static int seaboard_backlight_init(struct device *dev) {
 	if (ret < 0)
 		gpio_free(TEGRA_GPIO_BACKLIGHT);
 
+	gpio_export(TEGRA_GPIO_BACKLIGHT, 0);
+
 	return ret;
 };
 
@@ -56,12 +91,65 @@ static void seaboard_backlight_exit(struct device *dev) {
 	gpio_free(TEGRA_GPIO_BACKLIGHT);
 }
 
+static void tegra_msleep(int ms)
+{
+	if (ms) {
+		if (ms<20)
+			usleep_range(ms*1000, 20000);
+		else
+			msleep(ms);
+	}
+}
+
 static int seaboard_backlight_notify(struct device *unused, int brightness)
 {
-	gpio_set_value(TEGRA_GPIO_EN_VDD_PNL, !!brightness);
-	gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, !!brightness);
-	gpio_set_value(TEGRA_GPIO_BACKLIGHT, !!brightness);
+	u64 time_panel_was_off;
+
+	if (panel_is_enabled && !brightness) {
+		gpio_set_value(TEGRA_GPIO_BACKLIGHT, 0);
+		tegra_msleep(panel_timings.dis_bl_dis_lvds_ms);
+
+		gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, 0);
+		tegra_msleep(panel_timings.dis_lvds_dis_lcdvdd_ms);
+
+		gpio_set_value(TEGRA_GPIO_EN_VDD_PNL, 0);
+	} else if (!panel_is_enabled && brightness) {
+		time_panel_was_off = tegra_rtc_read_ms() - rtc_ms_at_panel_off;
+		if (time_panel_was_off < panel_timings.lcdvdd_off_on_ms ) {
+			/*
+			 * According to panel specification, the delay should
+			 * be at least 500ms between panel_vdd OFF and ON
+			 * to aviod abnormal display.
+			 */
+			tegra_msleep(panel_timings.lcdvdd_off_on_ms -
+				time_panel_was_off);
+		}
+
+		gpio_set_value(TEGRA_GPIO_EN_VDD_PNL, 1);
+		tegra_msleep(panel_timings.en_lcdvdd_en_data_ms);
+
+		gpio_set_value(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
+		tegra_msleep(panel_timings.en_lvds_en_blvdd_ms);
+
+		gpio_set_value(TEGRA_GPIO_BACKLIGHT_VDD, 1);
+		tegra_msleep(panel_timings.en_blvdd_en_pwm_ms);
+	}
+
 	return brightness;
+}
+
+static void seaboard_bl_notify_after(struct device *unused, int brightness)
+{
+	if (panel_is_enabled && !brightness) {
+		tegra_msleep(panel_timings.dis_pwm_dis_blvdd_ms);
+		gpio_set_value(TEGRA_GPIO_BACKLIGHT_VDD, 0);
+		rtc_ms_at_panel_off = tegra_rtc_read_ms();
+		panel_is_enabled = 0;
+	} else if (!panel_is_enabled && brightness) {
+		tegra_msleep(panel_timings.en_pwm_en_bl_ms);
+		gpio_set_value(TEGRA_GPIO_BACKLIGHT, 1);
+		panel_is_enabled = 1;
+	}
 }
 
 static int seaboard_disp1_check_fb(struct device *dev, struct fb_info *info);
@@ -74,6 +162,7 @@ static struct platform_pwm_backlight_data seaboard_backlight_data = {
 	.init		= seaboard_backlight_init,
 	.exit		= seaboard_backlight_exit,
 	.notify		= seaboard_backlight_notify,
+	.notify_after	= seaboard_bl_notify_after,
 	/* Only toggle backlight on fb blank notifications for disp1 */
 	.check_fb	= seaboard_disp1_check_fb,
 };
@@ -142,14 +231,12 @@ static int seaboard_hdmi_disable(void)
 static int seaboard_hdmi_hotplug_init(void)
 {
 	gpio_set_value(TEGRA_GPIO_HDMI_ENB, 1);
-
 	return 0;
 }
 
 static int seaboard_hdmi_postsuspend(void)
 {
 	gpio_set_value(TEGRA_GPIO_HDMI_ENB, 0);
-
 	return 0;
 }
 
@@ -168,9 +255,6 @@ static struct resource seaboard_disp1_resources[] = {
 	},
 	{
 		.name	= "fbmem",
-		.start	= 0x18012000,
-		/* enough space for 1368*910 32bpp */
-		.end	= 0x18012000 + 0x97f680 - 1,
 		.flags	= IORESOURCE_MEM,
 	},
 };
@@ -189,10 +273,6 @@ static struct resource seaboard_disp2_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	{
-		.name = "fbmem",
-		.flags = IORESOURCE_MEM,
-	},
-	{
 		.name	= "hdmi_regs",
 		.start	= TEGRA_HDMI_BASE,
 		.end	= TEGRA_HDMI_BASE + TEGRA_HDMI_SIZE - 1,
@@ -202,7 +282,7 @@ static struct resource seaboard_disp2_resources[] = {
 
 static struct tegra_dc_mode seaboard_panel_modes[] = {
 	{
-		.pclk = 62200000,
+		.pclk = 70600000,
 		.h_ref_to_sync = 11,
 		.v_ref_to_sync = 1,
 		.h_sync_width = 58,
@@ -229,22 +309,6 @@ static struct tegra_dc_mode wario_panel_modes[] = {
 		.v_active = 800,
 		.h_front_porch = 58,
 		.v_front_porch = 1,
-	},
-};
-
-static struct tegra_dc_mode arthur_panel_modes[] = {
-	{
-		.pclk = 82400000,
-		.h_ref_to_sync = 11,
-		.v_ref_to_sync = 1,
-		.h_sync_width = 32,
-		.v_sync_width = 5,
-		.h_back_porch = 112,
-		.v_back_porch = 20,
-		.h_active = 1366,
-		.v_active = 910,
-		.h_front_porch = 48,
-		.v_front_porch = 2,
 	},
 };
 
@@ -280,6 +344,22 @@ static struct tegra_dc_mode tf101_panel_modes[] = {
 	},
 };
 
+static struct tegra_dc_mode asymptote_panel_modes[] = {
+	{
+		.pclk = 100030000,
+		.h_ref_to_sync = 11,
+		.v_ref_to_sync = 1,
+		.h_sync_width = 320,
+		.v_sync_width = 10,
+		.h_back_porch = 480,
+		.v_back_porch = 6,
+		.h_active = 1024,
+		.v_active = 768,
+		.h_front_porch = 260,
+		.v_front_porch = 16,
+	},
+};
+
 static struct tegra_fb_data seaboard_fb_data = {
 	.win		= 0,
 	.xres		= 1366,
@@ -287,18 +367,18 @@ static struct tegra_fb_data seaboard_fb_data = {
 	.bits_per_pixel	= 16,
 };
 
-static struct tegra_fb_data fb_data_1280_800_16 = {
+static struct tegra_fb_data wario_fb_data = {
 	.win		= 0,
 	.xres		= 1280,
 	.yres		= 800,
 	.bits_per_pixel	= 16,
 };
 
-static struct tegra_fb_data arthur_fb_data = {
+static struct tegra_fb_data asymptote_fb_data = {
 	.win		= 0,
-	.xres		= 1366,
-	.yres		= 910,
-	.bits_per_pixel	= 32,
+	.xres		= 1024,
+	.yres		= 768,
+	.bits_per_pixel	= 16,
 };
 
 static struct tegra_fb_data seaboard_hdmi_fb_data = {
@@ -344,6 +424,9 @@ static struct tegra_dc_out seaboard_disp2_out = {
 	.disable	= seaboard_hdmi_disable,
 	.hotplug_init	= seaboard_hdmi_hotplug_init,
 	.postsuspend	= seaboard_hdmi_postsuspend,
+
+	/* DVFS tables only updated up to 148.5MHz for HDMI currently */
+	.max_pclk_khz	= 148500,
 };
 
 static struct tegra_dc_platform_data seaboard_disp1_pdata = {
@@ -395,8 +478,6 @@ static struct nvmap_platform_carveout seaboard_carveouts[] = {
 	[1] = {
 		.name		= "generic-0",
 		.usage_mask	= NVMAP_HEAP_CARVEOUT_GENERIC,
-		.base		= 0x18C00000,
-		.size		= SZ_128M - 0xC00000,
 		.buddy_size	= SZ_32K,
 	},
 };
@@ -421,66 +502,71 @@ static struct platform_device *seaboard_gfx_devices[] __initdata = {
 	&seaboard_backlight_device,
 };
 
-static void __init seaboard_panel_gpio_init(void)
+int __init seaboard_panel_init(void)
 {
+	int err;
+	struct resource *res;
+
+	seaboard_carveouts[1].base = tegra_carveout_start;
+	seaboard_carveouts[1].size = tegra_carveout_size;
+
+	if (machine_is_aebl() || machine_is_kaen())
+		panel_timings = panel_timings_kaen_aebl;
+
+	/* Run kaen's panel backlight at around 210Hz. */
+	if (machine_is_kaen())
+		seaboard_backlight_data.pwm_period_ns = 4750000;
+
 	gpio_request(TEGRA_GPIO_EN_VDD_PNL, "en_vdd_pnl");
 	gpio_direction_output(TEGRA_GPIO_EN_VDD_PNL, 1);
 
 	gpio_request(TEGRA_GPIO_BACKLIGHT_VDD, "bl_vdd");
 	gpio_direction_output(TEGRA_GPIO_BACKLIGHT_VDD, 1);
 
-	if (!(machine_is_picasso() || machine_is_tf101())) {
-		//This gpio is connected to a vibrator on picasso
+	if(!machine_is_picasso()) {
 		gpio_request(TEGRA_GPIO_HDMI_ENB, "hdmi_5v_en");
 		gpio_direction_output(TEGRA_GPIO_HDMI_ENB, 0);
 	}
 
 	gpio_request(TEGRA_GPIO_LVDS_SHUTDOWN, "lvds_shdn");
 	gpio_direction_output(TEGRA_GPIO_LVDS_SHUTDOWN, 1);
+	gpio_export(TEGRA_GPIO_LVDS_SHUTDOWN, 0);
 
 	gpio_request(TEGRA_GPIO_HDMI_HPD, "hdmi_hpd");
 	gpio_direction_input(TEGRA_GPIO_HDMI_HPD);
-}
 
-static int __init seaboard_panel_register_devices(void)
-{
-	int err;
+	if (machine_is_wario()) {
+		seaboard_disp1_out.modes = wario_panel_modes;
+		seaboard_disp1_pdata.fb = &wario_fb_data;
+	} else if (machine_is_asymptote()) {
+		seaboard_disp1_out.modes = asymptote_panel_modes;
+		seaboard_disp1_pdata.fb = &asymptote_fb_data;
+	}
+
+	panel_is_enabled = 1;
 
 	err = platform_add_devices(seaboard_gfx_devices,
 				   ARRAY_SIZE(seaboard_gfx_devices));
+	if (err)
+		goto fail;
 
-	if (!err)
-		err = nvhost_device_register(&seaboard_disp1_device);
+	err = nvhost_device_register(&seaboard_disp1_device);
+	if (err)
+		goto fail;
 
-	if (!err)
-		err = nvhost_device_register(&seaboard_disp2_device);
-
-	return err;
-}
-
-static void __init fix_framebuffer_carveouts(void) {
-	struct resource *res;
-	seaboard_carveouts[1].base = tegra_carveout_start;
-	seaboard_carveouts[1].size = tegra_carveout_size;
-	
-	res = nvhost_get_resource_byname(&seaboard_disp2_device, IORESOURCE_MEM,
+	res = nvhost_get_resource_byname(&seaboard_disp1_device, IORESOURCE_MEM,
 					 "fbmem");
 	if (!res) {
-		pr_err("Failed to get fbmem2 resource!\n");
+		pr_err("Failed to get fbmem resource!\n");
 		err = -ENXIO;
 		goto fail;
 	}
-	res->start = tegra_fb2_start;
-	res->end = tegra_fb2_start + tegra_fb2_size - 1;
+	res->start = tegra_fb_start;
+	res->end = tegra_fb_start + tegra_fb_size - 1;
+	err = nvhost_device_register(&seaboard_disp2_device);
 
 fail:
 	return err;
-}
-
-int __init seaboard_panel_init(void)
-{
-	seaboard_panel_gpio_init();
-	return seaboard_panel_register_devices();
 }
 
 #ifdef CONFIG_MACH_WARIO
@@ -488,18 +574,7 @@ int __init wario_panel_init(void)
 {
 	seaboard_panel_gpio_init();
 	seaboard_disp1_out.modes = wario_panel_modes;
-	seaboard_disp1_pdata.fb = &fb_data_1280_800_16;
-	return seaboard_panel_register_devices();
-}
-#endif
-
-#ifdef CONFIG_MACH_ARTHUR
-int __init arthur_panel_init(void)
-{
-	seaboard_panel_gpio_init();
-	seaboard_disp1_out.modes = arthur_panel_modes;
-	seaboard_disp1_out.depth = 24;
-	seaboard_disp1_pdata.fb = &arthur_fb_data;
+	seaboard_disp1_pdata.fb = &wario_fb_data;
 	return seaboard_panel_register_devices();
 }
 #endif
@@ -509,14 +584,15 @@ int __init picasso_panel_init(void)
 {
 	seaboard_panel_gpio_init();
 	seaboard_disp1_out.modes = picasso_panel_modes;
-	seaboard_disp1_pdata.fb = &fb_data_1280_800_16;
+	seaboard_disp1_pdata.fb = &wario_fb_data;
 	seaboard_backlight_data.pwm_period_ns = 4166667;
 
 	//Picasso has a vibro motor connected to the gpio
 	//that is used for HDMI power on other boards
 	seaboard_disp2_out.hotplug_init = NULL;
 	seaboard_disp2_out.postsuspend = NULL;
-	return seaboard_panel_register_devices();
+
+	return seaboard_panel_init();
 }
 #endif
 
@@ -528,6 +604,6 @@ int __init tf101_panel_init(void)
 	seaboard_disp1_pdata.fb = &tf101_fb_data;
 	seaboard_backlight_data.pwm_period_ns = 4000000;
 
-	return seaboard_panel_register_devices();
+	return seaboard_panel_init();
 }
 #endif

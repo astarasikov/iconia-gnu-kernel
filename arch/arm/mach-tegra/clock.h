@@ -22,6 +22,7 @@
 
 #include <linux/clkdev.h>
 #include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/spinlock.h>
 
 #define DIV_BUS			(1 << 0)
@@ -41,9 +42,6 @@
 #define PLLU			(1 << 14)
 #define PERIPH_SOURCE_CLK_4BIT	(1 << 15)
 #define ENABLE_ON_INIT		(1 << 28)
-
-#define clk_lock_save(c, flags)		__clk_lock_save(c, &(flags))
-#define clk_unlock_restore(c, flags)	__clk_unlock_restore(c, &(flags))
 
 struct clk;
 
@@ -80,7 +78,7 @@ enum clk_state {
 struct clk {
 	/* node for master clocks list */
 	struct list_head	node;		/* node for list of all clocks */
-	struct dvfs		*dvfs;
+	struct dvfs 		*dvfs;
 	struct clk_lookup	lookup;
 
 #ifdef CONFIG_DEBUG_FS
@@ -162,12 +160,48 @@ struct clk *tegra_get_clock_by_name(const char *name);
 unsigned long clk_measure_input_freq(void);
 int clk_reparent(struct clk *c, struct clk *parent);
 void tegra_clk_init_from_table(struct tegra_clk_init_table *table);
+void clk_set_cansleep(struct clk *c);
 unsigned long clk_get_rate_locked(struct clk *c);
 int clk_set_rate_locked(struct clk *c, unsigned long rate);
 void tegra2_sdmmc_tap_delay(struct clk *c, int delay);
-void clk_set_cansleep(struct clk *c);
-unsigned long clk_get_rate_locked(struct clk *c);
-void __clk_lock_save(struct clk *c, unsigned long *flags);
-void __clk_unlock_restore(struct clk *c, unsigned long *flags);
+
+static inline bool clk_is_auto_dvfs(struct clk *c)
+{
+	return c->auto_dvfs;
+}
+
+static inline bool clk_is_dvfs(struct clk *c)
+{
+	return (c->dvfs != NULL);
+}
+
+static inline bool clk_cansleep(struct clk *c)
+{
+	return c->cansleep;
+}
+
+static inline void clk_lock_save(struct clk *c, unsigned long *flags)
+{
+	if (clk_cansleep(c)) {
+		*flags = 0;
+		mutex_lock(&c->mutex);
+	} else {
+		spin_lock_irqsave(&c->spinlock, *flags);
+	}
+}
+
+static inline void clk_unlock_restore(struct clk *c, unsigned long *flags)
+{
+	if (clk_cansleep(c))
+		mutex_unlock(&c->mutex);
+	else
+		spin_unlock_irqrestore(&c->spinlock, *flags);
+}
+
+static inline void clk_lock_init(struct clk *c)
+{
+	mutex_init(&c->mutex);
+	spin_lock_init(&c->spinlock);
+}
 
 #endif

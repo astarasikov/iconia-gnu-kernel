@@ -10,14 +10,17 @@
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/clk.h>
+#include <linux/cpufreq.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/err.h>
 #include <linux/smp.h>
 #include <linux/jiffies.h>
 #include <linux/clockchips.h>
 #include <linux/irq.h>
 #include <linux/io.h>
-#include <linux/cpufreq.h>
+#include <linux/percpu.h>
 
 #include <asm/smp_twd.h>
 #include <asm/hardware/gic.h>
@@ -25,26 +28,25 @@
 /* set up by the platform code */
 void __iomem *twd_base;
 
+static struct clk *twd_clk;
 static unsigned long twd_timer_rate;
-static unsigned long twd_periphclk_prescaler;
-static unsigned long twd_cpu_rate;
+static DEFINE_PER_CPU(struct clock_event_device *, twd_ce);
 
 static void twd_set_mode(enum clock_event_mode mode,
 			struct clock_event_device *clk)
 {
-	unsigned long ctrl = __raw_readl(twd_base + TWD_TIMER_CONTROL);
-	ctrl &= TWD_TIMER_CONTROL_PRESCALE_MASK;
+	unsigned long ctrl;
 
 	switch (mode) {
 	case CLOCK_EVT_MODE_PERIODIC:
 		/* timer load already set up */
-		ctrl |= TWD_TIMER_CONTROL_ENABLE | TWD_TIMER_CONTROL_IT_ENABLE
+		ctrl = TWD_TIMER_CONTROL_ENABLE | TWD_TIMER_CONTROL_IT_ENABLE
 			| TWD_TIMER_CONTROL_PERIODIC;
 		__raw_writel(twd_timer_rate / HZ, twd_base + TWD_TIMER_LOAD);
 		break;
 	case CLOCK_EVT_MODE_ONESHOT:
 		/* period set, and timer enabled in 'next_event' hook */
-		ctrl |= TWD_TIMER_CONTROL_IT_ENABLE | TWD_TIMER_CONTROL_ONESHOT;
+		ctrl = TWD_TIMER_CONTROL_IT_ENABLE | TWD_TIMER_CONTROL_ONESHOT;
 		break;
 	case CLOCK_EVT_MODE_UNUSED:
 	case CLOCK_EVT_MODE_SHUTDOWN:
@@ -85,42 +87,29 @@ int twd_timer_ack(void)
 }
 
 /*
- * Recalculate the twd prescaler value when the cpu frequency changes. To
- * prevent early timer interrupts, must be called before changing the cpu
- * frequency if the frequency is increasing, or after if the frequency is
- * decreasing.
+ * Updates clockevent frequency when the cpu frequency changes.
+ * Called on the cpu that is changing frequency with interrupts disabled.
  */
-static void twd_update_prescaler(void *data)
+static void twd_update_frequency(void *data)
 {
-	u32 ctrl;
-	int prescaler;
-	unsigned long periphclk_rate;
+	twd_timer_rate = clk_get_rate(twd_clk);
 
-	BUG_ON(twd_periphclk_prescaler == 0 || twd_timer_rate == 0);
-
-	periphclk_rate = twd_cpu_rate / twd_periphclk_prescaler;
-
-	prescaler = DIV_ROUND_UP(periphclk_rate, twd_timer_rate);
-	prescaler = clamp(prescaler - 1, 0, 0xFF);
-
-	ctrl = __raw_readl(twd_base + TWD_TIMER_CONTROL);
-	ctrl &= ~TWD_TIMER_CONTROL_PRESCALE_MASK;
-	ctrl |= prescaler << 8;
-	__raw_writel(ctrl, twd_base + TWD_TIMER_CONTROL);
+	clockevents_update_freq(__get_cpu_var(twd_ce), twd_timer_rate);
 }
 
 static int twd_cpufreq_transition(struct notifier_block *nb,
 	unsigned long state, void *data)
 {
 	struct cpufreq_freqs *freqs = data;
-	if (((freqs->new > freqs->old) && state == CPUFREQ_PRECHANGE) ||
-	    ((freqs->old > freqs->new) && state == CPUFREQ_POSTCHANGE)) {
-		/* freqs->new is in kHz, twd_cpu_rate is in Hz */
-		twd_cpu_rate = freqs->new * 1000;
 
-		smp_call_function_single(freqs->cpu, twd_update_prescaler,
+	/*
+	 * The twd clock events must be reprogrammed to account for the new
+	 * frequency.  The timer is local to a cpu, so cross-call to the
+	 * changing cpu.
+	 */
+	if (state == CPUFREQ_POSTCHANGE || state == CPUFREQ_RESUMECHANGE)
+		smp_call_function_single(freqs->cpu, twd_update_frequency,
 			NULL, 1);
-	}
 
 	return NOTIFY_OK;
 }
@@ -131,7 +120,7 @@ static struct notifier_block twd_cpufreq_nb = {
 
 static int twd_cpufreq_init(void)
 {
-	if (twd_cpu_rate)
+	if (!IS_ERR_OR_NULL(twd_clk))
 		return cpufreq_register_notifier(&twd_cpufreq_nb,
 			CPUFREQ_TRANSITION_NOTIFIER);
 
@@ -139,32 +128,31 @@ static int twd_cpufreq_init(void)
 }
 core_initcall(twd_cpufreq_init);
 
-static void __cpuinit twd_calibrate_rate(unsigned long target_rate,
-	unsigned int periphclk_prescaler)
+static void __cpuinit twd_calibrate_rate(void)
 {
-        unsigned long count;
-        u64 waitjiffies;
- 	
-        /*
-         * If this is the first time round, we need to work out how fast
-         * the timer ticks
-         */
+	unsigned long count;
+	u64 waitjiffies;
+
+	/*
+	 * If this is the first time round, we need to work out how fast
+	 * the timer ticks
+	 */
 	if (twd_timer_rate == 0) {
 		printk(KERN_INFO "Calibrating local timer... ");
- 		
+
 		/* Wait for a tick to start */
 		waitjiffies = get_jiffies_64() + 1;
- 		
+
 		while (get_jiffies_64() < waitjiffies)
 			udelay(10);
 
 		/* OK, now the tick has started, let's get the timer going */
 		waitjiffies += 5;
 
-		/* enable, no interrupt or reload */
+				 /* enable, no interrupt or reload */
 		__raw_writel(0x1, twd_base + TWD_TIMER_CONTROL);
 
-		/* maximum value */
+				 /* maximum value */
 		__raw_writel(0xFFFFFFFFU, twd_base + TWD_TIMER_COUNTER);
 
 		while (get_jiffies_64() < waitjiffies)
@@ -174,40 +162,44 @@ static void __cpuinit twd_calibrate_rate(unsigned long target_rate,
 
 		twd_timer_rate = (0xFFFFFFFFU - count) * (HZ / 5);
 
-		/*
-		 * If a target rate has been requested, adjust the TWD prescaler
-		 * to get the closest lower frequency.
-		 */
-		if (target_rate) {
-			twd_periphclk_prescaler = periphclk_prescaler;
-
-			printk("%lu.%02luMHz, setting to ",
-			       twd_timer_rate / 1000000,
-			       (twd_timer_rate / 10000) % 100);
-
-			twd_cpu_rate = twd_timer_rate * periphclk_prescaler;
-			twd_timer_rate = target_rate;
-			twd_update_prescaler(NULL);
-		}
-
 		printk("%lu.%02luMHz.\n", twd_timer_rate / 1000000,
-		       (twd_timer_rate / 10000) % 100);
-	} else {
-		if (target_rate) {
-			BUG_ON(target_rate != twd_timer_rate);
-			twd_update_prescaler(NULL);
-		}
-        }
+			(twd_timer_rate / 10000) % 100);
+	}
+}
+
+static struct clk *twd_get_clock(void)
+{
+	struct clk *clk;
+	int err;
+
+	clk = clk_get_sys("smp_twd", NULL);
+	if (IS_ERR(clk)) {
+		pr_err("smp_twd: clock not found: %d\n", (int)PTR_ERR(clk));
+		return clk;
+	}
+
+	err = clk_enable(clk);
+	if (err) {
+		pr_err("smp_twd: clock failed to enable: %d\n", err);
+		clk_put(clk);
+		return ERR_PTR(err);
+	}
+
+	return clk;
 }
 
 /*
  * Setup the local clock events for a CPU.
  */
-static void __cpuinit __twd_timer_setup(struct clock_event_device *clk,
-					unsigned long target_rate,
-					unsigned int periphclk_prescaler)
+void __cpuinit twd_timer_setup(struct clock_event_device *clk)
 {
-	twd_calibrate_rate(target_rate, periphclk_prescaler);
+	if (!twd_clk)
+		twd_clk = twd_get_clock();
+
+	if (!IS_ERR_OR_NULL(twd_clk))
+		twd_timer_rate = clk_get_rate(twd_clk);
+	else
+		twd_calibrate_rate();
 
 	clk->name = "local_timer";
 	clk->features = CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT |
@@ -215,25 +207,12 @@ static void __cpuinit __twd_timer_setup(struct clock_event_device *clk,
 	clk->rating = 350;
 	clk->set_mode = twd_set_mode;
 	clk->set_next_event = twd_set_next_event;
-	clk->shift = 20;
-	clk->mult = div_sc(twd_timer_rate, NSEC_PER_SEC, clk->shift);
-	clk->max_delta_ns = clockevent_delta2ns(0xffffffff, clk);
-	clk->min_delta_ns = clockevent_delta2ns(0xf, clk);
 
 	/* Make sure our local interrupt controller has this enabled */
 	gic_enable_ppi(clk->irq);
 
-	clockevents_register_device(clk);
-}
+	__get_cpu_var(twd_ce) = clk;
 
-void __cpuinit twd_timer_setup_scalable(struct clock_event_device *clk,
-					unsigned long target_rate,
-					unsigned int periphclk_prescaler)
-{
-	__twd_timer_setup(clk, target_rate, periphclk_prescaler);
-}
-
-void __cpuinit twd_timer_setup(struct clock_event_device *clk)
-{
-	__twd_timer_setup(clk, 0, 0);
+	clockevents_config_and_register(clk, twd_timer_rate,
+					0xf, 0xffffffff);
 }

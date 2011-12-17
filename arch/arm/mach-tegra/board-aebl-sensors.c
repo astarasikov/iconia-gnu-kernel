@@ -138,7 +138,7 @@ static struct tegra_camera_platform_data tegra_camera_platform_data = {
 	.enable_camera		= tegra_camera_enable,
 	.disable_camera		= tegra_camera_disable,
 	.flip_v			= 0,
-	.flip_h			= 0,
+	.flip_h			= 1,
 };
 
 int __init aebl_sensors_init(void)
@@ -190,6 +190,9 @@ int __init aebl_sensors_init(void)
 	clk_csus = clk_get_sys("tegra_camera", "csus");
 	if (!clk_csus)
 		pr_warn("Failed to get csus clock\n");
+
+	clk_set_rate(clk_vi, 150000000);
+	clk_set_rate(clk_vi_sensor, 24000000);
 
 	nvhost_device_register(&tegra_camera_device);
 

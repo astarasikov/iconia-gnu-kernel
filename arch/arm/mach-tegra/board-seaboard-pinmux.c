@@ -14,8 +14,10 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/io.h>
 #include <linux/gpio.h>
 
+#include <mach/iomap.h>
 #include <mach/pinmux.h>
 #include <mach/pinmux-t2.h>
 
@@ -157,7 +159,7 @@ static __initdata struct tegra_pingroup_config seaboard_pinmux[] = {
 	{TEGRA_PINGROUP_SDD,   TEGRA_MUX_SDIO3,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
 	{TEGRA_PINGROUP_SDIO1, TEGRA_MUX_SDIO1,         TEGRA_PUPD_PULL_UP,   TEGRA_TRI_NORMAL},
 	{TEGRA_PINGROUP_SLXA,  TEGRA_MUX_PCIE,          TEGRA_PUPD_PULL_UP,   TEGRA_TRI_TRISTATE},
-	{TEGRA_PINGROUP_SLXC,  TEGRA_MUX_SPDIF,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_SLXC,  TEGRA_MUX_SPDIF,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
 	{TEGRA_PINGROUP_SLXD,  TEGRA_MUX_SPDIF,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
 	{TEGRA_PINGROUP_SLXK,  TEGRA_MUX_PCIE,          TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
 	{TEGRA_PINGROUP_SPDI,  TEGRA_MUX_RSVD2,         TEGRA_PUPD_NORMAL,    TEGRA_TRI_NORMAL},
@@ -191,7 +193,7 @@ static __initdata struct tegra_pingroup_config seaboard_pinmux[] = {
 
 
 
-static struct tegra_gpio_table gpio_table[] = {
+static struct tegra_gpio_table common_gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_SD2_CD,		.enable = true },
 	{ .gpio = TEGRA_GPIO_SD2_WP,		.enable = true },
 	{ .gpio = TEGRA_GPIO_SD2_POWER,		.enable = true },
@@ -199,28 +201,38 @@ static struct tegra_gpio_table gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_POWERKEY,		.enable = true },
 	{ .gpio = TEGRA_GPIO_ISL29018_IRQ,	.enable = true },
 	{ .gpio = TEGRA_GPIO_USB1,		.enable = true },
+	{ .gpio = TEGRA_GPIO_USB3,		.enable = true },
 	{ .gpio = TEGRA_GPIO_NCT1008_THERM2_IRQ,.enable = true },
 	{ .gpio = TEGRA_GPIO_WLAN_POWER,	.enable = true },
-	{ .gpio = TEGRA_GPIO_BACKLIGHT,		.enable = true },
-	{ .gpio = TEGRA_GPIO_LVDS_SHUTDOWN,	.enable = true },
-	{ .gpio = TEGRA_GPIO_BACKLIGHT_VDD,	.enable = true },
-	{ .gpio = TEGRA_GPIO_EN_VDD_PNL,	.enable = true },
 	{ .gpio = TEGRA_GPIO_AC_ONLINE,		.enable = true },
 	{ .gpio = TEGRA_GPIO_HP_DET,		.enable = true },
-	{ .gpio = TEGRA_GPIO_CYTP_INT,		.enable = true },
-	{ .gpio = TEGRA_GPIO_MXT_RST,		.enable = true },
 	{ .gpio = TEGRA_GPIO_MXT_IRQ,		.enable = true },
 	{ .gpio = TEGRA_GPIO_HDMI_ENB,		.enable = true },
 	{ .gpio = TEGRA_GPIO_MPU3050_IRQ,	.enable = true },
 	{ .gpio = TEGRA_GPIO_DISABLE_CHARGER,	.enable = true },
-	{ .gpio = TEGRA_GPIO_BT_RESET,		.enable = true },
-	{ .gpio = TEGRA_GPIO_HDMI_HPD,		.enable = true },
 	{ .gpio = TEGRA_GPIO_RECOVERY_SWITCH,	.enable = true },
 	{ .gpio = TEGRA_GPIO_DEV_SWITCH,	.enable = true },
 	{ .gpio = TEGRA_GPIO_WP_STATUS,		.enable = true },
+	{ .gpio = TEGRA_GPIO_BACKLIGHT,		.enable = true },
+	{ .gpio = TEGRA_GPIO_LVDS_SHUTDOWN,	.enable = true },
+	{ .gpio = TEGRA_GPIO_BACKLIGHT_VDD,	.enable = true },
+	{ .gpio = TEGRA_GPIO_EN_VDD_PNL,	.enable = true },
+	{ .gpio = TEGRA_GPIO_BT_RESET,		.enable = true },
+	{ .gpio = TEGRA_GPIO_BT_SHUTDOWN,	.enable = true },
+	{ .gpio = TEGRA_GPIO_HDMI_HPD,		.enable = true },
+	{ .gpio = TEGRA_GPIO_CYTP_INT,		.enable = true },
 };
 
-void __init seaboard_pinmux_init(void)
+static struct tegra_gpio_table seaboard_gpio_table[] = {
+	{ .gpio = SEABOARD_GPIO_MXT_RST,	.enable = true },
+};
+
+static struct tegra_gpio_table asymptote_gpio_table[] = {
+	{ .gpio = ASYMPTOTE_GPIO_MXT_RST,	.enable = true },
+	{ .gpio = ASYMPTOTE_GPIO_TSL2563_IRQ,	.enable = true },
+};
+
+void __init seaboard_common_pinmux_init(void)
 {
 	/*
 	 * PINGROUP_SPIC contains two pins:
@@ -235,9 +247,9 @@ void __init seaboard_pinmux_init(void)
 	 * PX3 as a GPIO here, and set is as an input, before the pinmux table
 	 * is written, which is when the pins will be un-tristated.
 	 */
-	tegra_gpio_enable(TEGRA_GPIO_WM8903_IRQ);
-	gpio_request(TEGRA_GPIO_WM8903_IRQ, "wm8903");
-	gpio_direction_input(TEGRA_GPIO_WM8903_IRQ);
+	tegra_gpio_enable(TEGRA_GPIO_CDC_IRQ);
+	gpio_request(TEGRA_GPIO_CDC_IRQ, "wm8903");
+	gpio_direction_input(TEGRA_GPIO_CDC_IRQ);
 
 	/* Ensure the reset line stays high. */
 	gpio_request(TEGRA_GPIO_RESET, "reset");
@@ -249,7 +261,118 @@ void __init seaboard_pinmux_init(void)
 	tegra_drive_pinmux_config_table(seaboard_drive_pinmux,
 					ARRAY_SIZE(seaboard_drive_pinmux));
 
-	tegra_gpio_config(gpio_table, ARRAY_SIZE(gpio_table));
+	tegra_gpio_config(common_gpio_table, ARRAY_SIZE(common_gpio_table));
+}
+
+void __init seaboard_pinmux_init(void)
+{
+	seaboard_common_pinmux_init();
+	tegra_gpio_config(seaboard_gpio_table, ARRAY_SIZE(seaboard_gpio_table));
+}
+
+static void __init update_pinmux(struct tegra_pingroup_config *newtbl, int size)
+{
+	int i, j;
+	struct tegra_pingroup_config *new_pingroup, *base_pingroup;
+
+	/* Update base seaboard pinmux table with secondary board
+	 * specific pinmux table table.
+	 */
+	for (i = 0; i < size; i++) {
+		new_pingroup = &newtbl[i];
+		for (j = 0; j < ARRAY_SIZE(seaboard_pinmux); j++) {
+			base_pingroup = &seaboard_pinmux[j];
+			if (new_pingroup->pingroup == base_pingroup->pingroup) {
+				*base_pingroup = *new_pingroup;
+				break;
+			}
+		}
+	}
+}
+
+#define STRAP_OPT 0x008
+#define GMI_AD0 (1 << 4)
+#define GMI_AD1 (1 << 5)
+#define RAM_ID_MASK (GMI_AD0 | GMI_AD1)
+#define RAM_CODE_SHIFT 4
+
+void __init fixup_pinmux_for_26Mhz(void)
+{
+	const struct tegra_pingroup_config pingroup_CDEV2_MUX_OSC[] = {
+		{TEGRA_PINGROUP_CDEV2, TEGRA_MUX_OSC,
+		 TEGRA_PUPD_NORMAL, TEGRA_TRI_NORMAL}
+	};
+	tegra_pinmux_config_table(pingroup_CDEV2_MUX_OSC,
+				  ARRAY_SIZE(pingroup_CDEV2_MUX_OSC));
+}
+
+void __init kaen_pinmux_init(void)
+{
+	/* TODO: Refactor this entire board revision specialization when
+	 * Flattened Device Tree and apbio interfaces are ready.
+	 */
+
+	void __iomem *apb_misc = IO_ADDRESS(TEGRA_APB_MISC_BASE);
+	int ram_id;
+	u32 reg;
+
+	seaboard_pinmux_init();
+
+	/*
+	 * For Kaen DVT2 (and not DVT1) there is a single pinmux register
+	 * change to be made which accomodates a 26Mhz reference oscillator.
+	 * If DVT2, then overwrite the value that was just written in the call
+	 * to seaboard_pinmux_init().
+	 *
+	 * Detect that 26Mhz oscillator is present for Kaen based on ram_id.
+	 *   ram_id = {0, 1} for DVT2, 26Mhz oscillator
+	 *   ram_id = {2, 3} for DVT1, 12Mhz oscillator (same as seaboard)
+	 */
+	reg = readl(apb_misc + STRAP_OPT);
+	ram_id = (reg & RAM_ID_MASK) >> RAM_CODE_SHIFT;
+
+	if ((ram_id == 0) || (ram_id == 1))
+		fixup_pinmux_for_26Mhz();
+}
+
+void __init aebl_pinmux_init(void)
+{
+	seaboard_pinmux_init();
+	fixup_pinmux_for_26Mhz();
+}
+
+void __init asymptote_pinmux_init(void)
+{
+	seaboard_common_pinmux_init();
+	tegra_gpio_config(asymptote_gpio_table,
+			  ARRAY_SIZE(asymptote_gpio_table));
+}
+
+static __initdata struct tegra_pingroup_config ventana_pinmux[] = {
+	{TEGRA_PINGROUP_DAP3, TEGRA_MUX_DAP3,     TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_DDC,  TEGRA_MUX_RSVD2,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTA,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTB,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTC,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_DTD,  TEGRA_MUX_VI,       TEGRA_PUPD_PULL_DOWN, TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_GMD,  TEGRA_MUX_SFLASH,   TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_LPW0, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_LPW2, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_LSC1, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_LSCK, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_LSDA, TEGRA_MUX_RSVD4,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_PTA,  TEGRA_MUX_RSVD2,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_SLXC, TEGRA_MUX_SDIO3,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_SLXK, TEGRA_MUX_SDIO3,    TEGRA_PUPD_NORMAL,	TEGRA_TRI_NORMAL},
+	{TEGRA_PINGROUP_SPIA, TEGRA_MUX_GMI,      TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_SPIC, TEGRA_MUX_GMI,      TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+	{TEGRA_PINGROUP_SPIG, TEGRA_MUX_SPI2_ALT, TEGRA_PUPD_NORMAL,	TEGRA_TRI_TRISTATE},
+};
+
+void __init ventana_pinmux_init(void)
+{
+	update_pinmux(ventana_pinmux, ARRAY_SIZE(ventana_pinmux));
+	seaboard_pinmux_init();
 }
 
 #ifdef CONFIG_MACH_PICASSO

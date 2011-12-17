@@ -21,6 +21,7 @@
 #include <asm/cputype.h>
 #include <asm/thread_notify.h>
 #include <asm/vfp.h>
+#include <asm/cpu_pm.h>
 
 #include "vfpinstr.h"
 #include "vfp.h"
@@ -78,6 +79,14 @@ static void vfp_thread_exit(struct thread_info *thread)
 	put_cpu();
 }
 
+static void vfp_thread_copy(struct thread_info *thread)
+{
+	struct thread_info *parent = current_thread_info();
+
+	vfp_sync_hwstate(parent);
+	thread->vfpstate = parent->vfpstate;
+}
+
 /*
  * When this function is called with the following 'cmd's, the following
  * is true while this function is being run:
@@ -104,12 +113,17 @@ static void vfp_thread_exit(struct thread_info *thread)
 static int vfp_notifier(struct notifier_block *self, unsigned long cmd, void *v)
 {
 	struct thread_info *thread = v;
+	u32 fpexc;
+#ifdef CONFIG_SMP
+	unsigned int cpu;
+#endif
 
-	if (likely(cmd == THREAD_NOTIFY_SWITCH)) {
-		u32 fpexc = fmrx(FPEXC);
+	switch (cmd) {
+	case THREAD_NOTIFY_SWITCH:
+		fpexc = fmrx(FPEXC);
 
 #ifdef CONFIG_SMP
-		unsigned int cpu = thread->cpu;
+		cpu = thread->cpu;
 
 		/*
 		 * On SMP, if VFP is enabled, save the old state in
@@ -134,13 +148,20 @@ static int vfp_notifier(struct notifier_block *self, unsigned long cmd, void *v)
 		 * old state.
 		 */
 		fmxr(FPEXC, fpexc & ~FPEXC_EN);
-		return NOTIFY_DONE;
-	}
+		break;
 
-	if (cmd == THREAD_NOTIFY_FLUSH)
+	case THREAD_NOTIFY_FLUSH:
 		vfp_thread_flush(thread);
-	else
+		break;
+
+	case THREAD_NOTIFY_EXIT:
 		vfp_thread_exit(thread);
+		break;
+
+	case THREAD_NOTIFY_COPY:
+		vfp_thread_copy(thread);
+		break;
+	}
 
 	return NOTIFY_DONE;
 }
@@ -149,11 +170,40 @@ static struct notifier_block vfp_notifier_block = {
 	.notifier_call	= vfp_notifier,
 };
 
+static int vfp_cpu_pm_notifier(struct notifier_block *self, unsigned long cmd,
+	void *v)
+{
+	u32 fpexc = fmrx(FPEXC);
+	unsigned int cpu = smp_processor_id();
+
+	switch (cmd) {
+	case CPU_PM_ENTER:
+		if (last_VFP_context[cpu]) {
+			fmxr(FPEXC, fpexc | FPEXC_EN);
+			vfp_save_state(last_VFP_context[cpu], fpexc);
+			/* force a reload when coming back from idle */
+			last_VFP_context[cpu] = NULL;
+			fmxr(FPEXC, fpexc & ~FPEXC_EN);
+		}
+		break;
+	case CPU_PM_ENTER_FAILED:
+	case CPU_PM_EXIT:
+		/* make sure VFP is disabled when leaving idle */
+		fmxr(FPEXC, fpexc & ~FPEXC_EN);
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block vfp_cpu_pm_notifier_block = {
+	.notifier_call = vfp_cpu_pm_notifier,
+};
+
 /*
  * Raise a SIGFPE for the current process.
  * sicode describes the signal being raised.
  */
-void vfp_raise_sigfpe(unsigned int sicode, struct pt_regs *regs)
+static void vfp_raise_sigfpe(unsigned int sicode, struct pt_regs *regs)
 {
 	siginfo_t info;
 
@@ -378,12 +428,18 @@ static void vfp_enable(void *unused)
 }
 
 #ifdef CONFIG_PM
-#include <linux/sysdev.h>
+#include <linux/syscore_ops.h>
 
-static int vfp_pm_suspend(struct sys_device *dev, pm_message_t state)
+static int vfp_pm_suspend(void)
 {
 	struct thread_info *ti = current_thread_info();
 	u32 fpexc = fmrx(FPEXC);
+
+	/* If lazy disable, re-enable the VFP ready for it to be saved */
+	if (last_VFP_context[ti->cpu] != &ti->vfpstate) {
+		fpexc |= FPEXC_EN;
+		fmxr(FPEXC, fpexc);
+	}
 
 	/* if vfp is on, then save state for resumption */
 	if (fpexc & FPEXC_EN) {
@@ -400,33 +456,24 @@ static int vfp_pm_suspend(struct sys_device *dev, pm_message_t state)
 	return 0;
 }
 
-static int vfp_pm_resume(struct sys_device *dev)
+static void vfp_pm_resume(void)
 {
 	/* ensure we have access to the vfp */
 	vfp_enable(NULL);
 
 	/* and disable it to ensure the next usage restores the state */
 	fmxr(FPEXC, fmrx(FPEXC) & ~FPEXC_EN);
-
-	return 0;
 }
 
-static struct sysdev_class vfp_pm_sysclass = {
-	.name		= "vfp",
+static struct syscore_ops vfp_pm_syscore_ops = {
 	.suspend	= vfp_pm_suspend,
 	.resume		= vfp_pm_resume,
 };
 
-static struct sys_device vfp_pm_sysdev = {
-	.cls	= &vfp_pm_sysclass,
-};
-
 static void vfp_pm_init(void)
 {
-	sysdev_class_register(&vfp_pm_sysclass);
-	sysdev_register(&vfp_pm_sysdev);
+	register_syscore_ops(&vfp_pm_syscore_ops);
 }
-
 
 #else
 static inline void vfp_pm_init(void) { }
@@ -489,8 +536,11 @@ void vfp_flush_hwstate(struct thread_info *thread)
 
 /*
  * VFP hardware can lose all context when a CPU goes offline.
- * Safely clear our held state when a CPU has been killed, and
- * re-enable access to VFP when the CPU comes back online.
+ * As we will be running in SMP mode with CPU hotplug, we will save the
+ * hardware state at every thread switch.  We clear our held state when
+ * a CPU has been killed, indicating that the VFP hardware doesn't contain
+ * a threads VFP state.  When a CPU starts up, we re-enable access to the
+ * VFP hardware.
  *
  * Both CPU_DYING and CPU_STARTING are called on the CPU which
  * is being offlined/onlined.
@@ -549,6 +599,7 @@ static int __init vfp_init(void)
 		vfp_vector = vfp_support_entry;
 
 		thread_register_notifier(&vfp_notifier_block);
+		cpu_pm_register_notifier(&vfp_cpu_pm_notifier_block);
 		vfp_pm_init();
 
 		/*

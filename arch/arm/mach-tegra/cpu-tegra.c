@@ -31,7 +31,6 @@
 #include <linux/suspend.h>
 #include <linux/debugfs.h>
 
-#include <asm/smp_twd.h>
 #include <asm/system.h>
 
 #include <mach/hardware.h>
@@ -39,6 +38,11 @@
 
 #include "clock.h"
 #include "fuse.h"
+
+/*
+ * Frequency table index must be sequential starting at 0 and frequencies
+ * must be ascending.
+ */
 
 /*
  * Frequency table index must be sequential starting at 0 and frequencies
@@ -104,7 +108,6 @@ static bool is_suspended;
 
 unsigned int tegra_getspeed(unsigned int cpu);
 static int tegra_update_cpu_speed(unsigned long rate);
-
 static unsigned long tegra_cpu_highest_speed(void);
 
 #ifdef CONFIG_TEGRA_THERMAL_THROTTLE
@@ -126,7 +129,6 @@ static void tegra_throttle_work_func(struct work_struct *work)
 	unsigned int current_freq;
 
 	mutex_lock(&tegra_cpu_lock);
-
 	current_freq = tegra_getspeed(0);
 	throttle_index = throttle_next_index;
 
@@ -153,6 +155,7 @@ void tegra_throttling_enable(bool enable)
 		unsigned int current_freq = tegra_getspeed(0);
 
 		is_throttling = true;
+
 		for (throttle_index = throttle_highest_index;
 		     throttle_index >= throttle_lowest_index;
 		     throttle_index--)
@@ -163,7 +166,6 @@ void tegra_throttling_enable(bool enable)
 		throttle_index = max(throttle_index, throttle_lowest_index);
 		throttle_next_index = throttle_index;
 		queue_delayed_work(workqueue, &throttle_work, 0);
-
 	} else if (!enable && is_throttling) {
 		cancel_delayed_work_sync(&throttle_work);
 		is_throttling = false;
@@ -195,7 +197,6 @@ static int throttle_debug_set(void *data, u64 val)
 	tegra_throttling_enable(val);
 	return 0;
 }
-
 static int throttle_debug_get(void *data, u64 *val)
 {
 	*val = (u64) is_throttling;
@@ -352,6 +353,9 @@ static int tegra_pm_notify(struct notifier_block *nb, unsigned long event,
 		tegra_update_cpu_speed(freq_table[0].frequency);
 	} else if (event == PM_POST_SUSPEND) {
 		is_suspended = false;
+		tegra_update_cpu_speed(tegra_cpu_highest_speed());
+		pr_info("Tegra cpufreq resume: restoring frequency to %d kHz\n",
+			tegra_cpu_highest_speed());
 	}
 	mutex_unlock(&tegra_cpu_lock);
 
@@ -385,8 +389,8 @@ static int tegra_cpu_init(struct cpufreq_policy *policy)
 	policy->cur = tegra_getspeed(policy->cpu);
 	target_cpu_speed[policy->cpu] = policy->cur;
 
-	/* FIXME: what's the actual transition time? */
-	policy->cpuinfo.transition_latency = 300 * 1000;
+	/* cpu clock change latency: ~400us */
+	policy->cpuinfo.transition_latency = 400;
 
 	policy->shared_type = CPUFREQ_SHARED_TYPE_ALL;
 	cpumask_copy(policy->related_cpus, cpu_possible_mask);

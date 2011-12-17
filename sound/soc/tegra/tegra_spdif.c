@@ -29,7 +29,6 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <mach/iomap.h>
-#include <mach/dc.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -174,13 +173,6 @@ static int tegra_spdif_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
-	/* FIXME: Should this be in a codec driver? */
-	ret = tegra_dc_hdmi_set_audio_sample_rate(srate);
-	if (ret) {
-		dev_err(dev, "Can't configure HDMI controller: %d\n", ret);
-		return ret;
-	}
-
 	return 0;
 }
 
@@ -241,7 +233,7 @@ static struct snd_soc_dai_ops tegra_spdif_dai_ops = {
 };
 
 struct snd_soc_dai_driver tegra_spdif_dai = {
-	.name = DRV_NAME ".0",
+	.name = DRV_NAME,
 	.probe = tegra_spdif_probe,
 	.playback = {
 		.channels_min = 2,
@@ -267,9 +259,9 @@ static __devinit int tegra_spdif_platform_probe(struct platform_device *pdev)
 	}
 	dev_set_drvdata(&pdev->dev, spdif);
 
-	spdif->clk_spdif_out = clk_get_sys("spdif_out", NULL);
+	spdif->clk_spdif_out = clk_get(&pdev->dev, "spdif_out");
 	if (IS_ERR(spdif->clk_spdif_out)) {
-		pr_err("Can't retrieve spdif clock\n");
+		dev_err(&pdev->dev, "Can't retrieve spdif clock\n");
 		ret = PTR_ERR(spdif->clk_spdif_out);
 		goto err_free;
 	}

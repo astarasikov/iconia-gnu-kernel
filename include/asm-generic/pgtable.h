@@ -4,6 +4,8 @@
 #ifndef __ASSEMBLY__
 #ifdef CONFIG_MMU
 
+#include <linux/mm_types.h>
+
 #ifndef __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
 extern int ptep_set_access_flags(struct vm_area_struct *vma,
 				 unsigned long address, pte_t *ptep,
@@ -86,7 +88,7 @@ static inline pmd_t pmdp_get_and_clear(struct mm_struct *mm,
 	pmd_t pmd = *pmdp;
 	pmd_clear(mm, address, pmdp);
 	return pmd;
-})
+}
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 #endif
 
@@ -182,22 +184,18 @@ static inline int pmd_same(pmd_t pmd_a, pmd_t pmd_b)
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 #endif
 
-#ifndef __HAVE_ARCH_PAGE_TEST_DIRTY
-#define page_test_dirty(page)		(0)
+#ifndef __HAVE_ARCH_PAGE_TEST_AND_CLEAR_DIRTY
+#define page_test_and_clear_dirty(pfn, mapped)	(0)
 #endif
 
-#ifndef __HAVE_ARCH_PAGE_CLEAR_DIRTY
-#define page_clear_dirty(page, mapped)	do { } while (0)
-#endif
-
-#ifndef __HAVE_ARCH_PAGE_TEST_DIRTY
+#ifndef __HAVE_ARCH_PAGE_TEST_AND_CLEAR_DIRTY
 #define pte_maybe_dirty(pte)		pte_dirty(pte)
 #else
 #define pte_maybe_dirty(pte)		(1)
 #endif
 
 #ifndef __HAVE_ARCH_PAGE_TEST_AND_CLEAR_YOUNG
-#define page_test_and_clear_young(page) (0)
+#define page_test_and_clear_young(pfn) (0)
 #endif
 
 #ifndef __HAVE_ARCH_PGD_OFFSET_GATE

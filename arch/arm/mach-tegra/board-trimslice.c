@@ -23,15 +23,21 @@
 #include <linux/platform_device.h>
 #include <linux/serial_8250.h>
 #include <linux/io.h>
+#include <linux/i2c.h>
+#include <linux/gpio.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/setup.h>
 
 #include <mach/iomap.h>
+#include <mach/sdhci.h>
+#include <mach/gpio.h>
 
 #include "board.h"
 #include "clock.h"
+#include "devices.h"
+#include "gpio-names.h"
 
 #include "board-trimslice.h"
 
@@ -40,7 +46,8 @@ static struct plat_serial8250_port debug_uart_platform_data[] = {
 		.membase	= IO_ADDRESS(TEGRA_UARTA_BASE),
 		.mapbase	= TEGRA_UARTA_BASE,
 		.irq		= INT_UARTA,
-		.flags		= UPF_BOOT_AUTOCONF,
+		.flags		= UPF_BOOT_AUTOCONF | UPF_FIXED_TYPE,
+		.type		= PORT_TEGRA,
 		.iotype		= UPIO_MEM,
 		.regshift	= 2,
 		.uartclk	= 216000000,
@@ -56,10 +63,69 @@ static struct platform_device debug_uart = {
 		.platform_data	= debug_uart_platform_data,
 	},
 };
+static struct tegra_sdhci_platform_data sdhci_pdata1 = {
+	.cd_gpio	= -1,
+	.wp_gpio	= -1,
+	.power_gpio	= -1,
+};
+
+static struct tegra_sdhci_platform_data sdhci_pdata4 = {
+	.cd_gpio	= TRIMSLICE_GPIO_SD4_CD,
+	.wp_gpio	= TRIMSLICE_GPIO_SD4_WP,
+	.power_gpio	= -1,
+};
+
+static struct platform_device trimslice_audio_device = {
+	.name	= "tegra-snd-trimslice",
+	.id	= 0,
+};
 
 static struct platform_device *trimslice_devices[] __initdata = {
 	&debug_uart,
+	&tegra_sdhci_device1,
+	&tegra_sdhci_device4,
+	&tegra_i2s_device1,
+	&tegra_das_device,
+	&tegra_pcm_device,
+	&trimslice_audio_device,
 };
+
+static struct i2c_board_info trimslice_i2c3_board_info[] = {
+	{
+		I2C_BOARD_INFO("tlv320aic23", 0x1a),
+	},
+	{
+		I2C_BOARD_INFO("em3027", 0x56),
+	},
+};
+
+static void trimslice_i2c_init(void)
+{
+	platform_device_register(&tegra_i2c_device1);
+	platform_device_register(&tegra_i2c_device2);
+	platform_device_register(&tegra_i2c_device3);
+
+	i2c_register_board_info(2, trimslice_i2c3_board_info,
+				ARRAY_SIZE(trimslice_i2c3_board_info));
+}
+
+static void trimslice_usb_init(void)
+{
+	int err;
+
+	platform_device_register(&tegra_ehci3_device);
+
+	platform_device_register(&tegra_ehci2_device);
+
+	err = gpio_request_one(TRIMSLICE_GPIO_USB1_MODE, GPIOF_OUT_INIT_HIGH,
+			       "usb1mode");
+	if (err) {
+		pr_err("TrimSlice: failed to obtain USB1 mode gpio: %d\n", err);
+		return;
+	}
+
+	platform_device_register(&tegra_ehci1_device);
+}
 
 static void __init tegra_trimslice_fixup(struct machine_desc *desc,
 	struct tag *tags, char **cmdline, struct meminfo *mi)
@@ -74,6 +140,10 @@ static void __init tegra_trimslice_fixup(struct machine_desc *desc,
 static __initdata struct tegra_clk_init_table trimslice_clk_init_table[] = {
 	/* name		parent		rate		enabled */
 	{ "uarta",	"pll_p",	216000000,	true },
+	{ "pll_a",	"pll_p_out1",	56448000,	true },
+	{ "pll_a_out0",	"pll_a",	11289600,	true },
+	{ "cdev1",	NULL,		0,		true },
+	{ "i2s1",	"pll_a_out0",	11289600,	false},
 	{ NULL,		NULL,		0,		0},
 };
 
@@ -92,7 +162,13 @@ static void __init tegra_trimslice_init(void)
 
 	trimslice_pinmux_init();
 
+	tegra_sdhci_device1.dev.platform_data = &sdhci_pdata1;
+	tegra_sdhci_device4.dev.platform_data = &sdhci_pdata4;
+
 	platform_add_devices(trimslice_devices, ARRAY_SIZE(trimslice_devices));
+
+	trimslice_i2c_init();
+	trimslice_usb_init();
 }
 
 MACHINE_START(TRIMSLICE, "trimslice")

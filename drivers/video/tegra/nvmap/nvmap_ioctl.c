@@ -275,7 +275,10 @@ int nvmap_map_into_caller_ptr(struct file *filp, void __user *arg)
 		goto out;
 	}
 
-	if (!h->heap_pgalloc && (h->carveout->base & ~PAGE_MASK)) {
+	WARN(!h->heap_pgalloc && !h->carveout,
+		"nvmap: carveout pointer NULL when pgalloc not set");
+	if (!h->heap_pgalloc && (!h->carveout ||
+		(h->carveout->base & ~PAGE_MASK))) {
 		err = -EFAULT;
 		goto out;
 	}

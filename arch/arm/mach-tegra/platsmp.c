@@ -13,35 +13,19 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+
+#include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/errno.h>
-#include <linux/delay.h>
-#include <linux/device.h>
-#include <linux/jiffies.h>
-#include <linux/smp.h>
 #include <linux/io.h>
-#include <linux/completion.h>
-#include <linux/sched.h>
-#include <linux/cpu.h>
-#include <linux/slab.h>
+#include <linux/smp.h>
 
 #include <asm/cacheflush.h>
+#include <asm/hardware/gic.h>
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
-#include <asm/tlbflush.h>
 #include <asm/smp_scu.h>
-#include <asm/cpu.h>
-#include <asm/mmu_context.h>
-#include <asm/hardware/gic.h>
 
 #include <mach/iomap.h>
-
-#include "power.h"
-
-extern void tegra_secondary_startup(void);
-
-static DEFINE_SPINLOCK(boot_lock);
-static void __iomem *scu_base = IO_ADDRESS(TEGRA_ARM_PERIF_BASE);
 
 #define EVP_CPU_RESET_VECTOR \
 	(IO_ADDRESS(TEGRA_EXCEPTION_VECTORS_BASE) + 0x100)
@@ -52,68 +36,33 @@ static void __iomem *scu_base = IO_ADDRESS(TEGRA_ARM_PERIF_BASE);
 #define CLK_RST_CONTROLLER_RST_CPU_CMPLX_CLR \
 	(IO_ADDRESS(TEGRA_CLK_RESET_BASE) + 0x344)
 
+extern void tegra_secondary_startup(void);
+
+static void __iomem *scu_base = IO_ADDRESS(TEGRA_ARM_PERIF_BASE);
+
 void __cpuinit platform_secondary_init(unsigned int cpu)
 {
-	/*
-	 * if any interrupts are already enabled for the primary
-	 * core (e.g. timer irq), then they will not have been enabled
-	 * for us: do so
-	 */
 	gic_secondary_init(0);
-
-	/*
-	 * Synchronise with the boot thread.
-	 */
-	spin_lock(&boot_lock);
-	spin_unlock(&boot_lock);
 }
 
 int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
-	unsigned long old_boot_vector;
-	unsigned long boot_vector;
-	unsigned long timeout;
 	u32 reg;
-
-	/*
-	 * set synchronisation state between this boot processor
-	 * and the secondary one
-	 */
-	spin_lock(&boot_lock);
-
-	/* set the reset vector to point to the secondary_startup routine */
-	boot_vector = virt_to_phys(tegra_secondary_startup);
 
 	smp_wmb();
 
-	old_boot_vector = readl(EVP_CPU_RESET_VECTOR);
-	writel(boot_vector, EVP_CPU_RESET_VECTOR);
+	/* set the reset vector to point to the secondary_startup routine */
+	writel(virt_to_phys(tegra_secondary_startup), EVP_CPU_RESET_VECTOR);
 
 	/* enable cpu clock on cpu */
 	reg = readl(CLK_RST_CONTROLLER_CLK_CPU_CMPLX);
-	writel(reg & ~(1<<(8+cpu)), CLK_RST_CONTROLLER_CLK_CPU_CMPLX);
+	writel(reg & ~(1 << (8 + cpu)), CLK_RST_CONTROLLER_CLK_CPU_CMPLX);
 
-	reg = 0x1111<<cpu;
+	reg = 0x1111 << cpu;
 	writel(reg, CLK_RST_CONTROLLER_RST_CPU_CMPLX_CLR);
 
 	/* unhalt the cpu */
-	writel(0, IO_ADDRESS(TEGRA_FLOW_CTRL_BASE) + 0x14 + 0x8*(cpu-1));
-
-	timeout = jiffies + HZ;
-	while (time_before(jiffies, timeout)) {
-		if (readl(EVP_CPU_RESET_VECTOR) != boot_vector)
-			break;
-		udelay(10);
-	}
-
-	/* put the old boot vector back */
-	writel(old_boot_vector, EVP_CPU_RESET_VECTOR);
-
-	/*
-	 * now the secondary core is starting up let it run its
-	 * calibrations, then wait for it to finish
-	 */
-	spin_unlock(&boot_lock);
+	writel(0, IO_ADDRESS(TEGRA_FLOW_CTRL_BASE) + 0x14 + 0x8 * (cpu - 1));
 
 	return 0;
 }
@@ -133,7 +82,9 @@ void __init smp_init_cpus(void)
 	}
 
 	for (i = 0; i < ncores; i++)
-		cpu_set(i, cpu_possible_map);
+		set_cpu_possible(i, true);
+
+	set_smp_cross_call(gic_raise_softirq);
 }
 
 void __init platform_smp_prepare_cpus(unsigned int max_cpus)
@@ -149,60 +100,3 @@ void __init platform_smp_prepare_cpus(unsigned int max_cpus)
 
 	scu_enable(scu_base);
 }
-
-#ifdef CONFIG_HOTPLUG_CPU
-
-int platform_cpu_kill(unsigned int cpu)
-{
-	unsigned int reg;
-
-	do {
-		reg = readl(CLK_RST_CONTROLLER_RST_CPU_CMPLX_SET);
-		cpu_relax();
-	} while (!(reg & (1<<cpu)));
-
-	spin_lock(&boot_lock);
-	reg = readl(CLK_RST_CONTROLLER_CLK_CPU_CMPLX);
-	writel(reg | (1<<(8+cpu)), CLK_RST_CONTROLLER_CLK_CPU_CMPLX);
-	spin_unlock(&boot_lock);
-
-	return 1;
-}
-
-void platform_cpu_die(unsigned int cpu)
-{
-#ifdef DEBUG
-	unsigned int this_cpu = hard_smp_processor_id();
-
-	if (cpu != this_cpu) {
-		printk(KERN_CRIT "Eek! platform_cpu_die running on %u, should be %u\n",
-			   this_cpu, cpu);
-		BUG();
-	}
-#endif
-
-	gic_cpu_exit(0);
-	barrier();
-	flush_cache_all();
-	barrier();
-	__cortex_a9_save(0);
-
-	/*
-	 * __cortex_a9_save can return through __cortex_a9_restore, but that
-	 * should never happen for a hotplugged cpu
-	 */
-	BUG();
-}
-
-int platform_cpu_disable(unsigned int cpu)
-{
-	/*
-	 * we don't allow CPU 0 to be shutdown (it is still too special
-	 * e.g. clock tick interrupts)
-	 */
-	if (unlikely(!tegra_context_area))
-		return -ENXIO;
-
-	return cpu == 0 ? -EPERM : 0;
-}
-#endif

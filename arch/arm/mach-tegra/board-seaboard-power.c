@@ -25,8 +25,10 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <mach/iomap.h>
+#include <mach/powergate.h>
 #include <linux/err.h>
 
+#include <asm/mach-types.h>
 #include "board-seaboard.h"
 #include "gpio-names.h"
 
@@ -50,6 +52,7 @@ static struct regulator_consumer_supply tps658621_ldo1_supply[] = {
 };
 static struct regulator_consumer_supply tps658621_ldo2_supply[] = {
 	REGULATOR_SUPPLY("vdd_rtc", NULL),
+	REGULATOR_SUPPLY("vdd_aon", NULL),
 };
 static struct regulator_consumer_supply tps658621_ldo3_supply[] = {
 	REGULATOR_SUPPLY("avdd_usb", NULL),
@@ -96,7 +99,7 @@ struct regulator_init_data wwan_pwr_initdata = {
 static struct fixed_voltage_config wwan_pwr = {
 	.supply_name		= "si4825",
 	.microvolts		= 3300000, /* 3.3V */
-	.gpio			= TPS_GPIO_WWAN_PWR,
+	.gpio			= TEGRA_GPIO_WWAN_PWR,
 	.startup_delay		= 0,
 	.enable_high		= 1,
 	.enabled_at_boot	= 1,
@@ -119,7 +122,7 @@ struct regulator_init_data vdd_1v5_initdata = {
 static struct fixed_voltage_config vdd_1v5 = {
 	.supply_name		= "vdd_1v5",
 	.microvolts		= 1500000, /* 1.5V */
-	.gpio			= TPS_GPIO_EN_1V5,
+	.gpio			= TEGRA_GPIO_EN_1V5,
 	.startup_delay		= 0,
 	.enable_high		= 0,
 	.enabled_at_boot	= 0,
@@ -148,7 +151,7 @@ static struct regulator_init_data sm1_data = REGULATOR_INIT(sm1, 750, 1275, true
 static struct regulator_init_data sm2_data = REGULATOR_INIT(sm2, 3000, 4550, true);
 static struct regulator_init_data ldo0_data = REGULATOR_INIT(ldo0, 1250, 3300, false);
 static struct regulator_init_data ldo1_data = REGULATOR_INIT(ldo1, 1100, 1100, true);
-static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2, 900, 1200, false);
+static struct regulator_init_data ldo2_data = REGULATOR_INIT(ldo2, 900, 1300, false);
 static struct regulator_init_data ldo3_data = REGULATOR_INIT(ldo3, 3300, 3300, true);
 static struct regulator_init_data ldo4_data = REGULATOR_INIT(ldo4, 1800, 1800, true);
 static struct regulator_init_data ldo5_data = REGULATOR_INIT(ldo5, 2850, 3300, true);
@@ -194,7 +197,7 @@ static struct tps6586x_subdev_info tps_devs[] = {
 	{
 		.id	= 0,
 		.name	= "tps6586x-rtc",
-		.platform_data	= &rtc_data,
+		.platform_data  = &rtc_data,
 	},
 };
 
@@ -202,7 +205,7 @@ static struct tps6586x_platform_data tps_platform = {
 	.irq_base = TEGRA_NR_IRQS,
 	.num_subdevs = ARRAY_SIZE(tps_devs),
 	.subdevs = tps_devs,
-	.gpio_base = TPS_GPIO_BASE,
+	.gpio_base = SEABOARD_GPIO_TPS6586X(0),
 };
 
 static struct i2c_board_info __initdata seaboard_regulators[] = {
@@ -228,6 +231,16 @@ int __init seaboard_regulator_init(void)
 
 	/* set initial_mode to MODE_FAST for SM1 */
 	sm1_data.constraints.initial_mode = REGULATOR_MODE_FAST;
+
+	/* Asymptote has a touchscreen on the rail powered by LDO6, it needs
+	 * 3v3. All other seaboard-based targets use 1v8 on LDO6.
+	 */
+	if (machine_is_asymptote()) {
+		ldo6_data.constraints.max_uV = 3300*1000;
+		ldo6_data.constraints.min_uV = 3300*1000;
+		ldo6_data.constraints.apply_uV = true;
+		ldo6_data.constraints.always_on = true;
+	}
 
 	i2c_register_board_info(4, seaboard_regulators, 1);
 	return 0;
@@ -267,6 +280,8 @@ static struct platform_device seaboard_ac_power_device = {
 	},
 };
 
+static unsigned disable_charger_gpio = TEGRA_GPIO_DISABLE_CHARGER;
+
 int __init seaboard_ac_power_init(void)
 {
 	int err;
@@ -279,48 +294,27 @@ int __init seaboard_ac_power_init(void)
 		gpio_free(TEGRA_GPIO_AC_ONLINE);
 	}
 
-	err = gpio_request(TEGRA_GPIO_DISABLE_CHARGER, "disable charger");
+	err = gpio_request(disable_charger_gpio, "disable charger");
 	if (err < 0) {
 		pr_err("could not acquire charger disable\n");
 	} else {
-		gpio_direction_output(TEGRA_GPIO_DISABLE_CHARGER, 0);
-		gpio_free(TEGRA_GPIO_DISABLE_CHARGER);
+		gpio_direction_output(disable_charger_gpio, 0);
+		gpio_free(disable_charger_gpio);
 	}
 
 	err = platform_device_register(&seaboard_ac_power_device);
 	return err;
 }
 
-static void reg_off(const char *reg)
-{
-	int rc;
-	struct regulator *regulator;
-
-	regulator = regulator_get(NULL, reg);
-
-	if (IS_ERR(regulator)) {
-		pr_err("%s: regulator_get returned %ld\n", __func__,
-		       PTR_ERR(regulator));
-		return;
-	}
-
-	rc = regulator_force_disable(regulator);
-	if (rc)
-		pr_err("%s: regulator_force_disable returned %d\n", __func__,
-			rc);
-	regulator_put(regulator);
-}
-
 static void seaboard_power_off(void)
 {
-	reg_off("vdd_sm2");
-	reg_off("vdd_core");
-	reg_off("vdd_cpu");
-	local_irq_disable();
-	while (1) {
-		dsb();
-		__asm__ ("wfi");
-	}
+	int ret;
+
+	ret = tps6586x_power_off();
+	if (ret)
+		pr_err("Failed to power off\n");
+
+	while(1);
 }
 
 int __init seaboard_power_init(void)
@@ -331,11 +325,16 @@ int __init seaboard_power_init(void)
 	if (err < 0)
 		pr_warning("Unable to initialize regulator\n");
 
+	if (machine_is_ventana())
+		disable_charger_gpio = TEGRA_GPIO_VENTANA_DISABLE_CHARGER;
+
 	err = seaboard_ac_power_init();
 	if (err < 0)
 		pr_warning("Unable to initialize ac power\n");
 
 	pm_power_off = seaboard_power_off;
+
+	tegra_powergate_power_off(TEGRA_POWERGATE_PCIE);
 
 	return 0;
 }

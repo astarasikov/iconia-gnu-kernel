@@ -191,6 +191,15 @@ static int tegra_dc_ext_set_windowattr(struct tegra_dc_ext *ext,
 		win->flags |= TEGRA_WIN_FLAG_BLEND_PREMULT;
 	else if (flip_win->attr.blend == TEGRA_DC_EXT_BLEND_COVERAGE)
 		win->flags |= TEGRA_WIN_FLAG_BLEND_COVERAGE;
+
+	/*
+	 * If we start with a swap_countdown of zero, that means we want to
+	 * swap as soon as possible.  Mark this window as such, because it
+	 * affects what interrupt we use to trigger the swap completion.
+	 */
+	if (win->swap_countdown == 0)
+		win->flags |= TEGRA_WIN_FLAG_SWAP_ASAP;
+
 	win->fmt = flip_win->attr.pixformat;
 	win->x.full = flip_win->attr.x;
 	win->y.full = flip_win->attr.y;
@@ -257,6 +266,8 @@ static void tegra_dc_ext_flip_worker(struct work_struct *work)
 		win = tegra_dc_get_window(ext->dc, index);
 		ext_win = &ext->win[index];
 
+		win->swap_countdown = flip_win->attr.swap_interval;
+
 		old_ena = ext->win[index].enabled;
 		new_ena = flip_win->handle != NULL;
 		if (old_ena != new_ena) {
@@ -276,7 +287,6 @@ static void tegra_dc_ext_flip_worker(struct work_struct *work)
 	}
 
 	tegra_dc_update_windows(wins, nr_win);
-	/* TODO: implement swapinterval here */
 	tegra_dc_sync_windows(wins, nr_win);
 
 	for (i = 0; i < DC_N_WINDOWS; i++) {

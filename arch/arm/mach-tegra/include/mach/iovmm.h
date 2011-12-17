@@ -69,7 +69,7 @@ struct tegra_iovmm_domain {
 struct iovmm_share_group;
 
 struct tegra_iovmm_client {
-	const char			*name;
+	const char 			*name;
 	unsigned long			flags;
 	struct iovmm_share_group	*group;
 	struct tegra_iovmm_domain	*domain;
@@ -166,6 +166,9 @@ void tegra_iovmm_unzap_vm(struct tegra_iovmm_area *vm);
 /* called by clients to return an iovmm_area to the free pool for the domain */
 void tegra_iovmm_free_vm(struct tegra_iovmm_area *vm);
 
+/* returns size of largest free iovm block */
+size_t tegra_iovmm_get_max_free(struct tegra_iovmm_client *client);
+
 /* called by client software to map the page-aligned I/O address vaddr to
  * a specific physical address pfn. I/O VMA should have been created with
  * a NULL tegra_iovmm_area_ops structure. */
@@ -191,12 +194,6 @@ int tegra_iovmm_register(struct tegra_iovmm_device *dev);
 
 /* called by drivers to remove an I/O VMM device from the system */
 int tegra_iovmm_unregister(struct tegra_iovmm_device *dev);
-
-/* called by platform suspend code to save IOVMM context */
-int tegra_iovmm_suspend(void);
-
-/* restores IOVMM context */
-void tegra_iovmm_resume(void);
 
 #else /* CONFIG_TEGRA_IOVMM */
 

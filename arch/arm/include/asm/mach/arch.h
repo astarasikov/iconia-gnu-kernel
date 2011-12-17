@@ -15,13 +15,11 @@ struct meminfo;
 struct sys_timer;
 
 struct machine_desc {
-	/*
-	 * Note! The first two elements are used
-	 * by assembler code in head.S, head-common.S
-	 */
 	unsigned int		nr;		/* architecture number	*/
 	const char		*name;		/* architecture name	*/
 	unsigned long		boot_params;	/* tagged list		*/
+	const char		**dt_compat;	/* array of device tree
+						 * 'compatible' strings	*/
 
 	unsigned int		nr_irqs;	/* number of IRQs */
 
@@ -50,6 +48,13 @@ struct machine_desc {
  * Current machine - only accessible during boot.
  */
 extern struct machine_desc *machine_desc;
+
+/*
+ * Machine type table - also only accessible during boot
+ */
+extern struct machine_desc __arch_info_begin[], __arch_info_end[];
+#define for_each_machine_desc(p)			\
+	for (p = __arch_info_begin; p < __arch_info_end; p++)
 
 /*
  * Set of macros to define architecture features.  This is built into

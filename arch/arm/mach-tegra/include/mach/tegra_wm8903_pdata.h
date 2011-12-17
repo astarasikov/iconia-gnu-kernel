@@ -20,4 +20,5 @@ struct tegra_wm8903_platform_data {
 	int gpio_hp_mute;
 	int gpio_int_mic_en;
 	int gpio_ext_mic_en;
+	int gpio_hp_invert;
 };

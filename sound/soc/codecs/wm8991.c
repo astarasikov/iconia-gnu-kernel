@@ -13,7 +13,6 @@
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
-#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/delay.h>
@@ -981,7 +980,7 @@ static int wm8991_set_dai_pll(struct snd_soc_dai *codec_dai,
 		reg = snd_soc_read(codec, WM8991_CLOCKING_2);
 		snd_soc_write(codec, WM8991_CLOCKING_2, reg | WM8991_SYSCLK_SRC);
 
-		/* set up N , fractional mode and pre-divisor if neccessary */
+		/* set up N , fractional mode and pre-divisor if necessary */
 		snd_soc_write(codec, WM8991_PLL1, pll_div.n | WM8991_SDM |
 			      (pll_div.div2 ? WM8991_PRESCALE : 0));
 		snd_soc_write(codec, WM8991_PLL2, (u8)(pll_div.k>>8));

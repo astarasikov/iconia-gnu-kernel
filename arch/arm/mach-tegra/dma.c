@@ -28,10 +28,10 @@
 #include <linux/irq.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
+#include <linux/syscore_ops.h>
 #include <mach/dma.h>
 #include <mach/irqs.h>
 #include <mach/iomap.h>
-#include <mach/suspend.h>
 
 #define APB_DMA_GEN				0x000
 #define GEN_ENABLE				(1<<31)
@@ -137,24 +137,6 @@ static void tegra_dma_update_hw_partial(struct tegra_dma_channel *ch,
 	struct tegra_dma_req *req);
 static void tegra_dma_stop(struct tegra_dma_channel *ch);
 
-void tegra_dma_flush(struct tegra_dma_channel *ch)
-{
-}
-EXPORT_SYMBOL(tegra_dma_flush);
-
-void tegra_dma_dequeue(struct tegra_dma_channel *ch)
-{
-	struct tegra_dma_req *req;
-
-	if (tegra_dma_is_empty(ch))
-		return;
-
-	req = list_entry(ch->list.next, typeof(*req), node);
-
-	tegra_dma_dequeue_req(ch, req);
-	return;
-}
-
 void tegra_dma_stop(struct tegra_dma_channel *ch)
 {
 	u32 csr;
@@ -250,17 +232,17 @@ int tegra_dma_dequeue_req(struct tegra_dma_channel *ch,
 	}
 	if (!found) {
 		spin_unlock_irqrestore(&ch->lock, irq_flags);
-		return 0;
+		return -EINVAL;
 	}
 
 	if (!stop)
 		goto skip_status;
 
 	/* STOP the DMA and get the transfer count.
-	  * Getting the transfer count is tricky.
+	 * Getting the transfer count is tricky.
 	 *  - Globally disable DMA on all channels
 	 *  - Read the channel's status register to know the number of pending
-	 *    bytes to be transfered.
+	 *    bytes to be transferred.
 	 *  - Stop the dma channel
 	 *  - Globally re-enable DMA to resume other transfers
 	 */
@@ -286,8 +268,6 @@ skip_status:
 
 	spin_unlock_irqrestore(&ch->lock, irq_flags);
 
-	/* Callback should be called without any lock */
-	req->complete(req);
 	return 0;
 }
 EXPORT_SYMBOL(tegra_dma_dequeue_req);
@@ -627,8 +607,13 @@ static void handle_continuous_dbl_dma(struct tegra_dma_channel *ch)
 				is_dma_ping_complete = !is_dma_ping_complete;
 			/* Out of sync - Release current buffer */
 			if (!is_dma_ping_complete) {
+				int bytes_transferred;
+
+				bytes_transferred = ch->req_transfer_count;
+				bytes_transferred += 1;
+				bytes_transferred <<= 3;
 				req->buffer_status = TEGRA_DMA_REQ_BUF_STATUS_FULL;
-				req->bytes_transferred = req->size;
+				req->bytes_transferred = bytes_transferred;
 				req->status = TEGRA_DMA_REQ_SUCCESS;
 				tegra_dma_stop(ch);
 
@@ -838,11 +823,13 @@ fail:
 	}
 	return ret;
 }
+postcore_initcall(tegra_dma_init);
 
 #ifdef CONFIG_PM
+
 static u32 apb_dma[5*TEGRA_SYSTEM_DMA_CH_NR + 3];
 
-void tegra_dma_suspend(void)
+static int tegra_dma_suspend(void)
 {
 	void __iomem *addr = IO_ADDRESS(TEGRA_APB_DMA_BASE);
 	u32 *ctx = apb_dma;
@@ -862,9 +849,11 @@ void tegra_dma_suspend(void)
 		*ctx++ = readl(addr + APB_DMA_CHAN_APB_PTR);
 		*ctx++ = readl(addr + APB_DMA_CHAN_APB_SEQ);
 	}
+
+	return 0;
 }
 
-void tegra_dma_resume(void)
+static void tegra_dma_resume(void)
 {
 	void __iomem *addr = IO_ADDRESS(TEGRA_APB_DMA_BASE);
 	u32 *ctx = apb_dma;
@@ -886,4 +875,16 @@ void tegra_dma_resume(void)
 	}
 }
 
+static struct syscore_ops tegra_dma_syscore_ops = {
+	.suspend = tegra_dma_suspend,
+	.resume = tegra_dma_resume,
+};
+
+static int tegra_dma_syscore_init(void)
+{
+	register_syscore_ops(&tegra_dma_syscore_ops);
+
+	return 0;
+}
+subsys_initcall(tegra_dma_syscore_init);
 #endif

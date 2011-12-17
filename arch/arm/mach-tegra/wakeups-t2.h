@@ -23,6 +23,9 @@
 #ifndef __MACH_TEGRA_WAKEUPS_T2_H
 #define __MACH_TEGRA_WAKEUPS_T2_H
 
+int tegra_irq_to_wake(int irq);
+int tegra_wake_to_irq(int wake);
+
 #define TEGRA_WAKE_GPIO_PO5	(1 << 0)
 #define TEGRA_WAKE_GPIO_PV3	(1 << 1)
 #define TEGRA_WAKE_GPIO_PL1	(1 << 2)
