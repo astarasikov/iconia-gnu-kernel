@@ -314,7 +314,9 @@ static void tegra_wm8903_disconnect_pins(struct snd_soc_card *card,
 	M(harmony)                              \
 	M(kaen)                                 \
 	M(seaboard)                             \
-	M(ventana)
+	M(ventana)								\
+	M(picasso)								\
+	M(tf101)
 
 #define M(_x) mn_##_x,
 	enum machine_names {
@@ -336,6 +338,8 @@ static void tegra_wm8903_disconnect_pins(struct snd_soc_card *card,
 			.name = "IN1R",
 			CONNECT(seaboard),
 			CONNECT(aebl),
+			CONNECT(picasso),
+			CONNECT(tf101),
 		},
 		{
 			.name = "IN2L",
@@ -385,10 +389,14 @@ static void tegra_wm8903_disconnect_pins(struct snd_soc_card *card,
 		{
 			.name = "LINEOUTR",
 			CONNECT(aebl),
+			CONNECT(picasso),
+			CONNECT(tf101),
 		},
 		{
 			.name = "LINEOUTL",
 			CONNECT(aebl),
+			CONNECT(picasso),
+			CONNECT(tf101),
 		},
 #undef CONNECT
 	};
@@ -556,10 +564,11 @@ static __devinit int tegra_wm8903_driver_probe(struct platform_device *pdev)
 	} else if (machine_is_kaen()) {
 		card->dapm_routes = kaen_audio_map;
 		card->num_dapm_routes = ARRAY_SIZE(kaen_audio_map);
-	} else {
-		BUG_ON(!machine_is_aebl());
+	} else if (machine_is_aebl() || machine_is_picasso() || machine_is_tf101()) {
 		card->dapm_routes = aebl_audio_map;
 		card->num_dapm_routes = ARRAY_SIZE(aebl_audio_map);
+	} else {
+		BUG();
 	}
 
 	ret = snd_soc_register_card(card);
