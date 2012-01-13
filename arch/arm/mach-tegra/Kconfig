@@ -55,10 +55,13 @@ config MACH_VENTANA
 
 config MACH_PICASSO
 		bool "Acer Picasso board"
+		select MACH_HAS_SND_SOC_TEGRA_WM8903
 		help
 			Support for Acer Iconia Tab A500 tablet
+
 config MACH_TF101
 		bool "Asus TF101 board"
+		select MACH_HAS_SND_SOC_TEGRA_WM8903
 		help
 			Support for Asus EEPad Transformer tablet
 
