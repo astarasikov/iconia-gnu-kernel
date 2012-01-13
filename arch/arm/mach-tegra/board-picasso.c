@@ -335,6 +335,7 @@ static struct tegra_wm8903_platform_data picasso_audio_pdata = {
 	.gpio_hp_det		= PICASSO_GPIO_HP_DETECT,
 	.gpio_int_mic_en	= PICASSO_GPIO_MIC_EN_INT,
 	.gpio_ext_mic_en	= TEGRA_GPIO_VENTANA_EN_MIC_EXT,
+	.gpio_hp_invert		= 1,
 };
 
 static struct platform_device picasso_audio_device = {
