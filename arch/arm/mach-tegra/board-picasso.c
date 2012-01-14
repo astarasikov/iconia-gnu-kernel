@@ -35,6 +35,7 @@
 #include <mach/usb_phy.h>
 #include <linux/platform_data/tegra_usb.h>
 #include <linux/input.h>
+#include <linux/input/kxtj9.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pda_power.h>
 #include <linux/mfd/acer_picasso_ec.h>
@@ -445,6 +446,32 @@ static struct nct1008_platform_data ventana_nct1008_pdata = {
 	.alarm_fn = tegra_throttling_enable,
 };
 
+static struct kxtj9_platform_data picasso_kxtf9_pdata = {
+	.axis_map_x = 1,
+	.axis_map_y = 0,
+	.axis_map_z = 2,
+	
+	.negate_x = 1,
+	.negate_y = 1,
+	.negate_z = 1,
+	
+	.res_12bit = RES_12BIT,
+	.g_range = KXTJ9_G_8G,
+	.data_odr_init = ODR800F,
+};
+
+static struct i2c_board_info __initdata picasso_mpu[] = {
+	{
+		I2C_BOARD_INFO("mpu3050", 0x68),
+		.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_MPU3050_IRQ),
+	},
+	{
+		I2C_BOARD_INFO("kxtj9", 0x0f),
+		.irq = TEGRA_GPIO_TO_IRQ(PICASSO_GPIO_KXTF9_IRQ),
+		.platform_data = &picasso_kxtf9_pdata,
+	}
+};
+
 static struct i2c_board_info __initdata picasso_i2c4_board_info[] = {
 	{
 		I2C_BOARD_INFO("nct1008", 0x4C),
@@ -475,6 +502,12 @@ static struct i2c_board_info __initdata tf101_asusec[] = {
 static void __init picasso_sensors_init(void) {
 	gpio_request(TEGRA_GPIO_NCT1008_THERM2_IRQ, "nct1008");
 	gpio_direction_input(TEGRA_GPIO_NCT1008_THERM2_IRQ);
+
+	gpio_request(PICASSO_GPIO_MPU3050_IRQ, "mpu3050");
+	gpio_direction_input(PICASSO_GPIO_MPU3050_IRQ);
+
+	gpio_request(PICASSO_GPIO_KXTF9_IRQ, "kxtf9");
+	gpio_direction_input(PICASSO_GPIO_KXTF9_IRQ);
 	
 	if(machine_is_picasso())
 		i2c_register_board_info(2, &picasso_ec, 1);
@@ -484,6 +517,8 @@ static void __init picasso_sensors_init(void) {
 
 	i2c_register_board_info(4, picasso_i2c4_board_info,
 		ARRAY_SIZE(picasso_i2c4_board_info));
+
+	i2c_register_board_info(0, picasso_mpu, ARRAY_SIZE(picasso_mpu));
 }
 
 /******************************************************************************
