@@ -439,6 +439,8 @@ static struct tegra_gpio_table picasso_gpio_table[] = {
 	{ .gpio = TEGRA_GPIO_SD2_CD,	.enable = true },
 	{ .gpio = TEGRA_GPIO_SD2_POWER,	.enable = true },
 	{ .gpio = PICASSO_GPIO_GPS,	.enable = true },
+	{ .gpio = PICASSO_GPIO_MPU3050_IRQ, .enable = true },
+	{ .gpio = PICASSO_GPIO_KXTF9_IRQ, .enable = true },
 };
 
 void __init picasso_pinmux_init(void)
