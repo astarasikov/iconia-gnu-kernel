@@ -487,7 +487,10 @@ static int __devinit kxtj9_verify(struct kxtj9_data *tj9)
 		goto out;
 	}
 
-	retval = retval != 0x06 ? -EIO : 0;
+	if (retval == 0x6 || retval == 0x1)
+		retval = 0;
+	else
+		retval = -EIO;
 
 out:
 	kxtj9_device_power_off(tj9);
