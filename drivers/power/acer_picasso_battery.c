@@ -89,7 +89,7 @@ union power_supply_propval *val) {
 	}
 	bat_present = !!ret;
 
-	ret = picasso_battery_read_register(EC_BATT_CHARGE_NOW);
+	ret = picasso_battery_read_register(EC_BATT_CAPACITY);
 	if (ret < 0) {
 		return ret;
 	}
@@ -137,21 +137,6 @@ static int picasso_battery_get_voltage(union power_supply_propval *val) {
 	return 0;
 }
 
-static int picasso_battery_get_battery_capacity(union power_supply_propval *val)
-{
-	s32 ret;
-	
-	ret = picasso_battery_read_register(EC_BATT_CAPACITY);
-
-	if (ret < 0) {
-		dev_err(&priv->client->dev, "i2c read for capacity failed\n");
-		return ret;
-	}
-
-	val->intval = ((ret >= 100) ? 100 : ret);
-	return 0;
-}
-
 static int picasso_battery_get_cycle_count(union power_supply_propval *val) {
 	s32 ret;
 	ret = picasso_battery_read_register(EC_BATT_CYCLE_COUNT);
@@ -174,11 +159,11 @@ static int picasso_battery_get_current_now(union power_supply_propval *val) {
 	return 0;
 }
 
-static int picasso_battery_get_charge_now(union power_supply_propval *val)
+static int picasso_battery_get_battery_capacity(union power_supply_propval *val)
 {
 	s32 ret;
 	
-	ret = picasso_battery_read_register(EC_BATT_CHARGE_NOW);
+	ret = picasso_battery_read_register(EC_BATT_CAPACITY);
 
 	if (ret < 0) {
 		dev_err(&priv->client->dev, "i2c read for charge failed\n");
@@ -213,12 +198,6 @@ static int picasso_battery_get_property(struct power_supply *psy,
 		return picasso_battery_get_cycle_count(val);
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		return picasso_battery_get_current_now(val);
-	case POWER_SUPPLY_PROP_CHARGE_NOW:
-		return picasso_battery_get_charge_now(val);
-	case POWER_SUPPLY_PROP_CHARGE_FULL:
-	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		val->intval = 100;
-		return 0;
 	default:
 		dev_err(&priv->client->dev,
 			"%s: INVALID property\n", __func__);
@@ -234,9 +213,6 @@ static enum power_supply_property picasso_battery_properties[] = {
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
-	POWER_SUPPLY_PROP_CHARGE_NOW,
-	POWER_SUPPLY_PROP_CHARGE_FULL,
-	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_TEMP,
