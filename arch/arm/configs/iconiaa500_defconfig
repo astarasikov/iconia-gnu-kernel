@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux/arm 2.6.38.3 Kernel Configuration
-# Sat Jan 14 16:54:05 2012
+# Sun Mar  4 20:26:27 2012
 #
 CONFIG_ARM=y
 CONFIG_HAVE_PWM=y
@@ -423,7 +423,7 @@ CONFIG_ALIGNMENT_TRAP=y
 # CONFIG_USE_OF is not set
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="mem=1024M@0M vmalloc=256M lp0_vec=8192@0x1840c000 console=tty0 usbcore.old_scheme_first=1 root=/dev/mmcblk1p2 rootwait rootfstype=ext4"
+CONFIG_CMDLINE="mem=1024M@0M vmalloc=256M lp0_vec=8192@0x1840c000 console=tty0 usbcore.old_scheme_first=1 root=/dev/mmcblk1p2 rootwait rootfstype=ext4 --no-log"
 CONFIG_CMDLINE_FORCE=y
 # CONFIG_XIP_KERNEL is not set
 # CONFIG_KEXEC is not set
